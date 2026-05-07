@@ -1,0 +1,125 @@
+{
+  "entities": {
+    "Player": {
+      "title": "Player",
+      "description": "A fantasy football player with ELO ranking.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "position": { "type": "string" },
+        "team": { "type": "string" },
+        "elo": { "type": "number" },
+        "votes_count": { "type": "number" }
+      },
+      "required": ["id", "name", "position", "team"]
+    },
+    "TradeProposal": {
+      "title": "TradeProposal",
+      "description": "A proposed trade between two sets of players.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "give_player_ids": { "type": "array", "items": { "type": "string" } },
+        "get_player_ids": { "type": "array", "items": { "type": "string" } },
+        "creator_id": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "give_player_ids", "get_player_ids"]
+    },
+    "UserVote": {
+      "title": "UserVote",
+      "description": "A user's swipe decision on a trade proposal.",
+      "type": "object",
+      "properties": {
+        "trade_id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "choice": { "type": "string", "enum": ["YES", "NO"] },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["trade_id", "user_id", "choice"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User preferences and team information.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "team_player_ids": { "type": "array", "items": { "type": "string" } },
+        "active_league_id": { "type": "string" }
+      },
+      "required": ["uid"]
+    },
+    "League": {
+      "title": "League",
+      "description": "A private group for managers to trade together.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "creator_id": { "type": "string" },
+        "members": { "type": "array", "items": { "type": "string" } },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "creator_id"]
+    },
+    "PlayerStats": {
+      "title": "PlayerStats",
+      "description": "League-specific player ratings.",
+      "type": "object",
+      "properties": {
+        "elo": { "type": "number" },
+        "votes_count": { "type": "number" }
+      },
+      "required": ["elo", "votes_count"]
+    },
+    "Match": {
+      "title": "Match",
+      "description": "A successful trade agreement between two users.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "league_id": { "type": "string" },
+        "user_a_id": { "type": "string" },
+        "user_b_id": { "type": "string" },
+        "user_a_email": { "type": "string" },
+        "user_b_email": { "type": "string" },
+        "player_ids_a": { "type": "array", "items": { "type": "string" } },
+        "player_ids_b": { "type": "array", "items": { "type": "string" } },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["league_id", "user_a_id", "user_b_id", "player_ids_a", "player_ids_b"]
+    }
+  },
+  "firestore": {
+    "/leagues/{leagueId}": {
+      "schema": "League",
+      "description": "User created leagues."
+    },
+    "/leagues/{leagueId}/player_stats/{playerId}": {
+      "schema": "PlayerStats",
+      "description": "League-specific player ratings."
+    },
+    "/matches/{matchId}": {
+      "schema": "Match",
+      "description": "Successful trade matches."
+    },
+    "/players/{playerId}": {
+      "schema": "Player",
+      "description": "Global list of players and their ELOs."
+    },
+    "/trades/{tradeId}": {
+      "schema": "TradeProposal",
+      "description": "Proposed trades for community swiping."
+    },
+    "/votes/{voteId}": {
+      "schema": "UserVote",
+      "description": "Individual votes on trade proposals."
+    },
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profiles and fantasy teams."
+    }
+  }
+}

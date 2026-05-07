@@ -1,0 +1,6 @@
+{
+  "name": "Trade Tinder",
+  "description": "Evaluate fantasy football trades with a swipe. Track player ELO based on community desirability.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

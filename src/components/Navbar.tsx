@@ -1,0 +1,134 @@
+'use client';
+
+import React from 'react';
+import { League, Team } from '@/types/fantasy';
+import { Layers, ArrowLeftRight, Users, RefreshCw, LayoutGrid, Home } from 'lucide-react';
+import { UnicornLogo } from './UnicornLogo';
+
+interface NavbarProps {
+  league: League | null;
+  currentTeam?: Team | null;
+  activeTab: 'deck' | 'matches' | 'roster' | 'lobby';
+  matchCount: number;
+  onTabChange: (tab: 'deck' | 'matches' | 'roster' | 'lobby') => void;
+  onGoHome: () => void;
+  onOpenSync: () => void;
+}
+
+export const Navbar: React.FC<NavbarProps> = ({
+  league,
+  currentTeam,
+  activeTab,
+  matchCount,
+  onTabChange,
+  onGoHome,
+  onOpenSync,
+}) => {
+  return (
+    <header className="sticky top-0 z-40 w-full bg-slate-950/80 backdrop-blur-lg border-b border-slate-800">
+      <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+        {/* Brand / Logo & Home Link */}
+        <div className="flex items-center gap-3 cursor-pointer" onClick={onGoHome}>
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-lg shadow-blue-500/25">
+            <UnicornLogo className="w-6 h-6 fill-white" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-black text-xl tracking-tight text-white">Trade Horny</span>
+              {currentTeam && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30 truncate max-w-[120px]">
+                  {currentTeam.name}
+                </span>
+              )}
+            </div>
+            <div className="text-[11px] text-slate-400 truncate max-w-[150px] sm:max-w-xs">
+              {league ? league.name : 'Fantasy Football Trade Matchmaker'}
+            </div>
+          </div>
+        </div>
+
+        {/* Center Navigation Tabs - Only visible when inside a league */}
+        {league && (
+          <nav className="flex items-center gap-1 bg-slate-900/90 p-1 rounded-2xl border border-slate-800">
+            <button
+              onClick={() => onTabChange('lobby')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition ${
+                activeTab === 'lobby'
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+              }`}
+              title="League Locker Room"
+            >
+              <LayoutGrid className="w-4 h-4" />
+            <span className="hidden md:inline">Locker Room</span>
+          </button>
+
+          <button
+            onClick={() => onTabChange('deck')}
+            className={`px-3 sm:px-4 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition ${
+              activeTab === 'deck'
+                ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+          >
+            <Layers className="w-4 h-4" />
+            <span className="hidden sm:inline">Trade Deck</span>
+          </button>
+
+          <button
+            onClick={() => onTabChange('matches')}
+            className={`relative px-3 sm:px-4 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition ${
+              activeTab === 'matches'
+                ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+          >
+            <ArrowLeftRight className="w-4 h-4" />
+            <span className="hidden sm:inline">Matches</span>
+            {matchCount > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-500 text-slate-950">
+                {matchCount}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => onTabChange('roster')}
+            className={`px-3 sm:px-4 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition ${
+              activeTab === 'roster'
+                ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            <span className="hidden sm:inline">My Roster</span>
+          </button>
+        </nav>
+        )}
+
+        {/* Right Action: Sync ESPN / Switch League */}
+        <div className="flex items-center gap-2">
+          {league && (
+            <button
+              onClick={onGoHome}
+              className="p-2 sm:px-3 sm:py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition"
+              title="Switch League"
+            >
+              <Home className="w-3.5 h-3.5 text-slate-400" />
+              <span className="hidden sm:inline">Leagues</span>
+            </button>
+          )}
+
+          <button
+            onClick={onOpenSync}
+            className="p-2 sm:px-3 sm:py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition"
+            title="Sync ESPN League"
+          >
+            <RefreshCw className="w-3.5 h-3.5 text-blue-400" />
+            <span className="hidden sm:inline">Sync ESPN</span>
+          </button>
+        </div>
+      </div>
+    </header>
+  );
+};

@@ -1,20 +1,53 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# workballs 🏈
 
-# Run and deploy your AI Studio app
+> Tinder-style Fantasy Football Trade Matchmaking Platform.
 
-This contains everything you need to run your app locally.
+**workballs** is a mobile-first web application designed to eliminate friction in fantasy football trading. Fantasy managers can shop players from their roster and swipe **Right (Interested / Want)** or **Left (Pass)** on target players across opponent teams. When two managers in the same league mutually swipe right on each other's shopped players, **workballs** detects the 1-for-1 match and triggers a celebration.
 
-View your app in AI Studio: https://ai.studio/apps/a33492f8-f120-402d-9af9-b78ff57b78f8
+---
 
-## Run Locally
+## R0 Features Delivered
 
-**Prerequisites:**  Node.js
+1. **ESPN League Synchronization**:
+   - Live integration with ESPN Fantasy Football API (v3) for public leagues (via `leagueId` and `seasonId`) and private leagues (via `espn_s2` and `SWID` session cookies).
+   - High-fidelity **Demo League (Gridiron Champions)** with real NFL stars (Justin Jefferson, Saquon Barkley, Patrick Mahomes, Breece Hall, CeeDee Lamb, Ja'Marr Chase, etc.) for instant 1-click testing.
 
+2. **The Trade Block ("Shopping" Mode)**:
+   - Managers select which player from their roster they want to put on the trade block.
+   - Dynamic context banner showing the offered player as you swipe.
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+3. **Tinder/Bumble Swipe Deck**:
+   - Physics-based card drag using **Framer Motion** with rotation, velocity thresholds, and rubber-banding.
+   - Dynamic stamps on drag: **WANT** (green) on right drag, **PASS** (red) on left drag.
+   - High-res ESPN player photos, team logos, projected points, bye weeks, matchup difficulty indicators, and season stat trends.
+   - Floating action controls: Pass (X), Undo (revert last swipe), Want (Checkmark).
+   - Fast position filtering (ALL, RB, WR, TE, QB).
+
+4. **1-for-1 Mutual Matchmaking**:
+   - Instant detection when two managers in the league have swiped right on each other's shopped players.
+   - Animated celebration modal powered by `canvas-confetti`.
+   - Dedicated **Matches Tab** listing all confirmed trade alignments with side-by-side trade comparisons and 1-click clipboard trade proposal export.
+
+5. **Internal Player Elo Engine (Private / Backend Only)**:
+   - Private Bradley-Terry / Elo ranking service running silently in the background on each swipe.
+   - Value perception updates: Swiping Right scores a comparative valuation win for the target player over the offered player; swiping Left scores a win for the offered player.
+   - Hidden from user UI, laying the data foundation for future smart trade recommendation algorithms.
+
+---
+
+## Getting Started
+
+### Prerequisites
+- Node.js 18+ (bundled locally in profile)
+- npm
+
+### Running the App
+```bash
+# Start local production server
+npm run start
+
+# Or run in development mode
+npm run dev
+```
+
+Visit [http://localhost:3000](http://localhost:3000) in your browser.

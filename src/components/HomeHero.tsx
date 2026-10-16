@@ -24,6 +24,7 @@ import {
   CheckCircle2,
   ChevronRight,
   Flame,
+  Crown,
 } from 'lucide-react';
 import { UnicornLogo } from './UnicornLogo';
 
@@ -34,6 +35,7 @@ interface HomeHeroProps {
   onSelectLeagueAndTeam?: (leagueId: string, teamId: string) => void;
   onOpenDemo: () => void;
   pendingLeagueId?: string | null;
+  onOpenSuperUser?: () => void;
 }
 
 export const HomeHero: React.FC<HomeHeroProps> = ({
@@ -43,6 +45,7 @@ export const HomeHero: React.FC<HomeHeroProps> = ({
   onSelectLeagueAndTeam,
   onOpenDemo,
   pendingLeagueId,
+  onOpenSuperUser,
 }) => {
   // Account Form State
   const [authMode, setAuthMode] = useState<'register' | 'login'>('login');
@@ -385,6 +388,35 @@ export const HomeHero: React.FC<HomeHeroProps> = ({
           <span>Log Out</span>
         </button>
       </div>
+
+      {/* Super User Admin Banner */}
+      {(currentUser.isSuperUser || currentUser.username.toLowerCase() === 'superu') && onOpenSuperUser && (
+        <div className="w-full max-w-2xl mb-6 p-4 rounded-3xl bg-gradient-to-r from-purple-950/70 via-slate-900 to-indigo-950/50 border border-purple-500/40 shadow-2xl flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-purple-600/30 flex-shrink-0">
+              <Crown className="w-5 h-5 text-amber-300" />
+            </div>
+            <div className="text-left">
+              <div className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-1.5">
+                <span>Super User Privileges Active</span>
+                <span className="w-2 h-2 rounded-full bg-purple-400 inline-block animate-pulse" />
+              </div>
+              <div className="text-[11px] text-slate-300">
+                View/delete all leagues & users, and assign/unassign team claims
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onOpenSuperUser}
+            className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-lg shadow-purple-600/30 flex items-center gap-1.5 transition active:scale-95 flex-shrink-0"
+          >
+            <span>Open Console</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {authSuccessMsg && (
         <div className="w-full max-w-2xl mb-4 p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-medium flex items-center gap-2">

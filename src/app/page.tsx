@@ -36,6 +36,7 @@ import { MatchCelebrationModal } from '@/components/MatchCelebrationModal';
 import { LeagueSyncModal } from '@/components/LeagueSyncModal';
 import { AuthModal } from '@/components/AuthModal';
 import { ResetLeagueModal } from '@/components/ResetLeagueModal';
+import { SuperUserModal } from '@/components/SuperUserModal';
 import { PositionFilterBar, ALL_POSITIONS } from '@/components/PositionFilterBar';
 import { HomeHero } from '@/components/HomeHero';
 import { LeagueLockerRoom } from '@/components/LeagueLockerRoom';
@@ -51,6 +52,7 @@ export default function Home() {
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<'register' | 'login'>('register');
+  const [isSuperUserModalOpen, setIsSuperUserModalOpen] = useState(false);
   const currentUserRef = useRef<UserAccount | null>(null);
   const [pendingLeagueId, setPendingLeagueId] = useState<string | null>(null);
 
@@ -1144,6 +1146,18 @@ export default function Home() {
     setIsAuthModalOpen(true);
   };
 
+  const handleSuperUserRefresh = () => {
+    const activeLeague = leagueRef.current || league;
+    if (activeLeague) {
+      syncLeagueStateWithServer(activeLeague, userTeamId).then((serverView) => {
+        if (serverView?.league) {
+          setLeague(serverView.league);
+          leagueRef.current = serverView.league;
+        }
+      });
+    }
+  };
+
   // If no league is loaded yet, show the Home Hero
   if (!league) {
     return (
@@ -1159,6 +1173,7 @@ export default function Home() {
           onOpenSync={() => setIsSyncModalOpen(true)}
           onOpenAuth={() => handleOpenAuth('login')}
           onLogout={handleLogout}
+          onOpenSuperUser={() => setIsSuperUserModalOpen(true)}
         />
         <main className="flex-1 flex flex-col justify-start sm:justify-center items-center py-6 px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))]">
           <HomeHero
@@ -1175,6 +1190,7 @@ export default function Home() {
               setActiveTab('lobby');
             }}
             pendingLeagueId={pendingLeagueId}
+            onOpenSuperUser={() => setIsSuperUserModalOpen(true)}
           />
         </main>
         {isSyncModalOpen && (
@@ -1189,6 +1205,11 @@ export default function Home() {
           onClose={() => setIsAuthModalOpen(false)}
           initialMode={authModalMode}
           onSuccess={handleUserChange}
+        />
+        <SuperUserModal
+          isOpen={isSuperUserModalOpen}
+          onClose={() => setIsSuperUserModalOpen(false)}
+          onRefreshAppState={handleSuperUserRefresh}
         />
       </div>
     );
@@ -1210,6 +1231,7 @@ export default function Home() {
           onOpenAuth={() => handleOpenAuth('login')}
           onLogout={handleLogout}
           onOpenResetSwipes={() => setIsResetModalOpen(true)}
+          onOpenSuperUser={() => setIsSuperUserModalOpen(true)}
         />
         <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6 pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] sm:pb-6">
           {/* Floating Notification Toasts */}
@@ -1264,6 +1286,11 @@ export default function Home() {
             isResetting={isResettingSwipes}
           />
         )}
+        <SuperUserModal
+          isOpen={isSuperUserModalOpen}
+          onClose={() => setIsSuperUserModalOpen(false)}
+          onRefreshAppState={handleSuperUserRefresh}
+        />
       </div>
     );
   }
@@ -1283,6 +1310,7 @@ export default function Home() {
         onOpenAuth={() => handleOpenAuth('login')}
         onLogout={handleLogout}
         onOpenResetSwipes={() => setIsResetModalOpen(true)}
+        onOpenSuperUser={() => setIsSuperUserModalOpen(true)}
       />
 
       <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6 pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] sm:pb-6 flex flex-col items-center justify-start sm:justify-center">
@@ -1613,6 +1641,13 @@ export default function Home() {
           isResetting={isResettingSwipes}
         />
       )}
+
+      {/* Super User Console Modal */}
+      <SuperUserModal
+        isOpen={isSuperUserModalOpen}
+        onClose={() => setIsSuperUserModalOpen(false)}
+        onRefreshAppState={handleSuperUserRefresh}
+      />
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { League, Team, UserAccount } from '@/types/fantasy';
-import { Layers, ArrowLeftRight, Users, RefreshCw, LayoutGrid, Home, LogOut, UserPlus, RotateCcw } from 'lucide-react';
+import { Layers, ArrowLeftRight, Users, RefreshCw, LayoutGrid, Home, LogOut, UserPlus, RotateCcw, Crown } from 'lucide-react';
 import { UnicornLogo } from './UnicornLogo';
 
 interface NavbarProps {
@@ -17,6 +17,7 @@ interface NavbarProps {
   onOpenAuth?: () => void;
   onLogout?: () => void;
   onOpenResetSwipes?: () => void;
+  onOpenSuperUser?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -31,6 +32,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenAuth,
   onLogout,
   onOpenResetSwipes,
+  onOpenSuperUser,
 }) => {
   return (
     <>
@@ -151,6 +153,17 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Account Status / Login */}
             {currentUser ? (
               <div className="flex items-center gap-1.5 pl-1 border-l border-slate-800">
+                {onOpenSuperUser && (currentUser.isSuperUser || currentUser.username.toLowerCase() === 'superu') && (
+                  <button
+                    type="button"
+                    onClick={onOpenSuperUser}
+                    className="px-2.5 py-1.5 min-h-[44px] rounded-xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-300 hover:text-white text-xs font-bold flex items-center gap-1.5 transition touch-manipulation active:scale-95"
+                    title="Open Super User Console"
+                  >
+                    <Crown className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="hidden sm:inline">Admin</span>
+                  </button>
+                )}
                 <div
                   className="flex items-center gap-1.5 px-2.5 py-1.5 min-h-[44px] rounded-xl bg-slate-900 border border-slate-800 text-xs font-semibold text-slate-200"
                   title={`Logged in as @${currentUser.username}`}

@@ -1017,3 +1017,216 @@ export function toClientLeagueView(
     matchFound: matchFound ?? null,
   };
 }
+
+/**
+ * Superuser: Returns all leagues and states currently saved in memory or on disk.
+ */
+export function getAllServerLeagues(): ServerLeagueState[] {
+  ensureCleanSlateMigration();
+  const candidateDirs = [
+    ...(process.env.DATA_DIR ? [path.join(process.env.DATA_DIR, 'leagues')] : []),
+    path.join(process.cwd(), '.data', 'leagues'),
+    path.join(os.tmpdir(), 'trade-horny', 'leagues'),
+  ];
+
+  for (const dir of candidateDirs) {
+    if (dir && fs.existsSync(dir)) {
+      try {
+        const files = fs.readdirSync(dir);
+        for (const file of files) {
+          if (file.endsWith('.json') && !file.startsWith('.') && !file.includes('.tmp.')) {
+            const cleanId = file.replace('.json', '');
+            if (!memoryStore.has(cleanId)) {
+              const diskState = readStateFromDisk(cleanId);
+              if (diskState) {
+                memoryStore.set(cleanId, diskState);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Failed to scan leagues directory for superuser overview:', e);
+      }
+    }
+  }
+
+  // Ensure demo league is also present
+  if (!memoryStore.has('12345678')) {
+    const demo = getServerLeagueState('12345678');
+    if (demo) memoryStore.set('12345678', demo);
+  }
+
+  return Array.from(memoryStore.values());
+}
+
+/**
+ * Superuser: Deletes a league completely from memory and disk.
+ */
+export function superDeleteLeague(espnLeagueId: string): boolean {
+  ensureCleanSlateMigration();
+  let cleanId: string;
+  try {
+    cleanId = sanitizeLeagueId(espnLeagueId);
+  } catch {
+    return false;
+  }
+
+  memoryStore.delete(cleanId);
+
+  const candidateDirs = [
+    ...(process.env.DATA_DIR ? [path.join(process.env.DATA_DIR, 'leagues')] : []),
+    path.join(process.cwd(), '.data', 'leagues'),
+    path.join(os.tmpdir(), 'trade-horny', 'leagues'),
+  ];
+
+  for (const dir of candidateDirs) {
+    if (dir && fs.existsSync(dir)) {
+      const filePath = path.join(dir, `${cleanId}.json`);
+      if (fs.existsSync(filePath)) {
+        try {
+          fs.unlinkSync(filePath);
+        } catch (e) {
+          console.error(`Failed to delete league file ${filePath}:`, e);
+        }
+      }
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Superuser: Assigns a user to a team within any league.
+ */
+export function superAssignTeam(
+  espnLeagueId: string,
+  teamId: string,
+  userId: string,
+  username: string
+): ServerLeagueState | null {
+  ensureCleanSlateMigration();
+  const cleanId = sanitizeLeagueId(espnLeagueId);
+  let state = getServerLeagueState(cleanId);
+  if (!state) return null;
+
+  const targetTeam = state.league.teams.find((t) => t.id === teamId || t.espnTeamId === teamId);
+  if (!targetTeam) return null;
+
+  const cleanUserId = String(userId).trim();
+  const cleanUsername = String(username).trim() || targetTeam.ownerName || 'Manager';
+
+  const updatedTeams = state.league.teams.map((t) => {
+    // If this user was previously assigned to a different team in this league, release it
+    if (t.id !== targetTeam.id && t.claimedByUserId === cleanUserId) {
+      return {
+        ...t,
+        isClaimed: false,
+        claimedBy: undefined,
+        claimedByUserId: undefined,
+      };
+    }
+    if (t.id === targetTeam.id) {
+      return {
+        ...t,
+        isClaimed: true,
+        claimedBy: cleanUsername,
+        claimedByUserId: cleanUserId,
+      };
+    }
+    return t;
+  });
+
+  const updatedState: ServerLeagueState = {
+    ...state,
+    league: {
+      ...state.league,
+      teams: updatedTeams,
+      lastSyncedAt: new Date().toISOString(),
+    },
+    updatedAt: new Date().toISOString(),
+  };
+
+  saveServerLeagueState(updatedState);
+  return updatedState;
+}
+
+/**
+ * Superuser: Unassigns whatever user was assigned to a team within any league.
+ */
+export function superUnassignTeam(
+  espnLeagueId: string,
+  teamId: string
+): { state: ServerLeagueState | null; previousUserId?: string } {
+  ensureCleanSlateMigration();
+  const cleanId = sanitizeLeagueId(espnLeagueId);
+  let state = getServerLeagueState(cleanId);
+  if (!state) return { state: null };
+
+  const targetTeam = state.league.teams.find((t) => t.id === teamId || t.espnTeamId === teamId);
+  if (!targetTeam) return { state: null };
+
+  const previousUserId = targetTeam.claimedByUserId;
+
+  const updatedTeams = state.league.teams.map((t) => {
+    if (t.id === targetTeam.id) {
+      return {
+        ...t,
+        isClaimed: false,
+        claimedBy: undefined,
+        claimedByUserId: undefined,
+      };
+    }
+    return t;
+  });
+
+  const updatedState: ServerLeagueState = {
+    ...state,
+    league: {
+      ...state.league,
+      teams: updatedTeams,
+      lastSyncedAt: new Date().toISOString(),
+    },
+    updatedAt: new Date().toISOString(),
+  };
+
+  saveServerLeagueState(updatedState);
+  return { state: updatedState, previousUserId };
+}
+
+/**
+ * Superuser helper: When a user is deleted, unclaim any teams they held across all leagues.
+ */
+export function unclaimAllTeamsForUser(userId: string): void {
+  ensureCleanSlateMigration();
+  const cleanUserId = String(userId).trim();
+  if (!cleanUserId) return;
+
+  const allLeagues = getAllServerLeagues();
+  for (const state of allLeagues) {
+    let modified = false;
+    const updatedTeams = state.league.teams.map((t) => {
+      if (t.claimedByUserId === cleanUserId) {
+        modified = true;
+        return {
+          ...t,
+          isClaimed: false,
+          claimedBy: undefined,
+          claimedByUserId: undefined,
+        };
+      }
+      return t;
+    });
+
+    if (modified) {
+      saveServerLeagueState({
+        ...state,
+        league: {
+          ...state.league,
+          teams: updatedTeams,
+          lastSyncedAt: new Date().toISOString(),
+        },
+        updatedAt: new Date().toISOString(),
+      });
+    }
+  }
+}

@@ -22,6 +22,10 @@ async function run() {
   if (authNavModule && authNavModule.testPromise) {
     await authNavModule.testPromise;
   }
+  const superUserModule = jiti('./test_superuser.ts');
+  if (superUserModule && superUserModule.testPromise) {
+    await superUserModule.testPromise;
+  }
 }
 
 run().catch((err) => {

@@ -12,6 +12,7 @@ export interface StoredUser {
   hash: string;
   tokens: string[]; // active session tokens
   claimedTeams: Record<string, string>; // leagueId -> teamId
+  isSuperUser?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -65,39 +66,95 @@ function getWritableUserDir(): string | null {
   return null;
 }
 
+/**
+ * Ensures the root superuser account ('superu' / 'thanos') always exists
+ * and has superuser privileges.
+ */
+export function ensureSuperUserAccount(): StoredUser {
+  const superUsername = 'superu';
+  const superPassword = 'thanos';
+  const normalized = superUsername.toLowerCase();
+
+  for (const user of userMemoryStore.values()) {
+    if (user.normalizedUsername === normalized) {
+      let changed = false;
+      if (!user.isSuperUser) {
+        user.isSuperUser = true;
+        changed = true;
+      }
+      if (!verifyPassword(superPassword, user.salt, user.hash)) {
+        const { salt, hash } = hashPassword(superPassword);
+        user.salt = salt;
+        user.hash = hash;
+        changed = true;
+      }
+      if (changed) {
+        user.updatedAt = new Date().toISOString();
+        userMemoryStore.set(user.id, user);
+        writeUserToDisk(user);
+      }
+      return user;
+    }
+  }
+
+  // Create superu account
+  const { salt, hash } = hashPassword(superPassword);
+  const userId = `usr_superu_root`;
+  const now = new Date().toISOString();
+  const superUser: StoredUser = {
+    id: userId,
+    username: superUsername,
+    normalizedUsername: normalized,
+    salt,
+    hash,
+    tokens: [],
+    claimedTeams: {},
+    isSuperUser: true,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  userMemoryStore.set(superUser.id, superUser);
+  writeUserToDisk(superUser);
+  return superUser;
+}
+
 function ensureUsersLoaded(): void {
   if (globalThis.__tradeHornyUsersLoaded) return;
   globalThis.__tradeHornyUsersLoaded = true;
 
   const dir = getWritableUserDir();
-  if (!dir) return;
-
-  try {
-    const files = fs.readdirSync(dir);
-    for (const file of files) {
-      if (file.endsWith('.json') && !file.startsWith('.')) {
-        try {
-          const filePath = path.join(dir, file);
-          const raw = fs.readFileSync(filePath, 'utf-8');
-          const parsed = JSON.parse(raw) as StoredUser;
-          if (parsed && parsed.id && parsed.username && parsed.hash) {
-            if (!Array.isArray(parsed.tokens)) parsed.tokens = [];
-            if (!parsed.claimedTeams || typeof parsed.claimedTeams !== 'object') {
-              parsed.claimedTeams = {};
+  if (dir) {
+    try {
+      const files = fs.readdirSync(dir);
+      for (const file of files) {
+        if (file.endsWith('.json') && !file.startsWith('.')) {
+          try {
+            const filePath = path.join(dir, file);
+            const raw = fs.readFileSync(filePath, 'utf-8');
+            const parsed = JSON.parse(raw) as StoredUser;
+            if (parsed && parsed.id && parsed.username && parsed.hash) {
+              if (!Array.isArray(parsed.tokens)) parsed.tokens = [];
+              if (!parsed.claimedTeams || typeof parsed.claimedTeams !== 'object') {
+                parsed.claimedTeams = {};
+              }
+              if (!parsed.normalizedUsername) {
+                parsed.normalizedUsername = parsed.username.toLowerCase();
+              }
+              userMemoryStore.set(parsed.id, parsed);
             }
-            if (!parsed.normalizedUsername) {
-              parsed.normalizedUsername = parsed.username.toLowerCase();
-            }
-            userMemoryStore.set(parsed.id, parsed);
+          } catch {
+            // Skip corrupt file
           }
-        } catch {
-          // Skip corrupt file
         }
       }
+    } catch (err) {
+      console.error('Failed to load users from disk:', err);
     }
-  } catch (err) {
-    console.error('Failed to load users from disk:', err);
   }
+
+  // Ensure root super user exists on system initialization
+  ensureSuperUserAccount();
 }
 
 function writeUserToDisk(user: StoredUser): void {
@@ -145,6 +202,7 @@ export function toPublicUser(stored: StoredUser): UserAccount {
     id: stored.id,
     username: stored.username,
     claimedTeams: stored.claimedTeams || {},
+    isSuperUser: Boolean(stored.isSuperUser || stored.normalizedUsername === 'superu'),
     createdAt: stored.createdAt,
   };
 }
@@ -408,5 +466,80 @@ export function clearAllServerUsers(): { deletedUsers: number } {
     }
   }
 
+  // Re-seed root superuser account
+  ensureSuperUserAccount();
+
   return { deletedUsers: count };
+}
+
+/**
+ * Returns all registered users on the system (for superuser management).
+ */
+export function getAllUsers(): UserAccount[] {
+  ensureUsersLoaded();
+  const list = Array.from(userMemoryStore.values()).map(toPublicUser);
+  // Sort so superu is at the top, then alphabetically by username
+  return list.sort((a, b) => {
+    if (a.username.toLowerCase() === 'superu') return -1;
+    if (b.username.toLowerCase() === 'superu') return 1;
+    return a.username.localeCompare(b.username);
+  });
+}
+
+/**
+ * Deletes a user account by ID.
+ * Throws an error if attempting to delete the root superuser account.
+ */
+export function deleteUser(userId: string): boolean {
+  ensureUsersLoaded();
+  const cleanUserId = String(userId ?? '').trim();
+  if (!cleanUserId) return false;
+
+  const user = userMemoryStore.get(cleanUserId);
+  if (!user) return false;
+
+  if (user.normalizedUsername === 'superu' || user.username.toLowerCase() === 'superu') {
+    throw new Error('Cannot delete the root super user account.');
+  }
+
+  userMemoryStore.delete(cleanUserId);
+
+  const candidateDirs = [
+    ...(process.env.DATA_DIR ? [path.join(process.env.DATA_DIR, 'users')] : []),
+    path.join(process.cwd(), '.data', 'users'),
+    path.join(os.tmpdir(), 'trade-horny', 'users'),
+  ];
+
+  for (const dir of candidateDirs) {
+    if (dir && fs.existsSync(dir)) {
+      try {
+        const filePath = path.join(dir, `${cleanUserId}.json`);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      } catch (e) {
+        console.error(`Failed to delete user file for ${cleanUserId}:`, e);
+      }
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Unlinks team claims for a deleted league across all users in the store.
+ */
+export function unlinkAllUserClaimsForLeague(espnLeagueId: string): void {
+  ensureUsersLoaded();
+  const cleanId = String(espnLeagueId ?? '').trim();
+  if (!cleanId) return;
+
+  for (const user of userMemoryStore.values()) {
+    if (user.claimedTeams && user.claimedTeams[cleanId]) {
+      delete user.claimedTeams[cleanId];
+      user.updatedAt = new Date().toISOString();
+      userMemoryStore.set(user.id, user);
+      writeUserToDisk(user);
+    }
+  }
 }

@@ -59,6 +59,7 @@ export interface UserAccount {
   username: string;
   claimedTeams: Record<string, string>; // leagueId -> teamId
   claimedLeaguesDetails?: UserClaimedLeagueSummary[];
+  isSuperUser?: boolean;
   createdAt: string;
 }
 

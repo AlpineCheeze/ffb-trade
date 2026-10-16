@@ -437,6 +437,9 @@ export function clearAllServerUsers(): { deletedUsers: number } {
         const files = fs.readdirSync(dir);
         for (const file of files) {
           if ((file.endsWith('.json') || file.includes('.tmp.')) && !file.startsWith('.')) {
+            if (file === 'usr_superu_root.json') {
+              continue;
+            }
             try {
               fs.unlinkSync(path.join(dir, file));
               count++;
@@ -466,8 +469,13 @@ export function clearAllServerUsers(): { deletedUsers: number } {
     }
   }
 
-  // Re-seed root superuser account
-  ensureSuperUserAccount();
+  // Re-seed root superuser account with clean slate
+  const rootSuperu = ensureSuperUserAccount();
+  rootSuperu.claimedTeams = {};
+  rootSuperu.tokens = [];
+  rootSuperu.updatedAt = new Date().toISOString();
+  userMemoryStore.set(rootSuperu.id, rootSuperu);
+  writeUserToDisk(rootSuperu);
 
   return { deletedUsers: count };
 }

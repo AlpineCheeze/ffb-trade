@@ -33,7 +33,7 @@ interface HomeHeroProps {
   onUserChange: (user: UserAccount | null) => void;
   onSelectLeague: (league: League) => void;
   onSelectLeagueAndTeam?: (leagueId: string, teamId: string) => void;
-  onOpenDemo: () => void;
+  onOpenDemo?: () => void;
   pendingLeagueId?: string | null;
   onOpenSuperUser?: () => void;
 }
@@ -339,18 +339,6 @@ export const HomeHero: React.FC<HomeHeroProps> = ({
               )}
             </button>
           </form>
-
-          {/* Guest Escape Link */}
-          <div className="mt-5 pt-4 border-t border-slate-800/80 text-center">
-            <button
-              type="button"
-              onClick={onOpenDemo}
-              className="text-xs text-slate-400 hover:text-blue-400 font-semibold transition inline-flex items-center gap-1.5"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-blue-400" />
-              <span>Just testing? Explore Demo League as Guest &rarr;</span>
-            </button>
-          </div>
         </div>
       </div>
     );
@@ -669,43 +657,16 @@ export const HomeHero: React.FC<HomeHeroProps> = ({
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={onOpenDemo}
-          className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition hover:scale-105 active:scale-95"
-        >
-          Launch Demo
-        </button>
+        {onOpenDemo && (
+          <button
+            type="button"
+            onClick={onOpenDemo}
+            className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition hover:scale-105 active:scale-95"
+          >
+            Launch Demo
+          </button>
+        )}
       </div>
-
-      {/* Saved Leagues Section */}
-      {savedLeagues.length > 0 && (
-        <div className="w-full max-w-2xl p-4 rounded-3xl bg-slate-900/60 border border-slate-800 text-left">
-          <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5 flex items-center justify-between">
-            <span className="flex items-center gap-1.5">
-              <Trophy className="w-3.5 h-3.5 text-amber-400" />
-              Cached on this Device
-            </span>
-            <span className="text-slate-500">{savedLeagues.length}</span>
-          </div>
-          <div className="space-y-1.5">
-            {savedLeagues.map((sl) => (
-              <button
-                key={sl.espnLeagueId}
-                type="button"
-                onClick={() => onSelectLeague(sl)}
-                className="w-full p-2.5 rounded-xl bg-slate-950/70 hover:bg-slate-800/80 border border-slate-800/80 transition flex items-center justify-between group text-left"
-              >
-                <div>
-                  <div className="text-xs font-bold text-white group-hover:text-blue-400 transition">{sl.name}</div>
-                  <div className="text-[10px] text-slate-500">ID: {sl.espnLeagueId} • {sl.teams.length} Teams</div>
-                </div>
-                <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-blue-400 group-hover:translate-x-0.5 transition" />
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 };

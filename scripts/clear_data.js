@@ -36,6 +36,20 @@ async function clearData() {
     const files = fs.readdirSync(usersDir);
     for (const file of files) {
       if ((file.endsWith('.json') || file.includes('.tmp.')) && !file.startsWith('.')) {
+        if (file === 'usr_superu_root.json') {
+          const filePath = path.join(usersDir, file);
+          try {
+            const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+            data.claimedTeams = {};
+            data.tokens = [];
+            data.updatedAt = new Date().toISOString();
+            fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
+            console.log(`Preserved & reset root super user account: ${file}`);
+          } catch (e) {
+            console.error(`Failed to reset super user ${file}:`, e);
+          }
+          continue;
+        }
         const filePath = path.join(usersDir, file);
         try {
           fs.unlinkSync(filePath);

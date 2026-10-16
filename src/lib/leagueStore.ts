@@ -22,7 +22,66 @@ const MATCHES_STORAGE_PREFIX = 'tradehorny_matches_';
 const DELETED_MATCHES_STORAGE_PREFIX = 'tradehorny_deleted_matches_';
 const EXCLUDED_TEAMS_STORAGE_PREFIX = 'tradehorny_excluded_teams_';
 
+export const CLIENT_RESET_EPOCH = 'tradehorny_epoch_20261016_purge_v3';
+
+export function ensureClientStorageReset(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const currentEpoch = localStorage.getItem('tradehorny_client_reset_epoch');
+    if (currentEpoch !== CLIENT_RESET_EPOCH) {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (
+          k &&
+          (k.startsWith(LEAGUE_STORAGE_PREFIX) ||
+           k.startsWith(CLAIM_STORAGE_PREFIX) ||
+           k.startsWith(SWIPES_STORAGE_PREFIX) ||
+           k.startsWith(MATCHES_STORAGE_PREFIX) ||
+           k.startsWith(DELETED_MATCHES_STORAGE_PREFIX) ||
+           k.startsWith(EXCLUDED_TEAMS_STORAGE_PREFIX) ||
+           k.startsWith('tradehorny_leagues_list') ||
+           k.startsWith('tradehorny_current_league_id') ||
+           k.startsWith('tradehonry_') ||
+           k.startsWith('tradehorney_') ||
+           k.startsWith('workballs_'))
+        ) {
+          keysToRemove.push(k);
+        }
+      }
+      for (const k of keysToRemove) {
+        localStorage.removeItem(k);
+      }
+      leaguesRegistry.clear();
+      leaguesRegistry.set(demoLeague.espnLeagueId.trim(), demoLeague);
+      localStorage.setItem('tradehorny_client_reset_epoch', CLIENT_RESET_EPOCH);
+    }
+  } catch {
+    // Ignore localStorage errors
+  }
+}
+
+export function removeStoredLeague(espnLeagueId: string): void {
+  const cleanId = espnLeagueId.trim();
+  leaguesRegistry.delete(cleanId);
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.removeItem(LEAGUE_STORAGE_PREFIX + cleanId);
+      localStorage.removeItem(CLAIM_STORAGE_PREFIX + cleanId);
+      localStorage.removeItem(SWIPES_STORAGE_PREFIX + cleanId);
+      localStorage.removeItem(MATCHES_STORAGE_PREFIX + cleanId);
+      localStorage.removeItem(DELETED_MATCHES_STORAGE_PREFIX + cleanId);
+      for (const prefix of LEGACY_LEAGUE_STORAGE_PREFIXES) {
+        localStorage.removeItem(prefix + cleanId);
+      }
+    } catch {
+      // Ignore localStorage errors
+    }
+  }
+}
+
 export function getLeagueById(espnLeagueId: string): League | undefined {
+  ensureClientStorageReset();
   const cleanId = espnLeagueId.trim();
   const inMemory = leaguesRegistry.get(cleanId);
   if (inMemory) return inMemory;
@@ -312,10 +371,14 @@ export async function syncLeagueStateWithServer(
         action: 'sync_state',
         leagueId: league.espnLeagueId,
         teamId: teamId || undefined,
-        fallbackLeague: league,
       }),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      if (res.status === 404) {
+        removeStoredLeague(league.espnLeagueId);
+      }
+      return null;
+    }
     const data = await res.json();
     if (data && data.league) {
       saveLeague(data.league);

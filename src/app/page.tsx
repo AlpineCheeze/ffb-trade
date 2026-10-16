@@ -1158,7 +1158,42 @@ export default function Home() {
     }
   };
 
-  // If no league is loaded yet, show the Home Hero
+  // 1. FIRST SCREEN IS ALWAYS USER LOGIN / CREATE ACCOUNT ONLY
+  if (!currentUser) {
+    return (
+      <div className="min-h-[100dvh] flex flex-col bg-slate-950">
+        <Navbar
+          league={null}
+          currentTeam={null}
+          currentUser={null}
+          activeTab="lobby"
+          matchCount={0}
+          onTabChange={() => {}}
+          onGoHome={handleGoHome}
+          onOpenSync={() => {}}
+          onOpenAuth={() => handleOpenAuth('login')}
+          onLogout={handleLogout}
+        />
+        <main className="flex-1 flex flex-col justify-start sm:justify-center items-center py-6 px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))]">
+          <HomeHero
+            currentUser={null}
+            onUserChange={handleUserChange}
+            onSelectLeague={handleSelectLeague}
+            onSelectLeagueAndTeam={handleSelectLeagueAndTeam}
+            pendingLeagueId={pendingLeagueId}
+          />
+        </main>
+        <AuthModal
+          isOpen={isAuthModalOpen}
+          onClose={() => setIsAuthModalOpen(false)}
+          initialMode={authModalMode}
+          onSuccess={handleUserChange}
+        />
+      </div>
+    );
+  }
+
+  // 2. USER IS LOGGED IN: If no league selected, show User Dashboard (Leagues & Claimed Teams Hub)
   if (!league) {
     return (
       <div className="min-h-[100dvh] flex flex-col">

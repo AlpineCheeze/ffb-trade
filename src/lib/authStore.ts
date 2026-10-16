@@ -1,4 +1,5 @@
 import { UserAccount } from '@/types/fantasy';
+import { ensureClientStorageReset } from './leagueStore';
 
 const AUTH_USER_KEY = 'tradehorny_auth_user';
 const AUTH_TOKEN_KEY = 'tradehorny_auth_token';
@@ -6,6 +7,7 @@ export const AUTH_CHANGE_EVENT = 'tradehorny:auth-change';
 
 export function getStoredUser(): UserAccount | null {
   if (typeof window === 'undefined') return null;
+  ensureClientStorageReset();
   try {
     const raw = localStorage.getItem(AUTH_USER_KEY);
     return raw ? (JSON.parse(raw) as UserAccount) : null;
@@ -16,6 +18,7 @@ export function getStoredUser(): UserAccount | null {
 
 export function getStoredToken(): string | null {
   if (typeof window === 'undefined') return null;
+  ensureClientStorageReset();
   try {
     return localStorage.getItem(AUTH_TOKEN_KEY);
   } catch {

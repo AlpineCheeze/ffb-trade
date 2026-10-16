@@ -58,8 +58,8 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           </div>
 
-          {/* Center Navigation Tabs - Only visible on desktop when inside a league */}
-          {league && (
+          {/* Center Navigation Tabs - Only visible on desktop when inside a league and logged in */}
+          {league && currentUser && (
             <nav className="hidden sm:flex items-center gap-1 bg-slate-900/90 p-1 rounded-2xl border border-slate-800">
               <button
                 onClick={() => onTabChange('lobby')}
@@ -119,7 +119,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Right Action: Sync ESPN / Switch League / Account */}
           <div className="flex items-center gap-2">
-            {league && (
+            {league && currentUser && (
               <button
                 onClick={onGoHome}
                 className="p-2 sm:px-3 sm:py-2 min-h-[44px] min-w-[44px] rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition touch-manipulation active:scale-95"
@@ -130,7 +130,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
 
-            {league && onOpenResetSwipes && (
+            {league && currentUser && onOpenResetSwipes && (
               <button
                 onClick={onOpenResetSwipes}
                 className="p-2 sm:px-3 sm:py-2 min-h-[44px] min-w-[44px] rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-rose-400 hover:text-rose-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition touch-manipulation active:scale-95"
@@ -141,14 +141,16 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
 
-            <button
-              onClick={onOpenSync}
-              className="p-2 sm:px-3 sm:py-2 min-h-[44px] min-w-[44px] rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition touch-manipulation active:scale-95"
-              title="Sync ESPN League"
-            >
-              <RefreshCw className="w-4 h-4 text-blue-400" />
-              <span className="hidden sm:inline">Sync ESPN</span>
-            </button>
+            {currentUser && (
+              <button
+                onClick={onOpenSync}
+                className="p-2 sm:px-3 sm:py-2 min-h-[44px] min-w-[44px] rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition touch-manipulation active:scale-95"
+                title="Sync ESPN League"
+              >
+                <RefreshCw className="w-4 h-4 text-blue-400" />
+                <span className="hidden sm:inline">Sync ESPN</span>
+              </button>
+            )}
 
             {/* Account Status / Login */}
             {currentUser ? (
@@ -186,23 +188,19 @@ export const Navbar: React.FC<NavbarProps> = ({
                 )}
               </div>
             ) : (
-              onOpenAuth && (
-                <button
-                  onClick={onOpenAuth}
-                  className="px-3 py-1.5 min-h-[44px] rounded-xl bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-300 hover:text-white text-xs font-bold flex items-center gap-1.5 transition touch-manipulation active:scale-95"
-                  title="Create account or log in"
-                >
-                  <UserPlus className="w-4 h-4" />
-                  <span className="hidden sm:inline">Sign In</span>
-                </button>
-              )
+              <div className="flex items-center gap-2 pl-1">
+                <div className="px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-800 text-xs font-semibold text-slate-400 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                  <span>Account Required</span>
+                </div>
+              </div>
             )}
           </div>
         </div>
       </header>
 
-      {/* Mobile Fixed Bottom Navigation Bar */}
-      {league && (
+      {/* Mobile Fixed Bottom Navigation Bar - Only when logged in and inside a league */}
+      {league && currentUser && (
         <nav className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 backdrop-blur-lg border-t border-slate-800 pb-[env(safe-area-inset-bottom,0px)] px-2 py-1.5 flex items-center justify-around">
           <button
             onClick={() => onTabChange('lobby')}

@@ -312,12 +312,8 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'sync_state') {
-      const { teamId, fallbackLeague } = body;
-      let state = getServerLeagueState(cleanId);
-      if (!state && fallbackLeague && Array.isArray(fallbackLeague.teams)) {
-        saveServerLeagueSnapshot({ ...fallbackLeague, espnLeagueId: cleanId }, cleanId);
-        state = getServerLeagueState(cleanId);
-      }
+      const { teamId } = body;
+      const state = getServerLeagueState(cleanId);
       if (!state) {
         return NextResponse.json(
           { error: 'League not found on server' },

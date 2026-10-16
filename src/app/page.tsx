@@ -7,6 +7,7 @@ import {
   getLeagueById,
   saveLeague,
   getStoredUserClaim,
+  saveStoredUserClaim,
   removeStoredUserClaim,
   getLocalSwipes,
   saveLocalSwipes,
@@ -51,6 +52,7 @@ export default function Home() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<'register' | 'login'>('register');
   const currentUserRef = useRef<UserAccount | null>(null);
+  const [pendingLeagueId, setPendingLeagueId] = useState<string | null>(null);
 
   const [league, setLeague] = useState<League | null>(null);
   const [userTeamId, setUserTeamId] = useState<string | null>(null);
@@ -166,29 +168,36 @@ export default function Home() {
       const queryLeagueId = params.get('leagueId');
 
       if (queryLeagueId) {
-        const found = getLeagueById(queryLeagueId);
-        if (found) {
-          handleSelectLeague(found);
-          setActiveTab('lobby');
-          return;
-        } else {
-          // If a league link was shared with someone who has not cached it yet, fetch from server/ESPN
-          fetchEspnLeague({ leagueId: queryLeagueId })
-            .then((fetched) => {
-              const saved = saveLeague(fetched);
-              handleSelectLeague(saved);
-              setActiveTab('lobby');
-            })
-            .catch(() => {
-              // If private or error, user remains on HomeHero to input cookies/search
-            });
+        setPendingLeagueId(queryLeagueId);
+        const stored = getStoredUser();
+        // If user is already authenticated on this device, proceed to load their league
+        if (stored) {
+          const found = getLeagueById(queryLeagueId);
+          if (found) {
+            handleSelectLeague(found);
+            setActiveTab('lobby');
+            return;
+          } else {
+            // If a league link was shared with someone who has not cached it yet, fetch from server/ESPN
+            fetchEspnLeague({ leagueId: queryLeagueId })
+              .then((fetched) => {
+                const saved = saveLeague(fetched);
+                handleSelectLeague(saved);
+                setActiveTab('lobby');
+              })
+              .catch(() => {
+                // If private or error, user remains on HomeHero to input cookies/search
+              });
+          }
         }
+        // If not logged in, user encounters HomeHero Screen 1 (Login/Register)
+        // with invite banner: "You've been invited to join ESPN League #{pendingLeagueId}!"
       }
       // Cold visits with no query parameter will stay on HomeHero (league = null)
     }
   }, []);
 
-  const handleSelectLeague = (selectedLeague: League) => {
+  const handleSelectLeague = (selectedLeague: League, forcedTeamId?: string) => {
     mutationVersionRef.current += 1;
     const reqVersion = mutationVersionRef.current;
 
@@ -213,8 +222,13 @@ export default function Home() {
     const cleanLeagueId = selectedLeague.espnLeagueId;
     const activeUser = currentUserRef.current;
 
+    // 0. Forced team ID if passed (e.g. from claimed leagues navigator)
+    if (forcedTeamId && selectedLeague.teams.some((t) => t.id === forcedTeamId)) {
+      resolvedTeamId = forcedTeamId;
+    }
+
     // 1. Check user account claimed teams
-    if (activeUser && activeUser.claimedTeams && activeUser.claimedTeams[cleanLeagueId]) {
+    if (!resolvedTeamId && activeUser && activeUser.claimedTeams && activeUser.claimedTeams[cleanLeagueId]) {
       const accountTeamId = activeUser.claimedTeams[cleanLeagueId];
       if (selectedLeague.teams.some((t) => t.id === accountTeamId)) {
         resolvedTeamId = accountTeamId;
@@ -245,11 +259,15 @@ export default function Home() {
 
     if (resolvedTeamId) {
       setUserTeamId(resolvedTeamId);
+      saveStoredUserClaim(cleanLeagueId, resolvedTeamId);
       const team = selectedLeague.teams.find((t) => t.id === resolvedTeamId);
       if (team && team.roster.length > 0) {
         setSelectedOfferedPlayerIds([team.roster[0].id]);
       } else {
         setSelectedOfferedPlayerIds([]);
+      }
+      if (forcedTeamId) {
+        setActiveTab('deck');
       }
     } else {
       // In demo league, default user to Team 1 ("You (Manager)")
@@ -289,6 +307,7 @@ export default function Home() {
         if (serverUserTeam) {
           resolvedTeamId = serverUserTeam.id;
           setUserTeamId(serverUserTeam.id);
+          saveStoredUserClaim(cleanLeagueId, serverUserTeam.id);
           if (serverUserTeam.roster.length > 0) {
             setSelectedOfferedPlayerIds([serverUserTeam.roster[0].id]);
           }
@@ -314,6 +333,35 @@ export default function Home() {
         ]);
       }
     });
+  };
+
+  const handleSelectLeagueAndTeam = async (leagueId: string, teamId: string) => {
+    let targetLeague = getLeagueById(leagueId);
+    if (!targetLeague) {
+      try {
+        const res = await fetch(`/api/league?leagueId=${encodeURIComponent(leagueId)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.league) {
+            targetLeague = saveLeague(data.league);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to fetch league from server store:', err);
+      }
+    }
+    if (!targetLeague) {
+      try {
+        const fetched = await fetchEspnLeague({ leagueId });
+        targetLeague = saveLeague(fetched);
+      } catch (err) {
+        console.error('Failed to fetch ESPN league for claim:', err);
+      }
+    }
+    if (targetLeague) {
+      handleSelectLeague(targetLeague, teamId);
+      setActiveTab('deck');
+    }
   };
 
   const handleClaimAndEnterDeck = (teamId: string) => {
@@ -1033,6 +1081,26 @@ export default function Home() {
     setCurrentUser(newUser);
     currentUserRef.current = newUser;
 
+    // If there is a pending league invite from URL query param, automatically navigate to it
+    if (newUser && pendingLeagueId && !leagueRef.current) {
+      const targetId = pendingLeagueId;
+      setPendingLeagueId(null);
+      const found = getLeagueById(targetId);
+      if (found) {
+        handleSelectLeague(found);
+        setActiveTab('lobby');
+      } else {
+        fetchEspnLeague({ leagueId: targetId })
+          .then((fetched) => {
+            const saved = saveLeague(fetched);
+            handleSelectLeague(saved);
+            setActiveTab('lobby');
+          })
+          .catch(() => {});
+      }
+      return;
+    }
+
     // If a league is already loaded and the user has a claimed team in it, auto-link
     const currentLeague = leagueRef.current;
     if (currentLeague && newUser) {
@@ -1062,6 +1130,7 @@ export default function Home() {
     if (league) {
       removeStoredUserClaim(league.espnLeagueId);
     }
+    setLeague(null);
     setUserTeamId(null);
     setSelectedOfferedPlayerIds([]);
     setSwipes([]);
@@ -1099,11 +1168,13 @@ export default function Home() {
               handleSelectLeague(l);
               setActiveTab('lobby');
             }}
+            onSelectLeagueAndTeam={handleSelectLeagueAndTeam}
             onOpenDemo={() => {
               const demo = getLeagueById('12345678') || createMockLeague();
               handleSelectLeague(demo);
               setActiveTab('lobby');
             }}
+            pendingLeagueId={pendingLeagueId}
           />
         </main>
         {isSyncModalOpen && (

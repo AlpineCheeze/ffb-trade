@@ -8,7 +8,54 @@ import {
   unlinkUserTeamClaim,
   logoutUser,
 } from '@/lib/serverUserStore';
-import { ensureCleanSlateMigration } from '@/lib/serverLeagueStore';
+import { ensureCleanSlateMigration, getServerLeagueState } from '@/lib/serverLeagueStore';
+import { UserAccount, UserClaimedLeagueSummary } from '@/types/fantasy';
+
+function enrichUserWithClaimedLeagues(user: UserAccount): UserAccount {
+  const claimedLeaguesDetails: UserClaimedLeagueSummary[] = [];
+  const claimedEntries = Object.entries(user.claimedTeams || {});
+
+  for (const [leagueId, teamId] of claimedEntries) {
+    try {
+      const state = getServerLeagueState(leagueId);
+      if (state && state.league) {
+        const team = state.league.teams.find((t) => t.id === teamId || t.espnTeamId === teamId);
+        claimedLeaguesDetails.push({
+          leagueId,
+          leagueName: state.league.name || (leagueId === '12345678' ? 'The Gridiron Champions League (Demo)' : `ESPN League #${leagueId}`),
+          seasonId: state.league.seasonId || '2024',
+          teamId,
+          teamName: team?.name || `Team ${teamId}`,
+          teamLogo: team?.logoUrl || null,
+          ownerName: team?.ownerName || user.username,
+          starPlayers: team?.roster?.slice(0, 4) || [],
+          totalTeams: state.league.teams.length,
+          matchesCount: state.matches.filter((m) => m.teamAId === teamId || m.teamBId === teamId).length,
+        });
+      } else {
+        claimedLeaguesDetails.push({
+          leagueId,
+          leagueName: leagueId === '12345678' ? 'The Gridiron Champions League (Demo)' : `ESPN League #${leagueId}`,
+          seasonId: '2024',
+          teamId,
+          teamName: `Claimed Team`,
+          teamLogo: null,
+          ownerName: user.username,
+          starPlayers: [],
+          totalTeams: 0,
+          matchesCount: 0,
+        });
+      }
+    } catch {
+      // Continue
+    }
+  }
+
+  return {
+    ...user,
+    claimedLeaguesDetails,
+  };
+}
 
 function extractToken(req: NextRequest, body?: any): string | null {
   const authHeader = req.headers.get('Authorization');
@@ -46,7 +93,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      user,
+      user: enrichUserWithClaimedLeagues(user),
     });
   } catch (err: any) {
     return NextResponse.json(
@@ -75,7 +122,7 @@ export async function POST(req: NextRequest) {
       const result = createUser(username, password);
       return NextResponse.json({
         success: true,
-        user: result.user,
+        user: enrichUserWithClaimedLeagues(result.user),
         token: result.token,
       });
     }
@@ -85,7 +132,7 @@ export async function POST(req: NextRequest) {
       const result = loginUser(username, password);
       return NextResponse.json({
         success: true,
-        user: result.user,
+        user: enrichUserWithClaimedLeagues(result.user),
         token: result.token,
       });
     }
@@ -115,7 +162,7 @@ export async function POST(req: NextRequest) {
       }
       return NextResponse.json({
         success: true,
-        user,
+        user: enrichUserWithClaimedLeagues(user),
       });
     }
 
@@ -136,7 +183,7 @@ export async function POST(req: NextRequest) {
       }
       return NextResponse.json({
         success: true,
-        user: updatedUser,
+        user: enrichUserWithClaimedLeagues(updatedUser),
       });
     }
 
@@ -151,7 +198,7 @@ export async function POST(req: NextRequest) {
       const updatedUser = unlinkUserTeamClaim(userId, leagueId);
       return NextResponse.json({
         success: true,
-        user: updatedUser,
+        user: updatedUser ? enrichUserWithClaimedLeagues(updatedUser) : null,
       });
     }
 

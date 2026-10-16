@@ -158,6 +158,17 @@ export function removeStoredUserClaim(espnLeagueId: string): void {
   }
 }
 
+export function saveStoredUserClaim(espnLeagueId: string, teamId: string): void {
+  if (typeof window !== 'undefined') {
+    try {
+      const clean = espnLeagueId.trim();
+      localStorage.setItem(CLAIM_STORAGE_PREFIX + clean, teamId);
+    } catch {
+      // Ignore
+    }
+  }
+}
+
 export function getLocalSwipes(espnLeagueId: string): Swipe[] {
   if (typeof window === 'undefined') return [];
   try {

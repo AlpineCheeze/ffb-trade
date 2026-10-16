@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { fetchEspnLeague, normalizeEspnCookies } from '@/lib/espn';
 import { getLeagueById, saveLeague, getSavedLeagues } from '@/lib/leagueStore';
 import { registerAccount, loginAccount, logoutAccount } from '@/lib/authStore';
-import { League, UserAccount } from '@/types/fantasy';
+import { League, UserAccount, UserClaimedLeagueSummary } from '@/types/fantasy';
 import {
   Search,
   Sparkles,
@@ -21,8 +21,9 @@ import {
   LogOut,
   UserPlus,
   LogIn,
-  Smartphone,
   CheckCircle2,
+  ChevronRight,
+  Flame,
 } from 'lucide-react';
 import { UnicornLogo } from './UnicornLogo';
 
@@ -30,17 +31,21 @@ interface HomeHeroProps {
   currentUser: UserAccount | null;
   onUserChange: (user: UserAccount | null) => void;
   onSelectLeague: (league: League) => void;
+  onSelectLeagueAndTeam?: (leagueId: string, teamId: string) => void;
   onOpenDemo: () => void;
+  pendingLeagueId?: string | null;
 }
 
 export const HomeHero: React.FC<HomeHeroProps> = ({
   currentUser,
   onUserChange,
   onSelectLeague,
+  onSelectLeagueAndTeam,
   onOpenDemo,
+  pendingLeagueId,
 }) => {
   // Account Form State
-  const [authMode, setAuthMode] = useState<'register' | 'login'>('register');
+  const [authMode, setAuthMode] = useState<'register' | 'login'>('login');
   const [usernameInput, setUsernameInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [isAuthLoading, setIsAuthLoading] = useState(false);
@@ -102,7 +107,7 @@ export const HomeHero: React.FC<HomeHeroProps> = ({
         setAuthSuccessMsg(`Account created! Welcome, @${user.username}.`);
       } else {
         user = await loginAccount(cleanUser, passwordInput);
-        setAuthSuccessMsg(`Logged in as @${user.username}.`);
+        setAuthSuccessMsg(`Welcome back, @${user.username}!`);
       }
       setIsAuthLoading(false);
       setUsernameInput('');
@@ -132,11 +137,9 @@ export const HomeHero: React.FC<HomeHeroProps> = ({
     setError(null);
 
     try {
-      // 1. Normalize cookies (strips extra quotes, headers, and ensures SWID braces)
       const norm = normalizeEspnCookies(espnS2, swid);
       const hasCookies = Boolean(norm.espnS2 && norm.swid);
 
-      // 2. Only short-circuit to existing cached league if NO fresh credentials/cookies were provided
       if (!hasCookies) {
         const existing = getLeagueById(cleanId);
         if (existing) {
@@ -146,7 +149,6 @@ export const HomeHero: React.FC<HomeHeroProps> = ({
         }
       }
 
-      // 3. Fetch from ESPN and register it
       const fetched = await fetchEspnLeague({
         leagueId: cleanId,
         espnS2: norm.espnS2,
@@ -172,154 +174,145 @@ export const HomeHero: React.FC<HomeHeroProps> = ({
     }
   };
 
-  return (
-    <div className="w-full max-w-4xl mx-auto py-8 px-4 flex flex-col items-center text-center animate-in fade-in duration-300">
-      {/* Top Badge */}
-      <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-blue-600/10 border border-blue-500/20 text-blue-400 font-bold text-xs uppercase tracking-wider mb-6 shadow-sm">
-        <UnicornLogo className="w-4 h-4 fill-blue-400" />
-        Grindr for the Gridiron
-      </div>
+  const claimedSummaries: UserClaimedLeagueSummary[] = useMemo(() => {
+    if (!currentUser) return [];
+    if (currentUser.claimedLeaguesDetails && currentUser.claimedLeaguesDetails.length > 0) {
+      return currentUser.claimedLeaguesDetails;
+    }
+    const summaries: UserClaimedLeagueSummary[] = [];
+    const entries = Object.entries(currentUser.claimedTeams || {});
+    for (const [leagueId, teamId] of entries) {
+      const local = getLeagueById(leagueId);
+      if (local) {
+        const team = local.teams.find((t) => t.id === teamId);
+        summaries.push({
+          leagueId,
+          leagueName: local.name,
+          seasonId: local.seasonId,
+          teamId,
+          teamName: team?.name || `Team ${teamId}`,
+          teamLogo: team?.logoUrl || null,
+          ownerName: team?.ownerName || currentUser.username,
+          starPlayers: team?.roster?.slice(0, 4) || [],
+          totalTeams: local.teams.length,
+        });
+      } else {
+        summaries.push({
+          leagueId,
+          leagueName: leagueId === '12345678' ? 'The Gridiron Champions League (Demo)' : `ESPN League #${leagueId}`,
+          teamId,
+          teamName: 'Claimed Team',
+          ownerName: currentUser.username,
+        });
+      }
+    }
+    return summaries;
+  }, [currentUser]);
 
-      {/* Main Headline */}
-      <h1 className="text-4xl min-[360px]:text-5xl sm:text-7xl font-black tracking-tight text-white flex items-center justify-center gap-2.5 sm:gap-5 leading-[1.1] my-2">
-        <span>Trade</span>
-        <UnicornLogo className="w-10 h-10 min-[360px]:w-12 min-[360px]:h-12 sm:w-16 sm:h-16 fill-blue-500 drop-shadow-[0_0_24px_rgba(59,130,246,0.5)] flex-shrink-0" />
-        <span>Horny</span>
-      </h1>
+  // =========================================================================
+  // SCREEN 1: USER IS NOT LOGGED IN -> DEDICATED LOGIN / CREATE ACCOUNT SCREEN
+  // =========================================================================
+  if (!currentUser) {
+    return (
+      <div className="w-full max-w-lg mx-auto py-6 sm:py-10 px-4 flex flex-col items-center text-center animate-in fade-in duration-300">
+        {/* Top Badge */}
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-blue-600/10 border border-blue-500/20 text-blue-400 font-bold text-xs uppercase tracking-wider mb-5 shadow-sm">
+          <UnicornLogo className="w-4 h-4 fill-blue-400" />
+          Grindr for the Gridiron
+        </div>
 
-      <p className="mt-4 text-base sm:text-lg text-slate-400 max-w-xl leading-relaxed">
-        Sync your ESPN league, shop your surplus players, and swipe <strong className="text-emerald-400">Yes</strong> or <strong className="text-rose-400">No</strong> on opponents. When both sides align, <span className="text-blue-400 font-bold">Trade Horny</span> makes the match.
-      </p>
+        {/* Main Headline */}
+        <h1 className="text-4xl sm:text-6xl font-black tracking-tight text-white flex items-center justify-center gap-3 sm:gap-4 leading-[1.1] my-1">
+          <span>Trade</span>
+          <UnicornLogo className="w-10 h-10 sm:w-14 sm:h-14 fill-blue-500 drop-shadow-[0_0_24px_rgba(59,130,246,0.5)] flex-shrink-0" />
+          <span>Horny</span>
+        </h1>
 
-      {/* ========================================================================= */}
-      {/* STEP 1: CREATE ACCOUNT / LOGIN (BEFORE FINDING YOUR LEAGUE) */}
-      {/* ========================================================================= */}
-      <div className="w-full max-w-lg mt-8 p-5 rounded-3xl bg-slate-900/90 border border-slate-800 shadow-2xl backdrop-blur-md text-left">
-        {currentUser ? (
-          /* LOGGED IN VIEW */
-          <div className="space-y-3">
-            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-slate-400">
-              <span className="flex items-center gap-1.5 text-emerald-400">
-                <UserCheck className="w-4 h-4" />
-                Account Active
-              </span>
-              <span className="text-emerald-400 font-semibold lowercase">cross-device linked</span>
-            </div>
+        <p className="mt-3 text-sm sm:text-base text-slate-400 max-w-md leading-relaxed">
+          The fantasy trade matchmaker. Log in or create an account to view your leagues and claimed rosters.
+        </p>
 
-            <div className="p-3.5 rounded-2xl bg-slate-950/90 border border-emerald-500/30 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-black text-sm">
-                  {currentUser.username.slice(0, 2).toUpperCase()}
-                </div>
-                <div>
-                  <div className="text-sm font-bold text-white flex items-center gap-1.5">
-                    <span>@{currentUser.username}</span>
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block animate-pulse" />
-                  </div>
-                  <div className="text-[11px] text-slate-400">
-                    Logged in • Claimed teams are linked across all your devices
-                  </div>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1 transition"
-                title="Log out of this account"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                <span>Log Out</span>
-              </button>
-            </div>
-
-            {authSuccessMsg && (
-              <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-medium flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                <span>{authSuccessMsg}</span>
-              </div>
-            )}
+        {pendingLeagueId && (
+          <div className="mt-4 p-3 rounded-2xl bg-blue-500/10 border border-blue-500/30 text-blue-300 text-xs font-semibold flex items-center justify-center gap-2">
+            <Trophy className="w-4 h-4 text-blue-400" />
+            <span>You&apos;ve been invited to join ESPN League #{pendingLeagueId}!</span>
           </div>
-        ) : (
-          /* CREATE ACCOUNT / LOGIN FORM */
+        )}
+
+        {/* AUTHENTICATION CARD */}
+        <div className="w-full mt-6 p-5 sm:p-6 rounded-3xl bg-slate-900/90 border border-slate-800 shadow-2xl backdrop-blur-md text-left">
+          {/* Mode Switcher Tabs */}
+          <div className="flex p-1 rounded-2xl bg-slate-950 border border-slate-800 mb-4">
+            <button
+              type="button"
+              onClick={() => {
+                setAuthMode('login');
+                setAuthError(null);
+              }}
+              className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition ${
+                authMode === 'login'
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              <span>Log In</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAuthMode('register');
+                setAuthError(null);
+              }}
+              className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition ${
+                authMode === 'register'
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>Create Account</span>
+            </button>
+          </div>
+
           <form onSubmit={handleAuthSubmit} className="space-y-3.5">
-            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-slate-400">
-              <span className="flex items-center gap-1.5 text-blue-400">
-                <Smartphone className="w-3.5 h-3.5" />
-                Step 1: Your Trade Horny Account
-              </span>
-              <span className="text-blue-400 font-semibold lowercase">cross-device sync</span>
-            </div>
-
-            {/* Mode Switcher Tabs */}
-            <div className="flex p-1 rounded-2xl bg-slate-950 border border-slate-800">
-              <button
-                type="button"
-                onClick={() => {
-                  setAuthMode('register');
-                  setAuthError(null);
-                }}
-                className={`flex-1 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition ${
-                  authMode === 'register'
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <UserPlus className="w-3.5 h-3.5" />
-                <span>Create Account</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setAuthMode('login');
-                  setAuthError(null);
-                }}
-                className={`flex-1 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition ${
-                  authMode === 'login'
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <LogIn className="w-3.5 h-3.5" />
-                <span>Log In</span>
-              </button>
-            </div>
-
-            <p className="text-[11px] text-slate-400">
-              {authMode === 'register'
-                ? 'Create a quick account before finding your league so your claimed team is linked across your phone, tablet, and PC.'
-                : 'Log in with your username and password to restore your claimed teams on this device.'}
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                Username
+              </label>
               <div className="relative">
-                <User className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <User className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder={authMode === 'register' ? 'Username (e.g. BlitzKing)' : 'Username'}
+                  placeholder={authMode === 'register' ? 'e.g. BlitzKing' : 'Your username'}
                   value={usernameInput}
                   onChange={(e) => setUsernameInput(e.target.value)}
                   autoCapitalize="none"
                   autoCorrect="off"
                   spellCheck={false}
-                  className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-base sm:text-sm font-semibold text-white placeholder-slate-600 outline-none transition"
+                  className="w-full pl-10 pr-3.5 py-3 rounded-2xl bg-slate-950 border border-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-base sm:text-sm font-semibold text-white placeholder-slate-600 outline-none transition"
                 />
               </div>
+            </div>
 
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                Password
+              </label>
               <div className="relative">
-                <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="password"
-                  placeholder={authMode === 'register' ? 'Password (min 4 chars)' : 'Password'}
+                  placeholder={authMode === 'register' ? 'Choose a password (min 4 chars)' : 'Your password'}
                   value={passwordInput}
                   onChange={(e) => setPasswordInput(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-base sm:text-sm font-semibold text-white placeholder-slate-600 outline-none transition"
+                  className="w-full pl-10 pr-3.5 py-3 rounded-2xl bg-slate-950 border border-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-base sm:text-sm font-semibold text-white placeholder-slate-600 outline-none transition"
                 />
               </div>
             </div>
 
             {authError && (
-              <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-medium">
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-medium">
                 {authError}
               </div>
             )}
@@ -327,7 +320,7 @@ export const HomeHero: React.FC<HomeHeroProps> = ({
             <button
               type="submit"
               disabled={isAuthLoading}
-              className="w-full py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 text-white font-bold text-xs shadow-lg shadow-blue-600/25 flex items-center justify-center gap-1.5 transition hover:scale-[1.01] active:scale-95"
+              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 text-white font-bold text-sm shadow-xl shadow-blue-600/30 flex items-center justify-center gap-2 transition hover:scale-[1.01] active:scale-95 touch-manipulation mt-2"
             >
               {isAuthLoading ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -335,25 +328,199 @@ export const HomeHero: React.FC<HomeHeroProps> = ({
                 <>
                   <span>
                     {authMode === 'register'
-                      ? 'Create Account & Continue to League'
-                      : 'Log In & Continue to League'}
+                      ? 'Create Account & Continue'
+                      : 'Log In & Continue'}
                   </span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
             </button>
           </form>
+
+          {/* Guest Escape Link */}
+          <div className="mt-5 pt-4 border-t border-slate-800/80 text-center">
+            <button
+              type="button"
+              onClick={onOpenDemo}
+              className="text-xs text-slate-400 hover:text-blue-400 font-semibold transition inline-flex items-center gap-1.5"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+              <span>Just testing? Explore Demo League as Guest &rarr;</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // =========================================================================
+  // SCREEN 2: USER IS LOGGED IN -> LEAGUE NAVIGATOR & CLAIMED TEAMS HUB
+  // =========================================================================
+  return (
+    <div className="w-full max-w-4xl mx-auto py-6 sm:py-8 px-4 flex flex-col items-center animate-in fade-in duration-300">
+      {/* User Status Bar */}
+      <div className="w-full max-w-2xl p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-600/10 border border-blue-500/30 flex items-center justify-center text-blue-400 font-black text-sm">
+            {currentUser.username.slice(0, 2).toUpperCase()}
+          </div>
+          <div className="text-left">
+            <div className="text-sm font-bold text-white flex items-center gap-1.5">
+              <span>@{currentUser.username}</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block animate-pulse" />
+            </div>
+            <div className="text-[11px] text-slate-400">
+              Account active • Teams synced across devices
+            </div>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition active:scale-95"
+          title="Log out of this account"
+        >
+          <LogOut className="w-3.5 h-3.5" />
+          <span>Log Out</span>
+        </button>
+      </div>
+
+      {authSuccessMsg && (
+        <div className="w-full max-w-2xl mb-4 p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-medium flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+          <span>{authSuccessMsg}</span>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* SECTION 1: THE LEAGUES YOU ARE PART OF AND TEAMS YOU HAVE CLAIMED */}
+      {/* ========================================================================= */}
+      <div className="w-full max-w-2xl mb-6 text-left">
+        <div className="flex items-center justify-between mb-3 px-1">
+          <h2 className="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+            <Trophy className="w-4 h-4 text-amber-400" />
+            <span>My Leagues & Claimed Teams</span>
+          </h2>
+          <span className="text-xs text-blue-400 font-bold">
+            {claimedSummaries.length} Claimed
+          </span>
+        </div>
+
+        {claimedSummaries.length > 0 ? (
+          <div className="space-y-3">
+            {claimedSummaries.map((summary) => (
+              <div
+                key={`${summary.leagueId}_${summary.teamId}`}
+                className="p-4 rounded-3xl bg-slate-900/90 border border-slate-800 hover:border-blue-500/50 shadow-xl transition-all group flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+              >
+                <div className="flex items-start gap-3.5 min-w-0 flex-1">
+                  {summary.teamLogo ? (
+                    <img
+                      src={summary.teamLogo}
+                      alt={summary.teamName}
+                      className="w-12 h-12 rounded-2xl object-cover bg-slate-950 border border-slate-800 flex-shrink-0 mt-0.5"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-600/20 to-indigo-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 font-black text-base flex-shrink-0 mt-0.5">
+                      <ShieldCheck className="w-6 h-6" />
+                    </div>
+                  )}
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs text-blue-400 font-semibold truncate">
+                        {summary.leagueName}
+                      </span>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-950 text-slate-400 border border-slate-800">
+                        ESPN #{summary.leagueId}
+                      </span>
+                    </div>
+
+                    <h3 className="text-base font-bold text-white truncate mt-0.5 group-hover:text-blue-300 transition">
+                      {summary.teamName}
+                    </h3>
+
+                    <div className="text-xs text-slate-400 flex items-center gap-2 mt-1">
+                      <span>Owner: <strong className="text-slate-200">{summary.ownerName}</strong></span>
+                      {summary.matchesCount !== undefined && summary.matchesCount > 0 && (
+                        <>
+                          <span>•</span>
+                          <span className="text-emerald-400 font-bold flex items-center gap-1">
+                            <Sparkles className="w-3 h-3" />
+                            {summary.matchesCount} Match{summary.matchesCount === 1 ? '' : 'es'}
+                          </span>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Star Players Heads */}
+                    {summary.starPlayers && summary.starPlayers.length > 0 && (
+                      <div className="flex items-center gap-1 mt-2.5">
+                        {summary.starPlayers.map((player) => (
+                          <div
+                            key={player.id}
+                            className="w-6 h-6 rounded-full bg-slate-950 border border-slate-800 overflow-hidden flex-shrink-0"
+                            title={`${player.fullName} (${player.position})`}
+                          >
+                            <img
+                              src={player.headshotUrl}
+                              alt={player.fullName}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        ))}
+                        <span className="text-[11px] text-slate-500 ml-1">Roster Ready</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Direct 1-Click Launch Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onSelectLeagueAndTeam) {
+                      onSelectLeagueAndTeam(summary.leagueId, summary.teamId);
+                    } else {
+                      const existing = getLeagueById(summary.leagueId);
+                      if (existing) {
+                        onSelectLeague(existing);
+                      }
+                    }
+                  }}
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-600/30 flex items-center justify-center gap-1.5 transition active:scale-95 flex-shrink-0"
+                >
+                  <span>Enter League</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="p-6 rounded-3xl bg-slate-900/60 border border-slate-800/80 text-center">
+            <div className="w-12 h-12 rounded-2xl bg-slate-800/60 border border-slate-700/60 text-slate-400 flex items-center justify-center mx-auto mb-3">
+              <Users className="w-6 h-6" />
+            </div>
+            <h3 className="text-sm font-bold text-white">No Claimed Teams Yet</h3>
+            <p className="text-xs text-slate-400 max-w-sm mx-auto mt-1 leading-relaxed">
+              Find your ESPN league below or launch the demo league to claim your team roster and start trading.
+            </p>
+          </div>
         )}
       </div>
 
       {/* ========================================================================= */}
-      {/* STEP 2: FIND OR REGISTER ESPN LEAGUE */}
+      {/* SECTION 2: FIND OR JOIN AN ESPN LEAGUE */}
       {/* ========================================================================= */}
-      <div className="w-full max-w-lg mt-5 p-5 rounded-3xl bg-slate-900/90 border border-slate-800 shadow-2xl backdrop-blur-md">
+      <div className="w-full max-w-2xl p-5 rounded-3xl bg-slate-900/90 border border-slate-800 shadow-xl backdrop-blur-md text-left mb-6">
         <form onSubmit={handleSearchOrRegister} className="space-y-3">
-          <div className="text-left text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
-            <span>Step 2: Find or Register Your ESPN League</span>
-            <span className="text-blue-400 font-semibold lowercase">step 2 of 2</span>
+          <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-slate-400">
+            <span className="flex items-center gap-1.5 text-blue-400">
+              <Search className="w-3.5 h-3.5" />
+              Find Your ESPN League
+            </span>
+            <span className="text-slate-500 font-semibold lowercase">public & private</span>
           </div>
 
           <div className="flex gap-2">
@@ -379,7 +546,7 @@ export const HomeHero: React.FC<HomeHeroProps> = ({
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 <>
-                  <span>Search</span>
+                  <span>Connect</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
@@ -387,13 +554,13 @@ export const HomeHero: React.FC<HomeHeroProps> = ({
           </div>
 
           {error && (
-            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-medium text-left">
+            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-medium">
               {error}
             </div>
           )}
 
           {/* Toggle for Private League Credentials */}
-          <div className="pt-2 text-left">
+          <div className="pt-1">
             <button
               type="button"
               onClick={() => setShowPrivateFields(!showPrivateFields)}
@@ -450,95 +617,63 @@ export const HomeHero: React.FC<HomeHeroProps> = ({
                     className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-base sm:text-sm text-white placeholder-slate-600 outline-none focus:border-blue-500 font-mono"
                   />
                 </div>
-
-                <div className="text-[10px] text-slate-500 italic">
-                  💡 Tip: You can also paste your full cookie string into either box above — Trade Horny will automatically extract both espn_s2 and SWID for you!
-                </div>
               </div>
             )}
           </div>
         </form>
-
-        {/* 1-Click Instant Demo Button */}
-        <div className="mt-5 pt-4 border-t border-slate-800/80 flex items-center justify-between">
-          <div className="text-left">
-            <div className="text-xs font-bold text-white flex items-center gap-1">
-              <Sparkles className="w-3.5 h-3.5 text-blue-400" />
-              Just browsing?
-            </div>
-            <div className="text-[11px] text-slate-400">Test the app with our pre-loaded demo league</div>
-          </div>
-
-          <button
-            onClick={onOpenDemo}
-            className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition hover:scale-105 active:scale-95"
-          >
-            Launch Demo League
-          </button>
-        </div>
       </div>
 
-      {/* Saved Leagues Section (if user previously synced any real league on this device) */}
+      {/* ========================================================================= */}
+      {/* SECTION 3: DEMO SANDBOX */}
+      {/* ========================================================================= */}
+      <div className="w-full max-w-2xl p-4 rounded-3xl bg-slate-900/60 border border-slate-800 flex items-center justify-between mb-6">
+        <div className="text-left">
+          <div className="text-xs font-bold text-white flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+            <span>Try the Demo Sandbox</span>
+          </div>
+          <div className="text-[11px] text-slate-400">
+            Explore features with our pre-loaded 3-team demo league (12345678)
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={onOpenDemo}
+          className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition hover:scale-105 active:scale-95"
+        >
+          Launch Demo
+        </button>
+      </div>
+
+      {/* Saved Leagues Section */}
       {savedLeagues.length > 0 && (
-        <div className="w-full max-w-lg mt-6 p-4 rounded-3xl bg-slate-900/80 border border-slate-800 shadow-xl text-left">
-          <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center justify-between">
+        <div className="w-full max-w-2xl p-4 rounded-3xl bg-slate-900/60 border border-slate-800 text-left">
+          <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5 flex items-center justify-between">
             <span className="flex items-center gap-1.5">
               <Trophy className="w-3.5 h-3.5 text-amber-400" />
-              Your Synced Leagues
+              Cached on this Device
             </span>
-            <span className="text-blue-400 font-semibold">{savedLeagues.length} saved</span>
+            <span className="text-slate-500">{savedLeagues.length}</span>
           </div>
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             {savedLeagues.map((sl) => (
               <button
                 key={sl.espnLeagueId}
                 type="button"
                 onClick={() => onSelectLeague(sl)}
-                className="w-full p-3 rounded-2xl bg-slate-950 hover:bg-slate-800/80 border border-slate-800/90 hover:border-blue-500/50 transition flex items-center justify-between group text-left"
+                className="w-full p-2.5 rounded-xl bg-slate-950/70 hover:bg-slate-800/80 border border-slate-800/80 transition flex items-center justify-between group text-left"
               >
                 <div>
-                  <div className="text-sm font-bold text-white group-hover:text-blue-400 transition">{sl.name}</div>
-                  <div className="text-xs text-slate-500">ESPN ID: {sl.espnLeagueId} • Season {sl.seasonId} • {sl.teams.length} Teams</div>
+                  <div className="text-xs font-bold text-white group-hover:text-blue-400 transition">{sl.name}</div>
+                  <div className="text-[10px] text-slate-500">ID: {sl.espnLeagueId} • {sl.teams.length} Teams</div>
                 </div>
-                <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-blue-400 group-hover:translate-x-1 transition" />
+                <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-blue-400 group-hover:translate-x-0.5 transition" />
               </button>
             ))}
           </div>
         </div>
       )}
-
-      {/* Feature Highlights */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-12 max-w-3xl w-full text-left">
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800/80">
-          <div className="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center font-black text-sm mb-2">
-            1
-          </div>
-          <h3 className="font-bold text-white text-sm">Cross-Device Account</h3>
-          <p className="text-xs text-slate-400 mt-1">
-            Create an account with simple username and password. Your claimed team follows you on any device.
-          </p>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800/80">
-          <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center font-black text-sm mb-2">
-            2
-          </div>
-          <h3 className="font-bold text-white text-sm">Claim Your Team</h3>
-          <p className="text-xs text-slate-400 mt-1">
-            Pick your roster from the locker room, put players on the trade block, and start swiping.
-          </p>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800/80">
-          <div className="w-8 h-8 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center font-black text-sm mb-2">
-            3
-          </div>
-          <h3 className="font-bold text-white text-sm">Mutual Trade Matches</h3>
-          <p className="text-xs text-slate-400 mt-1">
-            When two managers mutually swipe right on each other&apos;s shopped players, both get notified.
-          </p>
-        </div>
-      </div>
     </div>
   );
 };

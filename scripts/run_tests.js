@@ -18,6 +18,10 @@ async function run() {
   if (clearModule && clearModule.testPromise) {
     await clearModule.testPromise;
   }
+  const authNavModule = jiti('./test_auth_navigator.ts');
+  if (authNavModule && authNavModule.testPromise) {
+    await authNavModule.testPromise;
+  }
 }
 
 run().catch((err) => {

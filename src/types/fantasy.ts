@@ -41,10 +41,24 @@ export interface Team {
   claimedByUserId?: string;
 }
 
+export interface UserClaimedLeagueSummary {
+  leagueId: string;
+  leagueName: string;
+  seasonId?: string;
+  teamId: string;
+  teamName: string;
+  teamLogo?: string | null;
+  ownerName?: string;
+  starPlayers?: Player[];
+  totalTeams?: number;
+  matchesCount?: number;
+}
+
 export interface UserAccount {
   id: string;
   username: string;
   claimedTeams: Record<string, string>; // leagueId -> teamId
+  claimedLeaguesDetails?: UserClaimedLeagueSummary[];
   createdAt: string;
 }
 

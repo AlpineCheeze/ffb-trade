@@ -24,7 +24,7 @@ import {
 } from '@/lib/leagueStore';
 import { getStoredUser, fetchCurrentUser, logoutAccount, AUTH_CHANGE_EVENT } from '@/lib/authStore';
 import { checkForMutualMatch, createSeedOpponentSwipes, arraysEqualIgnoreOrder } from '@/lib/matchmaking';
-import { recordPackageSwipeEloUpdate } from '@/lib/elo';
+import { recordPackageSwipeEloUpdate, resetInternalEloStore } from '@/lib/elo';
 import { League, Team, Player, Swipe, Match, Position, TradeType, UserAccount } from '@/types/fantasy';
 import { Navbar } from '@/components/Navbar';
 import { SwipeCard } from '@/components/SwipeCard';
@@ -379,11 +379,22 @@ export default function Home() {
         const isMock =
           serverView.league.id === 'league_mock_123' || serverView.league.espnLeagueId === '12345678';
         const serverDeleted = serverView.deletedMatches || [];
+        const isServerReset =
+          serverView.matches.length === 0 &&
+          serverDeleted.length === 0 &&
+          serverView.mySwipes.length === 0;
+
         setDeletedMatches((prevDel) =>
-          isMock ? mergeMatchesUnique(serverDeleted, prevDel) : serverDeleted
+          isServerReset
+            ? []
+            : isMock
+            ? mergeMatchesUnique(serverDeleted, prevDel)
+            : serverDeleted
         );
         setMatches((prevMatches) => {
-          const nextMatches = isMock
+          const nextMatches = isServerReset
+            ? []
+            : isMock
             ? mergeMatchesUnique(serverView.matches, prevMatches, serverDeleted)
             : serverView.matches;
           // If a leaguemate just completed a mutual match with our team, celebrate!
@@ -399,6 +410,15 @@ export default function Home() {
           }
           return nextMatches;
         });
+
+        // Keep client swipes in sync with server swipes (especially when leaguemates or commissioner reset swipes)
+        if (userTeamId) {
+          const seeds = createSeedOpponentSwipes(serverView.league);
+          setSwipes([
+            ...seeds,
+            ...serverView.mySwipes.filter((ms) => !seeds.some((s) => s.id === ms.id)),
+          ]);
+        }
       });
     }, 8000);
 
@@ -935,7 +955,10 @@ export default function Home() {
       setDeletedMatches([]);
       setActiveMatchCelebration(null);
 
-      saveLocalSwipes(league.espnLeagueId, isMock ? seedSwipes : []);
+      // Reset client-side Elo ratings
+      resetInternalEloStore();
+
+      saveLocalSwipes(league.espnLeagueId, []);
       saveLocalMatches(league.espnLeagueId, []);
       saveLocalDeletedMatches(league.espnLeagueId, []);
 
@@ -949,7 +972,10 @@ export default function Home() {
         setLeague(serverView.league);
         leagueRef.current = serverView.league;
         const freshSeeds = isMock ? createSeedOpponentSwipes(serverView.league) : [];
-        setSwipes(freshSeeds);
+        setSwipes([
+          ...freshSeeds,
+          ...(serverView.mySwipes || []).filter((ms) => !freshSeeds.some((s) => s.id === ms.id)),
+        ]);
         setMatches(serverView.matches || []);
         setDeletedMatches(serverView.deletedMatches || []);
       }
@@ -1441,6 +1467,7 @@ export default function Home() {
               onStartSwiping={() => setActiveTab('deck')}
               onDeleteMatch={handleDeleteMatch}
               onDeleteAllMatches={handleDeleteAllMatches}
+              onResetSwipes={() => setIsResetModalOpen(true)}
             />
           </div>
         )}

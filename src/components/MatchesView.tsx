@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Match } from '@/types/fantasy';
-import { ArrowLeftRight, Check, Copy, Sparkles, Trash2, History } from 'lucide-react';
+import { ArrowLeftRight, Check, Copy, Sparkles, Trash2, History, RotateCcw } from 'lucide-react';
 
 interface MatchesViewProps {
   matches: Match[];
@@ -11,6 +11,7 @@ interface MatchesViewProps {
   onStartSwiping: () => void;
   onDeleteMatch?: (match: Match) => void;
   onDeleteAllMatches?: () => void;
+  onResetSwipes?: () => void;
 }
 
 export const MatchesView: React.FC<MatchesViewProps> = ({
@@ -20,6 +21,7 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
   onStartSwiping,
   onDeleteMatch,
   onDeleteAllMatches,
+  onResetSwipes,
 }) => {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [imgErrors, setImgErrors] = useState<Record<string, boolean>>({});
@@ -90,12 +92,24 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
           <p className="text-xs text-slate-400 mt-2 leading-relaxed">
             Matches happen when you swipe right on an opponent&apos;s player or package and they also swipe right on yours.
           </p>
-          <button
-            onClick={onStartSwiping}
-            className="mt-6 px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm shadow-lg shadow-blue-500/25 transition"
-          >
-            Start Swiping Now
-          </button>
+          <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <button
+              onClick={onStartSwiping}
+              className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm shadow-lg shadow-blue-500/25 transition"
+            >
+              Start Swiping Now
+            </button>
+            {onResetSwipes && (
+              <button
+                onClick={onResetSwipes}
+                className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-rose-400 hover:text-rose-300 font-bold text-xs flex items-center justify-center gap-1.5 transition"
+                title="Reset all swipes and matches for the league to start fresh"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Reset Swipes</span>
+              </button>
+            )}
+          </div>
         </div>
       ) : (
         <div className="space-y-4">
@@ -110,16 +124,28 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
               </p>
             </div>
 
-            {onDeleteAllMatches && (
-              <button
-                onClick={onDeleteAllMatches}
-                className="px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 hover:text-rose-300 text-xs font-bold flex items-center gap-1.5 transition self-start sm:self-auto"
-                title="Delete all active trade matches for your team and your matched trade partners"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Delete All Matches</span>
-              </button>
-            )}
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              {onResetSwipes && (
+                <button
+                  onClick={onResetSwipes}
+                  className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-rose-400 hover:text-rose-300 text-xs font-bold flex items-center gap-1.5 transition"
+                  title="Reset all swipes and matches across the league to start fresh"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Reset Swipes</span>
+                </button>
+              )}
+              {onDeleteAllMatches && (
+                <button
+                  onClick={onDeleteAllMatches}
+                  className="px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 hover:text-rose-300 text-xs font-bold flex items-center gap-1.5 transition"
+                  title="Delete all active trade matches for your team and your matched trade partners"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete All Matches</span>
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="space-y-4">

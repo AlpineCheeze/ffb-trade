@@ -126,3 +126,10 @@ export function recordPackageSwipeEloUpdate(
 export function getAllInternalEloRatings(): InternalEloRecord[] {
   return Array.from(internalEloStore.values());
 }
+
+/**
+ * Resets all in-memory Elo ratings back to defaults.
+ */
+export function resetInternalEloStore(): void {
+  internalEloStore.clear();
+}

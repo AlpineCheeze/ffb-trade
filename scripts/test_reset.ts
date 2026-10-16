@@ -6,6 +6,7 @@ import {
   recordServerSwipe,
   deleteServerMatch,
   resetServerLeagueSwipes,
+  deleteServerLeagueState,
   toClientLeagueView,
   sanitizeLeagueId,
 } from '../src/lib/serverLeagueStore';
@@ -16,22 +17,25 @@ import { NextRequest } from 'next/server';
 async function runTests() {
   console.log('--- Starting Reset Swipes Verification Suite ---');
 
-  // Test 1: Real League Workflow with Claim, Swipes, Matches, and Reset
-  console.log('\n[Test 1] Testing resetServerLeagueSwipes on custom league...');
-  const baseLeague = createMockLeague();
   const testLeagueId = 'reset_test_999';
-  const customLeague = {
-    ...baseLeague,
-    id: `league_${testLeagueId}`,
-    espnLeagueId: testLeagueId,
-    name: 'Reset Test League',
-  };
+  deleteServerLeagueState(testLeagueId);
 
-  // Save initial league
-  saveServerLeagueSnapshot(customLeague, testLeagueId);
-  let state = getServerLeagueState(testLeagueId);
-  assert(state !== null, 'State should exist for custom league');
-  assert.strictEqual(state.swipes.length, 0, 'Real custom league should start with 0 swipes');
+  try {
+    // Test 1: Real League Workflow with Claim, Swipes, Matches, and Reset
+    console.log('\n[Test 1] Testing resetServerLeagueSwipes on custom league...');
+    const baseLeague = createMockLeague();
+    const customLeague = {
+      ...baseLeague,
+      id: `league_${testLeagueId}`,
+      espnLeagueId: testLeagueId,
+      name: 'Reset Test League',
+    };
+
+    // Save initial league
+    saveServerLeagueSnapshot(customLeague, testLeagueId);
+    let state = getServerLeagueState(testLeagueId);
+    assert(state !== null, 'State should exist for custom league');
+    assert.strictEqual(state.swipes.length, 0, 'Real custom league should start with 0 swipes');
 
   // Claim Team 1
   const team1Id = customLeague.teams[0].id;
@@ -252,9 +256,26 @@ async function runTests() {
   assert.strictEqual(postResetSwipe2.state.matches.length, 1, '1 active match created');
   console.log('✓ Test 6 Passed: New swipes and mutual matches work flawlessly after league reset.');
 
+  // Test 7: Idempotent resets
+  console.log('\n[Test 7] Testing idempotent reset on an already-empty league...');
+  const resetEmpty = resetServerLeagueSwipes(testLeagueId);
+  assert(resetEmpty !== null);
+  assert.strictEqual(resetEmpty.swipes.length, 0);
+  assert.strictEqual(resetEmpty.matches.length, 0);
+  // Reset again immediately
+  const resetAgain = resetServerLeagueSwipes(testLeagueId);
+  assert(resetAgain !== null);
+  assert.strictEqual(resetAgain.swipes.length, 0);
+  assert.strictEqual(resetAgain.matches.length, 0);
+  console.log('✓ Test 7 Passed: Idempotent resets succeed without error.');
+
   console.log('\n=============================================');
   console.log('ALL RESET SWIPES VERIFICATION TESTS PASSED! 🎉');
   console.log('=============================================');
+  } finally {
+    // Clean up temporary test files so subsequent runs start clean
+    deleteServerLeagueState(testLeagueId);
+  }
 }
 
 runTests().catch((err) => {

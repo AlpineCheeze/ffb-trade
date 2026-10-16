@@ -552,11 +552,7 @@ export async function resetLeagueSwipesOnServer(
 
   if (typeof window !== 'undefined') {
     try {
-      if (fallbackLeague && isMock) {
-        saveLocalSwipes(cleanId, createSeedOpponentSwipes(fallbackLeague));
-      } else {
-        saveLocalSwipes(cleanId, []);
-      }
+      saveLocalSwipes(cleanId, []);
       saveLocalMatches(cleanId, []);
       saveLocalDeletedMatches(cleanId, []);
     } catch {
@@ -594,6 +590,15 @@ export async function resetLeagueSwipesOnServer(
     }
   } catch {
     // Fallback to local state if offline
+    const localLeague = getLeagueById(cleanId) || fallbackLeague;
+    if (localLeague) {
+      return {
+        league: localLeague,
+        mySwipes: [],
+        matches: [],
+        deletedMatches: [],
+      };
+    }
   }
   return null;
 }

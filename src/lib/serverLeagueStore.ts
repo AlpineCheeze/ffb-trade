@@ -854,6 +854,26 @@ export function resetServerLeagueSwipes(
 }
 
 /**
+ * Deletes a league state from memory and persistent disk (used for cleanup and testing).
+ */
+export function deleteServerLeagueState(espnLeagueId: string): boolean {
+  try {
+    const cleanId = sanitizeLeagueId(espnLeagueId);
+    memoryStore.delete(cleanId);
+    const dir = getWritableDataDir();
+    if (dir) {
+      const filePath = path.join(dir, `${cleanId}.json`);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Builds a privacy-safe ClientLeagueView for a specific team.
  * Unreciprocated swipes AND matches belonging only to third-party teams are NEVER exposed.
  */

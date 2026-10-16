@@ -824,6 +824,36 @@ export function deleteAllServerMatches(
 }
 
 /**
+ * Resets all recorded swipes and mutual matches for an entire league, starting fresh.
+ * Preserves league metadata, rosters, and all team claims (isClaimed, claimedBy, claimedByUserId)
+ * so leaguemates do not have to reclaim their teams.
+ * For the mock demo league, restores initial seed opponent swipes so demo trades work;
+ * for real leagues, sets swipes and matches to empty arrays.
+ */
+export function resetServerLeagueSwipes(
+  espnLeagueId: string,
+  fallbackLeague?: League
+): ServerLeagueState | null {
+  const cleanId = sanitizeLeagueId(espnLeagueId);
+  let state = getServerLeagueState(cleanId);
+
+  if (!state && fallbackLeague && Array.isArray(fallbackLeague.teams)) {
+    state = createInitialServerState({ ...fallbackLeague, espnLeagueId: cleanId }, cleanId);
+  }
+  if (!state) return null;
+
+  const isMock = state.league.id === 'league_mock_123' || cleanId === '12345678';
+
+  state.swipes = isMock ? createSeedOpponentSwipes(state.league) : [];
+  state.matches = [];
+  state.deletedMatches = [];
+  state.elo = {};
+  state.updatedAt = new Date().toISOString();
+
+  return saveServerLeagueState(state);
+}
+
+/**
  * Builds a privacy-safe ClientLeagueView for a specific team.
  * Unreciprocated swipes AND matches belonging only to third-party teams are NEVER exposed.
  */

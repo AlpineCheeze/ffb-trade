@@ -5,7 +5,7 @@ import { League, Team, UserAccount } from '@/types/fantasy';
 import { claimTeam, claimTeamOnServer, saveLeague } from '@/lib/leagueStore';
 import { linkTeamToAccount } from '@/lib/authStore';
 import { fetchEspnLeague } from '@/lib/espn';
-import { Users, Copy, Check, Sparkles, ArrowRight, ShieldCheck, Flame, UserCheck, AlertCircle, RefreshCw } from 'lucide-react';
+import { Users, Copy, Check, Sparkles, ArrowRight, ShieldCheck, Flame, UserCheck, AlertCircle, RefreshCw, RotateCcw } from 'lucide-react';
 
 interface LeagueLockerRoomProps {
   league: League;
@@ -16,6 +16,7 @@ interface LeagueLockerRoomProps {
   onUpdateLeague?: (league: League) => void;
   onOpenSync?: () => void;
   onOpenAuth?: () => void;
+  onOpenResetSwipes?: () => void;
 }
 
 export const LeagueLockerRoom: React.FC<LeagueLockerRoomProps> = ({
@@ -27,6 +28,7 @@ export const LeagueLockerRoom: React.FC<LeagueLockerRoomProps> = ({
   onUpdateLeague,
   onOpenSync,
   onOpenAuth,
+  onOpenResetSwipes,
 }) => {
   const [copied, setCopied] = useState(false);
   const [claimingTeam, setClaimingTeam] = useState<Team | null>(null);
@@ -198,6 +200,17 @@ export const LeagueLockerRoom: React.FC<LeagueLockerRoomProps> = ({
               <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-blue-400' : 'text-slate-400'}`} />
               <span>{isRefreshing ? 'Syncing...' : 'Sync Rosters'}</span>
             </button>
+
+            {onOpenResetSwipes && (
+              <button
+                onClick={onOpenResetSwipes}
+                className="flex items-center gap-1.5 text-xs font-bold text-rose-300 hover:text-white px-3.5 py-1.5 rounded-xl border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 transition shadow-sm"
+                title="Reset all swipes and matches for this league to start fresh"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-rose-400" />
+                <span>Reset Swipes</span>
+              </button>
+            )}
 
             <button
               onClick={onSwitchLeague}

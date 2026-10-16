@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { League, Team, UserAccount } from '@/types/fantasy';
-import { Layers, ArrowLeftRight, Users, RefreshCw, LayoutGrid, Home, LogOut, UserPlus } from 'lucide-react';
+import { Layers, ArrowLeftRight, Users, RefreshCw, LayoutGrid, Home, LogOut, UserPlus, RotateCcw } from 'lucide-react';
 import { UnicornLogo } from './UnicornLogo';
 
 interface NavbarProps {
@@ -16,6 +16,7 @@ interface NavbarProps {
   onOpenSync: () => void;
   onOpenAuth?: () => void;
   onLogout?: () => void;
+  onOpenResetSwipes?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -29,6 +30,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenSync,
   onOpenAuth,
   onLogout,
+  onOpenResetSwipes,
 }) => {
   return (
     <header className="sticky top-0 z-40 w-full bg-slate-950/80 backdrop-blur-lg border-b border-slate-800">
@@ -122,6 +124,17 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <Home className="w-3.5 h-3.5 text-slate-400" />
               <span className="hidden sm:inline">Leagues</span>
+            </button>
+          )}
+
+          {league && onOpenResetSwipes && (
+            <button
+              onClick={onOpenResetSwipes}
+              className="p-2 sm:px-3 sm:py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-rose-400 hover:text-rose-300 text-xs font-semibold flex items-center gap-1.5 transition"
+              title="Reset all league swipes to start fresh"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-rose-400" />
+              <span className="hidden md:inline">Reset Swipes</span>
             </button>
           )}
 

@@ -20,6 +20,7 @@ import {
   undoSwipeOnServer,
   deleteMatchOnServer,
   deleteAllMatchesOnServer,
+  resetLeagueSwipesOnServer,
 } from '@/lib/leagueStore';
 import { getStoredUser, fetchCurrentUser, logoutAccount, AUTH_CHANGE_EVENT } from '@/lib/authStore';
 import { checkForMutualMatch, createSeedOpponentSwipes, arraysEqualIgnoreOrder } from '@/lib/matchmaking';
@@ -32,6 +33,7 @@ import { MatchesView } from '@/components/MatchesView';
 import { MatchCelebrationModal } from '@/components/MatchCelebrationModal';
 import { LeagueSyncModal } from '@/components/LeagueSyncModal';
 import { AuthModal } from '@/components/AuthModal';
+import { ResetLeagueModal } from '@/components/ResetLeagueModal';
 import { PositionFilterBar, ALL_POSITIONS } from '@/components/PositionFilterBar';
 import { HomeHero } from '@/components/HomeHero';
 import { LeagueLockerRoom } from '@/components/LeagueLockerRoom';
@@ -66,6 +68,11 @@ export default function Home() {
   // Excluded opponent teams in trade deck filter
   const [excludedTeamIds, setExcludedTeamIds] = useState<string[]>([]);
   const [excludeNotification, setExcludeNotification] = useState<string | null>(null);
+
+  // Reset League Swipes modal and notification state
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [isResettingSwipes, setIsResettingSwipes] = useState(false);
+  const [resetNotification, setResetNotification] = useState<string | null>(null);
 
   // Refs to prevent stale closures and out-of-order network race conditions
   const leagueRef = useRef<League | null>(null);
@@ -909,6 +916,56 @@ export default function Home() {
     });
   };
 
+  // Handle Reset League Swipes (resets all swipes & matches across the league to start fresh)
+  const handleResetLeagueSwipes = async () => {
+    if (!league) return;
+
+    mutationVersionRef.current += 1;
+    const resetVersion = mutationVersionRef.current;
+
+    setIsResettingSwipes(true);
+
+    try {
+      const isMock = league.id === 'league_mock_123' || league.espnLeagueId === '12345678';
+      const seedSwipes = isMock ? createSeedOpponentSwipes(league) : [];
+
+      // Optimistically reset client state
+      setSwipes(seedSwipes);
+      setMatches([]);
+      setDeletedMatches([]);
+      setActiveMatchCelebration(null);
+
+      saveLocalSwipes(league.espnLeagueId, isMock ? seedSwipes : []);
+      saveLocalMatches(league.espnLeagueId, []);
+      saveLocalDeletedMatches(league.espnLeagueId, []);
+
+      const serverView = await resetLeagueSwipesOnServer(
+        league.espnLeagueId,
+        userTeamId,
+        league
+      );
+
+      if (serverView && mutationVersionRef.current === resetVersion) {
+        setLeague(serverView.league);
+        leagueRef.current = serverView.league;
+        const freshSeeds = isMock ? createSeedOpponentSwipes(serverView.league) : [];
+        setSwipes(freshSeeds);
+        setMatches(serverView.matches || []);
+        setDeletedMatches(serverView.deletedMatches || []);
+      }
+
+      setIsResetModalOpen(false);
+      setResetNotification(
+        `All swipes and trade matches for "${league.name}" have been reset! Starting fresh.`
+      );
+      setTimeout(() => setResetNotification(null), 5000);
+    } catch (err: any) {
+      console.error('Failed to reset league swipes:', err);
+    } finally {
+      setIsResettingSwipes(false);
+    }
+  };
+
   const handleSelectAllPositions = () => {
     setSelectedPositions(ALL_POSITIONS);
   };
@@ -1040,8 +1097,24 @@ export default function Home() {
           onOpenSync={() => setIsSyncModalOpen(true)}
           onOpenAuth={() => handleOpenAuth('login')}
           onLogout={handleLogout}
+          onOpenResetSwipes={() => setIsResetModalOpen(true)}
         />
         <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6">
+          {resetNotification && (
+            <div className="w-full max-w-xl mx-auto mb-4 px-4 py-3 rounded-2xl bg-slate-900 border border-emerald-500/40 text-xs font-semibold flex items-center justify-between shadow-xl shadow-emerald-950/20 animate-in fade-in slide-in-from-top-1 duration-200">
+              <div className="flex items-center gap-2 text-emerald-300">
+                <RotateCcw className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                <span>{resetNotification}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setResetNotification(null)}
+                className="text-xs text-slate-400 hover:text-white ml-2 flex-shrink-0"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
           <LeagueLockerRoom
             league={league}
             currentTeamId={userTeamId}
@@ -1051,6 +1124,7 @@ export default function Home() {
             onUpdateLeague={setLeague}
             onOpenSync={() => setIsSyncModalOpen(true)}
             onOpenAuth={() => handleOpenAuth('register')}
+            onOpenResetSwipes={() => setIsResetModalOpen(true)}
           />
         </main>
         {isSyncModalOpen && (
@@ -1066,6 +1140,15 @@ export default function Home() {
           initialMode={authModalMode}
           onSuccess={handleUserChange}
         />
+        {league && (
+          <ResetLeagueModal
+            isOpen={isResetModalOpen}
+            leagueName={league.name}
+            onClose={() => setIsResetModalOpen(false)}
+            onConfirm={handleResetLeagueSwipes}
+            isResetting={isResettingSwipes}
+          />
+        )}
       </div>
     );
   }
@@ -1084,6 +1167,7 @@ export default function Home() {
         onOpenSync={() => setIsSyncModalOpen(true)}
         onOpenAuth={() => handleOpenAuth('login')}
         onLogout={handleLogout}
+        onOpenResetSwipes={() => setIsResetModalOpen(true)}
       />
 
       <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6 flex flex-col items-center justify-center">
@@ -1098,6 +1182,7 @@ export default function Home() {
             onUpdateLeague={setLeague}
             onOpenSync={() => setIsSyncModalOpen(true)}
             onOpenAuth={() => handleOpenAuth('register')}
+            onOpenResetSwipes={() => setIsResetModalOpen(true)}
           />
         )}
 
@@ -1150,6 +1235,23 @@ export default function Home() {
                 Change Package
               </button>
             </div>
+
+            {/* Reset League Swipes Notification Toast */}
+            {resetNotification && (
+              <div className="w-full max-w-sm mb-3 px-3.5 py-2.5 rounded-2xl bg-slate-900 border border-emerald-500/40 text-xs font-semibold flex items-center justify-between shadow-xl shadow-emerald-950/20 animate-in fade-in slide-in-from-top-1 duration-200">
+                <div className="flex items-center gap-2 text-emerald-300">
+                  <RotateCcw className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                  <span>{resetNotification}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setResetNotification(null)}
+                  className="text-xs text-slate-400 hover:text-white ml-2 flex-shrink-0"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
 
             {/* Excluded Owner Notification Toast */}
             {excludeNotification && (
@@ -1283,6 +1385,13 @@ export default function Home() {
                     >
                       Configure a Different Package
                     </button>
+                    <button
+                      onClick={() => setIsResetModalOpen(true)}
+                      className="py-2.5 px-4 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs font-bold transition flex items-center justify-center gap-1.5"
+                    >
+                      <RotateCcw className="w-4 h-4 text-rose-400" />
+                      <span>Reset League Swipes (Start Fresh)</span>
+                    </button>
                   </div>
                 </div>
               )}
@@ -1376,6 +1485,17 @@ export default function Home() {
         initialMode={authModalMode}
         onSuccess={handleUserChange}
       />
+
+      {/* Reset League Swipes Modal */}
+      {league && (
+        <ResetLeagueModal
+          isOpen={isResetModalOpen}
+          leagueName={league.name}
+          onClose={() => setIsResetModalOpen(false)}
+          onConfirm={handleResetLeagueSwipes}
+          isResetting={isResettingSwipes}
+        />
+      )}
     </div>
   );
 }

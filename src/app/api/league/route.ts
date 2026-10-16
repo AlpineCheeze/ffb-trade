@@ -7,6 +7,7 @@ import {
   undoServerSwipe,
   deleteServerMatch,
   deleteAllServerMatches,
+  resetServerLeagueSwipes,
   toClientLeagueView,
   sanitizeLeagueId,
 } from '@/lib/serverLeagueStore';
@@ -266,6 +267,23 @@ export async function POST(req: NextRequest) {
         fallbackLeague,
         clientMatches
       );
+      if (!updatedState) {
+        return NextResponse.json(
+          { error: 'League not found on server' },
+          { status: 404 }
+        );
+      }
+
+      const view = toClientLeagueView(updatedState, teamId);
+      return NextResponse.json({
+        success: true,
+        ...view,
+      });
+    }
+
+    if (action === 'reset_swipes' || action === 'reset_league_swipes') {
+      const { teamId, fallbackLeague } = body;
+      const updatedState = resetServerLeagueSwipes(cleanId, fallbackLeague);
       if (!updatedState) {
         return NextResponse.json(
           { error: 'League not found on server' },

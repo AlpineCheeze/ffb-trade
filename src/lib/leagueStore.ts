@@ -1,5 +1,6 @@
 import { League, Swipe, Match, TradeType, ClientLeagueView } from '@/types/fantasy';
 import { createMockLeague } from './espn';
+import { createSeedOpponentSwipes } from './matchmaking';
 
 // In-memory persistent registry for leagues during runtime
 const leaguesRegistry = new Map<string, League>();
@@ -536,3 +537,64 @@ export async function deleteAllMatchesOnServer(
   }
   return null;
 }
+
+/**
+ * Resets all swipes and mutual matches for a league on the backend server,
+ * and resets local client swipe/match storage.
+ */
+export async function resetLeagueSwipesOnServer(
+  espnLeagueId: string,
+  teamId?: string | null,
+  fallbackLeague?: League
+): Promise<ClientLeagueView | null> {
+  const cleanId = espnLeagueId.trim();
+  const isMock = cleanId === '12345678' || fallbackLeague?.id === 'league_mock_123';
+
+  if (typeof window !== 'undefined') {
+    try {
+      if (fallbackLeague && isMock) {
+        saveLocalSwipes(cleanId, createSeedOpponentSwipes(fallbackLeague));
+      } else {
+        saveLocalSwipes(cleanId, []);
+      }
+      saveLocalMatches(cleanId, []);
+      saveLocalDeletedMatches(cleanId, []);
+    } catch {
+      // Ignore localStorage errors
+    }
+  }
+
+  if (typeof window === 'undefined') return null;
+  try {
+    const res = await fetch('/api/league', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'reset_swipes',
+        leagueId: cleanId,
+        teamId: teamId || undefined,
+        fallbackLeague,
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data && data.league) {
+      saveLeague(data.league);
+      if (Array.isArray(data.mySwipes)) saveLocalSwipes(cleanId, data.mySwipes);
+      if (Array.isArray(data.matches)) saveLocalMatches(cleanId, data.matches);
+      if (Array.isArray(data.deletedMatches)) {
+        saveLocalDeletedMatches(cleanId, data.deletedMatches);
+      }
+      return {
+        league: data.league,
+        mySwipes: data.mySwipes || [],
+        matches: data.matches || [],
+        deletedMatches: data.deletedMatches || [],
+      };
+    }
+  } catch {
+    // Fallback to local state if offline
+  }
+  return null;
+}
+

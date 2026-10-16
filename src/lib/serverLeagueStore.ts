@@ -48,6 +48,8 @@ function getWritableDataDir(): string | null {
   }
 
   const candidates = [
+    // Optional override for hosted deployments with a persistent volume (e.g. DATA_DIR=/data)
+    ...(process.env.DATA_DIR ? [path.join(process.env.DATA_DIR, 'leagues')] : []),
     path.join(process.cwd(), '.data', 'leagues'),
     path.join(os.tmpdir(), 'trade-horny', 'leagues'),
   ];

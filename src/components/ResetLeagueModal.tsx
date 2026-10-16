@@ -22,7 +22,7 @@ export const ResetLeagueModal: React.FC<ResetLeagueModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 overflow-y-auto p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 overflow-y-auto p-4 pt-[max(1rem,env(safe-area-inset-top,0px))] pb-[max(1rem,env(safe-area-inset-bottom,0px))] bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200"
       onClick={(e) => {
         if (e.target === e.currentTarget && !isResetting) {
           onClose();

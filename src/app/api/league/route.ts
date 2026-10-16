@@ -82,6 +82,18 @@ export async function POST(req: NextRequest) {
   try {
     const { action, leagueId: rawLeagueId } = body || {};
 
+    if (action === 'clear_all_data' || action === 'admin_clear') {
+      const leagueResult = clearAllServerLeagues();
+      const userResult = clearAllServerUsers();
+      return NextResponse.json({
+        success: true,
+        message: 'All league and user testing data cleared. Clean slate initialized.',
+        leaguesDeleted: leagueResult.deletedLeagues,
+        demoReseeded: leagueResult.demoReseeded,
+        usersDeletedCount: userResult.deletedUsers,
+      });
+    }
+
     if (!rawLeagueId || !String(rawLeagueId).trim()) {
       return NextResponse.json(
         { error: 'Valid ESPN League ID is required' },
@@ -317,18 +329,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         success: true,
         ...view,
-      });
-    }
-
-    if (action === 'clear_all_data' || action === 'admin_clear') {
-      const leagueResult = clearAllServerLeagues();
-      const userResult = clearAllServerUsers();
-      return NextResponse.json({
-        success: true,
-        message: 'All league and user testing data cleared. Clean slate initialized.',
-        leaguesDeleted: leagueResult.deletedLeagues,
-        demoReseeded: leagueResult.demoReseeded,
-        usersDeletedCount: userResult.deletedUsers,
       });
     }
 

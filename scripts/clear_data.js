@@ -18,11 +18,11 @@ async function clearData() {
   if (fs.existsSync(leaguesDir)) {
     const files = fs.readdirSync(leaguesDir);
     for (const file of files) {
-      if (file.endsWith('.json') && !file.startsWith('.')) {
+      if ((file.endsWith('.json') || file.includes('.tmp.')) && !file.startsWith('.')) {
         const filePath = path.join(leaguesDir, file);
         try {
           fs.unlinkSync(filePath);
-          deletedLeaguesCount++;
+          if (file.endsWith('.json')) deletedLeaguesCount++;
           console.log(`Deleted league file: ${file}`);
         } catch (e) {
           console.error(`Failed to delete ${filePath}:`, e);
@@ -35,11 +35,11 @@ async function clearData() {
   if (fs.existsSync(usersDir)) {
     const files = fs.readdirSync(usersDir);
     for (const file of files) {
-      if (file.endsWith('.json') && !file.startsWith('.')) {
+      if ((file.endsWith('.json') || file.includes('.tmp.')) && !file.startsWith('.')) {
         const filePath = path.join(usersDir, file);
         try {
           fs.unlinkSync(filePath);
-          deletedUsersCount++;
+          if (file.endsWith('.json')) deletedUsersCount++;
           console.log(`Deleted user account: ${file}`);
         } catch (e) {
           console.error(`Failed to delete ${filePath}:`, e);
@@ -58,6 +58,13 @@ async function clearData() {
       console.error(`Failed to delete ${usersJsonFile}:`, e);
     }
   }
+
+  // Write sentinel file to record that clean slate has run
+  const sentinelFile = path.join(dataDir, '.clean_slate_20261016');
+  try {
+    if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+    fs.writeFileSync(sentinelFile, `Clean slate performed at ${new Date().toISOString()}\n`, 'utf-8');
+  } catch {}
 
   console.log(`\nLocal disk wiped: ${deletedLeaguesCount} leagues, ${deletedUsersCount} users/accounts.`);
 

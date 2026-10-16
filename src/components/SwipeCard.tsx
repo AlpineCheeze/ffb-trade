@@ -63,7 +63,7 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
       dragElastic={0.7}
       onDragEnd={handleDragEnd}
       whileTap={isFront ? { cursor: 'grabbing' } : {}}
-      className={`absolute inset-0 w-full h-[440px] sm:h-[540px] rounded-3xl bg-slate-900/95 border border-slate-800 shadow-2xl overflow-hidden flex flex-col cursor-grab select-none touch-none transition-shadow ${
+      className={`absolute inset-0 w-full h-full rounded-3xl bg-slate-900/95 border border-slate-800 shadow-2xl overflow-hidden flex flex-col cursor-grab select-none touch-none transition-shadow ${
         isFront ? 'shadow-blue-900/20 shadow-2xl' : 'scale-95 translate-y-3 opacity-60 pointer-events-none'
       }`}
     >
@@ -91,7 +91,7 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
       {/* SINGLE PLAYER CARD */}
       {!isPackage && players[0] && (
         <>
-          <div className="relative h-52 sm:h-72 bg-gradient-to-b from-slate-800/80 via-slate-900/40 to-slate-900 p-5 flex flex-col justify-between overflow-hidden">
+          <div className="relative h-44 min-[400px]:h-52 sm:h-72 bg-gradient-to-b from-slate-800/80 via-slate-900/40 to-slate-900 p-4 sm:p-5 flex flex-col justify-between overflow-hidden">
             <div className="absolute -top-10 -right-10 text-9xl font-black text-slate-800/25 select-none pointer-events-none">
               {players[0].position}
             </div>
@@ -118,7 +118,7 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
               </div>
             </div>
 
-            <div className="absolute inset-x-0 bottom-0 h-[180px] sm:h-[250px] flex justify-center items-end pointer-events-none">
+            <div className="absolute inset-x-0 bottom-0 h-[150px] min-[400px]:h-[180px] sm:h-[250px] flex justify-center items-end pointer-events-none">
               {!imgErrors[players[0].id] ? (
                 <img
                   src={players[0].headshotUrl}

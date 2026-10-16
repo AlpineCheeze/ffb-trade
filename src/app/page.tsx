@@ -1091,7 +1091,7 @@ export default function Home() {
           onOpenAuth={() => handleOpenAuth('login')}
           onLogout={handleLogout}
         />
-        <main className="flex-1 flex flex-col justify-start sm:justify-center items-center py-6 px-4">
+        <main className="flex-1 flex flex-col justify-start sm:justify-center items-center py-6 px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))]">
           <HomeHero
             currentUser={currentUser}
             onUserChange={handleUserChange}
@@ -1142,7 +1142,7 @@ export default function Home() {
         />
         <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6 pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] sm:pb-6">
           {/* Floating Notification Toasts */}
-          <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-sm pointer-events-none flex flex-col gap-2">
+          <div className="fixed top-[calc(4.5rem+env(safe-area-inset-top,0px))] left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-sm pointer-events-none flex flex-col gap-2">
             {resetNotification && (
               <div className="pointer-events-auto w-full px-3.5 py-2.5 rounded-2xl bg-slate-900/95 border border-emerald-500/40 text-xs font-semibold flex items-center justify-between shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-200">
                 <div className="flex items-center gap-2 text-emerald-300">
@@ -1216,7 +1216,7 @@ export default function Home() {
 
       <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6 pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] sm:pb-6 flex flex-col items-center justify-start sm:justify-center">
         {/* Floating Notification Toasts */}
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-sm pointer-events-none flex flex-col gap-2">
+        <div className="fixed top-[calc(4.5rem+env(safe-area-inset-top,0px))] left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-sm pointer-events-none flex flex-col gap-2">
           {resetNotification && (
             <div className="pointer-events-auto w-full px-3.5 py-2.5 rounded-2xl bg-slate-900/95 border border-emerald-500/40 text-xs font-semibold flex items-center justify-between shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-200">
               <div className="flex items-center gap-2 text-emerald-300">
@@ -1358,7 +1358,7 @@ export default function Home() {
                 </AnimatePresence>
               ) : offeredPlayers.length < requiredOfferedCount ? (
                 /* Empty or Incomplete Selection State */
-                <div className="w-full h-[440px] sm:h-[540px] rounded-3xl bg-slate-900/70 border border-dashed border-amber-500/30 flex flex-col items-center justify-center p-8 text-center">
+                <div className="w-full h-full min-h-[380px] sm:min-h-[500px] rounded-3xl bg-slate-900/70 border border-dashed border-amber-500/30 flex flex-col items-center justify-center p-8 text-center">
                   <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mb-4">
                     <Sparkles className="w-8 h-8" />
                   </div>
@@ -1379,7 +1379,7 @@ export default function Home() {
                 </div>
               ) : allOpponentsExcluded ? (
                 /* All Opponents Excluded State */
-                <div className="w-full h-[440px] sm:h-[540px] rounded-3xl bg-slate-900/70 border border-dashed border-rose-500/30 flex flex-col items-center justify-center p-8 text-center">
+                <div className="w-full h-full min-h-[380px] sm:min-h-[500px] rounded-3xl bg-slate-900/70 border border-dashed border-rose-500/30 flex flex-col items-center justify-center p-8 text-center">
                   <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-center justify-center mb-4">
                     <UserX className="w-8 h-8" />
                   </div>
@@ -1397,7 +1397,7 @@ export default function Home() {
                 </div>
               ) : (
                 /* Cleared Deck State */
-                <div className="w-full h-[440px] sm:h-[540px] rounded-3xl bg-slate-900/70 border border-dashed border-slate-800 flex flex-col items-center justify-center p-8 text-center">
+                <div className="w-full h-full min-h-[380px] sm:min-h-[500px] rounded-3xl bg-slate-900/70 border border-dashed border-slate-800 flex flex-col items-center justify-center p-8 text-center">
                   <div className="w-16 h-16 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center mb-4">
                     <UserCheck className="w-8 h-8" />
                   </div>

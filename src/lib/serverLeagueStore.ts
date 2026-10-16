@@ -12,6 +12,7 @@ import {
 } from '@/types/fantasy';
 import { checkForMutualMatch, arraysEqualIgnoreOrder, createSeedOpponentSwipes } from './matchmaking';
 import { createMockLeague } from './espn';
+import { clearAllServerUsers } from './serverUserStore';
 
 // Global in-memory store across Next.js hot reloads and warm serverless invocations
 declare global {
@@ -19,6 +20,8 @@ declare global {
   var __tradeHornyServerStore: Map<string, ServerLeagueState> | undefined;
   // eslint-disable-next-line no-var
   var __tradeHornyWritableDir: string | null | undefined;
+  // eslint-disable-next-line no-var
+  var __tradeHornyCleanSlateV1Run: boolean | undefined;
 }
 
 const memoryStore: Map<string, ServerLeagueState> =
@@ -148,6 +151,8 @@ function writeStateToDisk(cleanId: string, state: ServerLeagueState): void {
  * Retrieves the full ServerLeagueState (including all swipes, matches, and claims).
  */
 export function getServerLeagueState(espnLeagueId: string): ServerLeagueState | null {
+  ensureCleanSlateMigration();
+
   let cleanId: string;
   try {
     cleanId = sanitizeLeagueId(espnLeagueId);
@@ -876,32 +881,104 @@ export function deleteServerLeagueState(espnLeagueId: string): boolean {
   }
 }
 
+const SENTINEL_FILE = '.clean_slate_20261016';
+
+function getCandidateDataDirs(): string[] {
+  return [
+    ...(process.env.DATA_DIR ? [process.env.DATA_DIR] : []),
+    path.join(process.cwd(), '.data'),
+    path.join(os.tmpdir(), 'trade-horny'),
+  ];
+}
+
 /**
- * Completely clears all stored league data from memory and disk.
+ * Automatically executes a one-time clean-slate migration on server startup
+ * (locally and when deployed to Railway production).
+ * Purges any stale test leagues, users, swipes, and claims while re-seeding
+ * the clean demo league (12345678).
+ */
+export function ensureCleanSlateMigration(): { executed: boolean } {
+  if (globalThis.__tradeHornyCleanSlateV1Run) {
+    return { executed: false };
+  }
+  globalThis.__tradeHornyCleanSlateV1Run = true;
+
+  const candidateDirs = getCandidateDataDirs();
+  let hasSentinel = false;
+
+  for (const dir of candidateDirs) {
+    const sentinelPath = path.join(dir, SENTINEL_FILE);
+    if (fs.existsSync(sentinelPath)) {
+      hasSentinel = true;
+      break;
+    }
+  }
+
+  if (hasSentinel) {
+    return { executed: false };
+  }
+
+  console.log('[Migration] Clean slate marker not found. Running automatic one-time data purge...');
+  try {
+    clearAllServerLeagues();
+    clearAllServerUsers();
+
+    for (const dir of candidateDirs) {
+      try {
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true });
+        }
+        fs.writeFileSync(
+          path.join(dir, SENTINEL_FILE),
+          `Clean slate initialized at ${new Date().toISOString()}\n`,
+          'utf-8'
+        );
+      } catch (err) {
+        console.error(`[Migration] Failed to write sentinel in ${dir}:`, err);
+      }
+    }
+    console.log('[Migration] Clean slate migration completed successfully.');
+    return { executed: true };
+  } catch (err) {
+    console.error('[Migration] Error during clean slate migration:', err);
+    return { executed: false };
+  }
+}
+
+/**
+ * Completely clears all stored league data from memory and disk across all candidates.
  * Wipes all user test leagues, active swipes, and matches.
  * Re-seeds the demo league (12345678) with a fresh, clean sandbox state.
  */
 export function clearAllServerLeagues(): { deletedLeagues: string[]; demoReseeded: boolean } {
-  const dir = getWritableDataDir();
-  const deleted: string[] = [];
+  const candidateDirs = [
+    ...(process.env.DATA_DIR ? [path.join(process.env.DATA_DIR, 'leagues')] : []),
+    path.join(process.cwd(), '.data', 'leagues'),
+    path.join(os.tmpdir(), 'trade-horny', 'leagues'),
+  ];
+  const deletedSet = new Set<string>();
   memoryStore.clear();
 
-  if (dir && fs.existsSync(dir)) {
-    try {
-      const files = fs.readdirSync(dir);
-      for (const file of files) {
-        if (file.endsWith('.json') && !file.startsWith('.')) {
-          try {
-            const leagueId = file.replace(/\.json$/, '');
-            fs.unlinkSync(path.join(dir, file));
-            deleted.push(leagueId);
-          } catch (e) {
-            console.error(`Failed to delete league file ${file}:`, e);
+  for (const dir of candidateDirs) {
+    if (dir && fs.existsSync(dir)) {
+      try {
+        const files = fs.readdirSync(dir);
+        for (const file of files) {
+          if ((file.endsWith('.json') || file.includes('.tmp.')) && !file.startsWith('.')) {
+            try {
+              if (file.endsWith('.json')) {
+                const leagueId = file.replace(/\.json$/, '');
+                deletedSet.add(leagueId);
+              }
+              fs.unlinkSync(path.join(dir, file));
+            } catch (e) {
+              console.error(`Failed to delete league file ${file}:`, e);
+            }
           }
         }
+      } catch (e) {
+        console.error('Failed to read leagues directory for clearing:', e);
       }
-    } catch (e) {
-      console.error('Failed to read leagues directory for clearing:', e);
     }
   }
 
@@ -909,7 +986,7 @@ export function clearAllServerLeagues(): { deletedLeagues: string[]; demoReseede
   const demoState = getServerLeagueState('12345678');
 
   return {
-    deletedLeagues: deleted,
+    deletedLeagues: Array.from(deletedSet),
     demoReseeded: demoState !== null,
   };
 }

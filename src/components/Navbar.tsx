@@ -120,10 +120,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             {league && (
               <button
                 onClick={onGoHome}
-                className="p-2 sm:px-3 sm:py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition"
+                className="p-2 sm:px-3 sm:py-2 min-h-[44px] min-w-[44px] rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition touch-manipulation active:scale-95"
                 title="Switch League"
               >
-                <Home className="w-3.5 h-3.5 text-slate-400" />
+                <Home className="w-4 h-4 text-slate-400" />
                 <span className="hidden sm:inline">Leagues</span>
               </button>
             )}
@@ -131,20 +131,20 @@ export const Navbar: React.FC<NavbarProps> = ({
             {league && onOpenResetSwipes && (
               <button
                 onClick={onOpenResetSwipes}
-                className="p-2 sm:px-3 sm:py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-rose-400 hover:text-rose-300 text-xs font-semibold flex items-center gap-1.5 transition"
+                className="p-2 sm:px-3 sm:py-2 min-h-[44px] min-w-[44px] rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-rose-400 hover:text-rose-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition touch-manipulation active:scale-95"
                 title="Reset all league swipes to start fresh"
               >
-                <RotateCcw className="w-3.5 h-3.5 text-rose-400" />
+                <RotateCcw className="w-4 h-4 text-rose-400" />
                 <span className="hidden md:inline">Reset Swipes</span>
               </button>
             )}
 
             <button
               onClick={onOpenSync}
-              className="p-2 sm:px-3 sm:py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition"
+              className="p-2 sm:px-3 sm:py-2 min-h-[44px] min-w-[44px] rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition touch-manipulation active:scale-95"
               title="Sync ESPN League"
             >
-              <RefreshCw className="w-3.5 h-3.5 text-blue-400" />
+              <RefreshCw className="w-4 h-4 text-blue-400" />
               <span className="hidden sm:inline">Sync ESPN</span>
             </button>
 
@@ -152,7 +152,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {currentUser ? (
               <div className="flex items-center gap-1.5 pl-1 border-l border-slate-800">
                 <div
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs font-semibold text-slate-200"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 min-h-[44px] rounded-xl bg-slate-900 border border-slate-800 text-xs font-semibold text-slate-200"
                   title={`Logged in as @${currentUser.username}`}
                 >
                   <div className="w-5 h-5 rounded-lg bg-emerald-500/20 text-emerald-400 font-black text-[10px] flex items-center justify-center">
@@ -165,10 +165,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                 {onLogout && (
                   <button
                     onClick={onLogout}
-                    className="p-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-rose-400 transition"
+                    className="p-2 min-h-[44px] min-w-[44px] rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-rose-400 transition touch-manipulation active:scale-95 flex items-center justify-center"
                     title="Log out"
                   >
-                    <LogOut className="w-3.5 h-3.5" />
+                    <LogOut className="w-4 h-4" />
                   </button>
                 )}
               </div>
@@ -176,10 +176,10 @@ export const Navbar: React.FC<NavbarProps> = ({
               onOpenAuth && (
                 <button
                   onClick={onOpenAuth}
-                  className="px-3 py-1.5 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-300 hover:text-white text-xs font-bold flex items-center gap-1.5 transition"
+                  className="px-3 py-1.5 min-h-[44px] rounded-xl bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-300 hover:text-white text-xs font-bold flex items-center gap-1.5 transition touch-manipulation active:scale-95"
                   title="Create account or log in"
                 >
-                  <UserPlus className="w-3.5 h-3.5" />
+                  <UserPlus className="w-4 h-4" />
                   <span className="hidden sm:inline">Sign In</span>
                 </button>
               )

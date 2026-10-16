@@ -423,7 +423,7 @@ export const LeagueLockerRoom: React.FC<LeagueLockerRoomProps> = ({
 
       {/* Claim Team Modal */}
       {claimingTeam && (
-        <div className="fixed inset-0 z-50 overflow-y-auto p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 overflow-y-auto p-4 pt-[max(1rem,env(safe-area-inset-top,0px))] pb-[max(1rem,env(safe-area-inset-bottom,0px))] bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200">
           <div className="flex min-h-full items-center justify-center">
             <div className="relative w-full max-w-md my-auto bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl">
               <h3 className="text-xl font-black text-white">

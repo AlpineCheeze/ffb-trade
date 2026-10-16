@@ -367,22 +367,29 @@ export function clearAllServerUsers(): { deletedUsers: number } {
   globalThis.__tradeHornyUsersLoaded = false;
   let count = 0;
 
-  const dir = getWritableUserDir();
-  if (dir && fs.existsSync(dir)) {
-    try {
-      const files = fs.readdirSync(dir);
-      for (const file of files) {
-        if (file.endsWith('.json') && !file.startsWith('.')) {
-          try {
-            fs.unlinkSync(path.join(dir, file));
-            count++;
-          } catch (e) {
-            console.error(`Failed to delete user file ${file}:`, e);
+  const candidateDirs = [
+    ...(process.env.DATA_DIR ? [path.join(process.env.DATA_DIR, 'users')] : []),
+    path.join(process.cwd(), '.data', 'users'),
+    path.join(os.tmpdir(), 'trade-horny', 'users'),
+  ];
+
+  for (const dir of candidateDirs) {
+    if (dir && fs.existsSync(dir)) {
+      try {
+        const files = fs.readdirSync(dir);
+        for (const file of files) {
+          if ((file.endsWith('.json') || file.includes('.tmp.')) && !file.startsWith('.')) {
+            try {
+              fs.unlinkSync(path.join(dir, file));
+              count++;
+            } catch (e) {
+              console.error(`Failed to delete user file ${file}:`, e);
+            }
           }
         }
+      } catch (e) {
+        console.error('Failed to read users directory for clearing:', e);
       }
-    } catch (e) {
-      console.error('Failed to read users directory for clearing:', e);
     }
   }
 
@@ -390,6 +397,7 @@ export function clearAllServerUsers(): { deletedUsers: number } {
   const rootCandidates = [
     ...(process.env.DATA_DIR ? [path.join(process.env.DATA_DIR, 'users.json')] : []),
     path.join(process.cwd(), '.data', 'users.json'),
+    path.join(os.tmpdir(), 'trade-horny', 'users.json'),
   ];
   for (const rootFile of rootCandidates) {
     if (fs.existsSync(rootFile)) {

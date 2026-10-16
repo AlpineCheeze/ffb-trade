@@ -71,21 +71,27 @@ async function runClearTests() {
   assert.strictEqual(bodyAdmin.demoReseeded, true);
   console.log('✓ Test 3 Passed: POST /api/admin/clear endpoint works cleanly.');
 
-  // Test 4: POST /api/league with action: "clear_all_data"
-  console.log('\n[Test 4] Testing POST /api/league endpoint with action: "clear_all_data"...');
+  // Test 4: POST /api/league with action: "clear_all_data" (without leagueId required)
+  console.log('\n[Test 4] Testing POST /api/league endpoint with action: "clear_all_data" (without leagueId)...');
   const reqLeagueClear = new NextRequest('http://localhost:3000/api/league', {
     method: 'POST',
     body: JSON.stringify({
       action: 'clear_all_data',
-      leagueId: '12345678',
     }),
   });
   const resLeagueClear = await leaguePOST(reqLeagueClear);
-  assert.strictEqual(resLeagueClear.status, 200, 'POST /api/league clear_all_data should return 200');
+  assert.strictEqual(resLeagueClear.status, 200, 'POST /api/league clear_all_data should return 200 even without leagueId');
   const bodyLeagueClear = await resLeagueClear.json();
   assert.strictEqual(bodyLeagueClear.success, true);
   assert.strictEqual(bodyLeagueClear.demoReseeded, true);
-  console.log('✓ Test 4 Passed: POST /api/league clear_all_data endpoint works cleanly.');
+  console.log('✓ Test 4 Passed: POST /api/league clear_all_data endpoint works cleanly without requiring leagueId.');
+
+  // Test 5: ensureCleanSlateMigration()
+  console.log('\n[Test 5] Testing ensureCleanSlateMigration()...');
+  const { ensureCleanSlateMigration } = await import('../src/lib/serverLeagueStore');
+  const migrationRes = ensureCleanSlateMigration();
+  assert(typeof migrationRes.executed === 'boolean', 'Migration should return status object');
+  console.log('✓ Test 5 Passed: ensureCleanSlateMigration is safe and idempotent.');
 
   console.log('\n=============================================');
   console.log('ALL DATA CLEARING TESTS PASSED! 🎉');

@@ -26,6 +26,10 @@ async function run() {
   if (superUserModule && superUserModule.testPromise) {
     await superUserModule.testPromise;
   }
+  const securityModule = jiti('./test_security_p0_p1.ts');
+  if (securityModule && securityModule.testPromise) {
+    await securityModule.testPromise;
+  }
 }
 
 run().catch((err) => {

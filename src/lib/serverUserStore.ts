@@ -4,6 +4,16 @@ import path from 'path';
 import crypto from 'crypto';
 import { UserAccount } from '@/types/fantasy';
 
+export const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30-day session TTL
+export const PBKDF2_ITERATIONS = 100000;
+export const PBKDF2_KEYLEN = 64;
+export const PBKDF2_DIGEST = 'sha512';
+
+export interface SessionMeta {
+  createdAt: string;
+  expiresAt: string;
+}
+
 export interface StoredUser {
   id: string;
   username: string; // display username as entered
@@ -11,6 +21,7 @@ export interface StoredUser {
   salt: string;
   hash: string;
   tokens: string[]; // active session tokens
+  sessions?: Record<string, SessionMeta>; // token -> session metadata with TTL
   claimedTeams: Record<string, string>; // leagueId -> teamId
   isSuperUser?: boolean;
   createdAt: string;
@@ -31,18 +42,93 @@ const userMemoryStore: Map<string, StoredUser> =
   globalThis.__tradeHornyUserStore || new Map<string, StoredUser>();
 globalThis.__tradeHornyUserStore = userMemoryStore;
 
+export class AsyncLock {
+  private locks = new Map<string, Promise<void>>();
+
+  async acquire<T>(key: string, fn: () => Promise<T> | T): Promise<T> {
+    while (this.locks.has(key)) {
+      try {
+        await this.locks.get(key);
+      } catch {
+        // Continue if previous lock holder rejected
+      }
+    }
+
+    let resolveLock!: () => void;
+    const lockPromise = new Promise<void>((resolve) => {
+      resolveLock = resolve;
+    });
+    this.locks.set(key, lockPromise);
+
+    try {
+      return await fn();
+    } finally {
+      this.locks.delete(key);
+      resolveLock();
+    }
+  }
+}
+
+export const userLock = new AsyncLock();
+
+/**
+ * Resets directory memoization and loaded flags (used for isolated test suites).
+ */
+export function resetUserStoreMemoization(): void {
+  globalThis.__tradeHornyUserWritableDir = undefined;
+  globalThis.__tradeHornyUsersLoaded = undefined;
+}
+
+/**
+ * Atomic file writer: writes to a temporary file in the same directory,
+ * flushes, and atomically renames to the destination file.
+ */
+export function atomicWriteFileSync(filePath: string, content: string): void {
+  const dir = path.dirname(filePath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  const tempPath = `${filePath}.tmp.${process.pid}.${Date.now()}.${crypto.randomBytes(4).toString('hex')}`;
+  fs.writeFileSync(tempPath, content, 'utf-8');
+  try {
+    fs.renameSync(tempPath, filePath);
+  } catch {
+    // Windows rename overwrite fallback
+    try {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+      fs.renameSync(tempPath, filePath);
+    } catch {
+      fs.copyFileSync(tempPath, filePath);
+      try {
+        fs.unlinkSync(tempPath);
+      } catch {}
+    }
+  }
+}
+
 /**
  * Resolves a writable directory for user account persistence.
- * Uses `.data/users` locally, and falls back to `os.tmpdir()`
- * on read-only serverless filesystems.
+ * Uses `.data/users` locally, respects `process.env.DATA_DIR`,
+ * and falls back to `os.tmpdir()` on read-only serverless filesystems.
  */
 function getWritableUserDir(): string | null {
+  if (process.env.DATA_DIR) {
+    const testDir = path.join(process.env.DATA_DIR, 'users');
+    if (!fs.existsSync(testDir)) {
+      try {
+        fs.mkdirSync(testDir, { recursive: true });
+      } catch {}
+    }
+    return testDir;
+  }
+
   if (globalThis.__tradeHornyUserWritableDir !== undefined) {
     return globalThis.__tradeHornyUserWritableDir;
   }
 
   const candidates = [
-    ...(process.env.DATA_DIR ? [path.join(process.env.DATA_DIR, 'users')] : []),
     path.join(process.cwd(), '.data', 'users'),
     path.join(os.tmpdir(), 'trade-horny', 'users'),
   ];
@@ -67,26 +153,179 @@ function getWritableUserDir(): string | null {
 }
 
 /**
+ * Validates and sanitizes a userId to prevent directory traversal and injection.
+ */
+export function sanitizeUserId(raw: string): string {
+  const trimmed = String(raw ?? '').trim();
+  if (!trimmed || !/^[a-zA-Z0-9_-]{1,64}$/.test(trimmed)) {
+    throw new Error('Invalid user ID');
+  }
+  return trimmed;
+}
+
+/**
+ * Validates and sanitizes a username.
+ */
+export function sanitizeUsername(raw: string): string {
+  const trimmed = String(raw ?? '').trim();
+  if (!trimmed || trimmed.length < 2 || trimmed.length > 30) {
+    throw new Error('Username must be between 2 and 30 characters.');
+  }
+  if (!/^[a-zA-Z0-9_\-\. ]{2,30}$/.test(trimmed)) {
+    throw new Error('Username may only contain letters, numbers, spaces, dots, hyphens, and underscores.');
+  }
+  if (trimmed.startsWith('.') || trimmed.endsWith('.') || trimmed.includes('..')) {
+    throw new Error('Username cannot start/end with a dot or contain consecutive dots.');
+  }
+  return trimmed;
+}
+
+/**
+ * Constant-time comparison for hex strings to eliminate timing attacks.
+ */
+export function safeTimingEqual(a: string, b: string): boolean {
+  try {
+    const bufA = Buffer.from(a, 'hex');
+    const bufB = Buffer.from(b, 'hex');
+    if (bufA.length === 0 || bufA.length !== bufB.length) {
+      if (bufA.length > 0) {
+        crypto.timingSafeEqual(bufA, bufA);
+      }
+      return false;
+    }
+    return crypto.timingSafeEqual(bufA, bufB);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Hashes a password using PBKDF2 with SHA-512 and 100,000 iterations.
+ */
+export function hashPassword(password: string): { salt: string; hash: string } {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hashHex = crypto
+    .pbkdf2Sync(password, salt, PBKDF2_ITERATIONS, PBKDF2_KEYLEN, PBKDF2_DIGEST)
+    .toString('hex');
+  const hash = `pbkdf2:${PBKDF2_ITERATIONS}:${PBKDF2_DIGEST}:${hashHex}`;
+  return { salt, hash };
+}
+
+/**
+ * Verifies password against expected hash with backward compatibility for:
+ * 1. Modern PBKDF2 100k iters (`pbkdf2:100000:sha512:<hex>`)
+ * 2. Unprefixed 100k iters PBKDF2
+ * 3. Legacy 1k iters PBKDF2 (`crypto.pbkdf2Sync(..., 1000, 64, 'sha512')`)
+ * 4. Legacy SHA-256 (both salted and unsalted)
+ * Returns whether password is valid and whether the stored hash needs rehashing.
+ */
+export function verifyPasswordWithUpgrade(
+  password: string,
+  salt: string,
+  expectedHash: string
+): { valid: boolean; needsRehash: boolean } {
+  try {
+    if (!expectedHash) return { valid: false, needsRehash: false };
+
+    // 1. Prefixed PBKDF2 format: pbkdf2:<iterations>:<digest>:<hashHex>
+    if (expectedHash.startsWith('pbkdf2:')) {
+      const parts = expectedHash.split(':');
+      const iters = parseInt(parts[1], 10) || PBKDF2_ITERATIONS;
+      const digest = parts[2] || PBKDF2_DIGEST;
+      const targetHex = parts[3] || '';
+      const computedHex = crypto
+        .pbkdf2Sync(password, salt, iters, PBKDF2_KEYLEN, digest)
+        .toString('hex');
+      const valid = safeTimingEqual(computedHex, targetHex);
+      return { valid, needsRehash: iters < PBKDF2_ITERATIONS };
+    }
+
+    // 2. Unprefixed modern 100k iters
+    const modernHex = crypto
+      .pbkdf2Sync(password, salt, PBKDF2_ITERATIONS, PBKDF2_KEYLEN, PBKDF2_DIGEST)
+      .toString('hex');
+    if (safeTimingEqual(modernHex, expectedHash)) {
+      return { valid: true, needsRehash: true };
+    }
+
+    // 3. Legacy 1,000 iterations PBKDF2
+    const legacy1kHex = crypto
+      .pbkdf2Sync(password, salt, 1000, 64, 'sha512')
+      .toString('hex');
+    if (safeTimingEqual(legacy1kHex, expectedHash)) {
+      return { valid: true, needsRehash: true };
+    }
+
+    // 4. Legacy raw SHA-256
+    const rawSha256 = crypto.createHash('sha256').update(password).digest('hex');
+    if (safeTimingEqual(rawSha256, expectedHash)) {
+      return { valid: true, needsRehash: true };
+    }
+    const saltedSha256 = crypto.createHash('sha256').update(salt + password).digest('hex');
+    if (safeTimingEqual(saltedSha256, expectedHash)) {
+      return { valid: true, needsRehash: true };
+    }
+
+    return { valid: false, needsRehash: false };
+  } catch {
+    return { valid: false, needsRehash: false };
+  }
+}
+
+/**
+ * Verifies a password against expected hash in constant time.
+ */
+export function verifyPassword(password: string, salt: string, expectedHash: string): boolean {
+  return verifyPasswordWithUpgrade(password, salt, expectedHash).valid;
+}
+
+/**
+ * Checks whether a given token has passed its expiration TTL.
+ */
+export function isTokenExpired(user: StoredUser, token: string): boolean {
+  if (user.sessions && user.sessions[token]) {
+    const expiry = new Date(user.sessions[token].expiresAt).getTime();
+    if (Date.now() > expiry) return true;
+  }
+  const match = token.match(/^tok_(\d+)_/);
+  if (match) {
+    const created = parseInt(match[1], 10);
+    if (!isNaN(created) && Date.now() - created > TOKEN_TTL_MS) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Ensures the root superuser account ('superu' / 'thanos') always exists
- * and has superuser privileges.
+ * and has superuser privileges without force-reverting passwords on every restart.
  */
 export function ensureSuperUserAccount(): StoredUser {
   const superUsername = 'superu';
-  const superPassword = 'thanos';
+  const superPassword = process.env.INITIAL_SUPERUSER_PASSWORD || 'thanos';
   const normalized = superUsername.toLowerCase();
 
   for (const user of userMemoryStore.values()) {
-    if (user.normalizedUsername === normalized) {
+    if (user.normalizedUsername === normalized || user.id === 'usr_superu_root') {
       let changed = false;
       if (!user.isSuperUser) {
         user.isSuperUser = true;
         changed = true;
       }
-      if (!verifyPassword(superPassword, user.salt, user.hash)) {
+      if (!user.hash || !user.salt) {
         const { salt, hash } = hashPassword(superPassword);
         user.salt = salt;
         user.hash = hash;
         changed = true;
+      } else {
+        const { valid, needsRehash } = verifyPasswordWithUpgrade(superPassword, user.salt, user.hash);
+        if (valid && needsRehash) {
+          const { salt, hash } = hashPassword(superPassword);
+          user.salt = salt;
+          user.hash = hash;
+          changed = true;
+        }
       }
       if (changed) {
         user.updatedAt = new Date().toISOString();
@@ -108,6 +347,7 @@ export function ensureSuperUserAccount(): StoredUser {
     salt,
     hash,
     tokens: [],
+    sessions: {},
     claimedTeams: {},
     isSuperUser: true,
     createdAt: now,
@@ -128,20 +368,36 @@ function ensureUsersLoaded(): void {
     try {
       const files = fs.readdirSync(dir);
       for (const file of files) {
-        if (file.endsWith('.json') && !file.startsWith('.')) {
+        if (file.endsWith('.json') && !file.startsWith('.') && !file.includes('.tmp.')) {
           try {
             const filePath = path.join(dir, file);
             const raw = fs.readFileSync(filePath, 'utf-8');
             const parsed = JSON.parse(raw) as StoredUser;
             if (parsed && parsed.id && parsed.username && parsed.hash) {
               if (!Array.isArray(parsed.tokens)) parsed.tokens = [];
+              if (!parsed.sessions || typeof parsed.sessions !== 'object') {
+                parsed.sessions = {};
+              }
               if (!parsed.claimedTeams || typeof parsed.claimedTeams !== 'object') {
                 parsed.claimedTeams = {};
               }
               if (!parsed.normalizedUsername) {
                 parsed.normalizedUsername = parsed.username.toLowerCase();
               }
+              // Prune any expired tokens on load
+              const originalCount = parsed.tokens.length;
+              parsed.tokens = parsed.tokens.filter((t) => !isTokenExpired(parsed, t));
+              if (parsed.sessions) {
+                for (const tok of Object.keys(parsed.sessions)) {
+                  if (!parsed.tokens.includes(tok)) {
+                    delete parsed.sessions[tok];
+                  }
+                }
+              }
               userMemoryStore.set(parsed.id, parsed);
+              if (parsed.tokens.length !== originalCount) {
+                writeUserToDisk(parsed);
+              }
             }
           } catch {
             // Skip corrupt file
@@ -162,38 +418,16 @@ function writeUserToDisk(user: StoredUser): void {
   if (!dir) return;
 
   try {
-    const filePath = path.join(dir, `${user.id}.json`);
-    const tempPath = `${filePath}.tmp.${process.pid}.${Date.now()}`;
-    fs.writeFileSync(tempPath, JSON.stringify(user, null, 2), 'utf-8');
-    fs.renameSync(tempPath, filePath);
+    const cleanId = sanitizeUserId(user.id);
+    const filePath = path.join(dir, `${cleanId}.json`);
+    const resolvedPath = path.resolve(filePath);
+    const resolvedDir = path.resolve(dir);
+    if (!resolvedPath.startsWith(resolvedDir)) {
+      throw new Error('Path traversal detected');
+    }
+    atomicWriteFileSync(filePath, JSON.stringify(user, null, 2));
   } catch (err) {
     console.error(`Failed to write user ${user.id} to disk:`, err);
-  }
-}
-
-export function sanitizeUsername(raw: string): string {
-  const trimmed = String(raw ?? '').trim();
-  if (!trimmed || trimmed.length < 2 || trimmed.length > 30) {
-    throw new Error('Username must be between 2 and 30 characters.');
-  }
-  if (!/^[a-zA-Z0-9_\-\. ]{2,30}$/.test(trimmed)) {
-    throw new Error('Username may only contain letters, numbers, spaces, dots, hyphens, and underscores.');
-  }
-  return trimmed;
-}
-
-export function hashPassword(password: string): { salt: string; hash: string } {
-  const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
-  return { salt, hash };
-}
-
-export function verifyPassword(password: string, salt: string, expectedHash: string): boolean {
-  try {
-    const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
-    return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), Buffer.from(expectedHash, 'hex'));
-  } catch {
-    return false;
   }
 }
 
@@ -202,7 +436,7 @@ export function toPublicUser(stored: StoredUser): UserAccount {
     id: stored.id,
     username: stored.username,
     claimedTeams: stored.claimedTeams || {},
-    isSuperUser: Boolean(stored.isSuperUser || stored.normalizedUsername === 'superu'),
+    isSuperUser: Boolean(stored.isSuperUser),
     createdAt: stored.createdAt,
   };
 }
@@ -219,6 +453,10 @@ export function createUser(
   const username = sanitizeUsername(rawUsername);
   const normalizedUsername = username.toLowerCase();
 
+  if (normalizedUsername === 'superu') {
+    throw new Error('Username "superu" is reserved.');
+  }
+
   const password = String(rawPassword ?? '');
   if (!password || password.length < 4) {
     throw new Error('Password must be at least 4 characters.');
@@ -233,8 +471,10 @@ export function createUser(
 
   const { salt, hash } = hashPassword(password);
   const userId = `usr_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
-  const token = `tok_${crypto.randomBytes(24).toString('hex')}`;
-  const now = new Date().toISOString();
+  const now = new Date();
+  const token = `tok_${now.getTime()}_${crypto.randomBytes(24).toString('hex')}`;
+  const expiresAt = new Date(now.getTime() + TOKEN_TTL_MS).toISOString();
+  const nowIso = now.toISOString();
 
   const newUser: StoredUser = {
     id: userId,
@@ -243,9 +483,15 @@ export function createUser(
     salt,
     hash,
     tokens: [token],
+    sessions: {
+      [token]: {
+        createdAt: nowIso,
+        expiresAt,
+      },
+    },
     claimedTeams: {},
-    createdAt: now,
-    updatedAt: now,
+    createdAt: nowIso,
+    updatedAt: nowIso,
   };
 
   userMemoryStore.set(userId, newUser);
@@ -259,6 +505,7 @@ export function createUser(
 
 /**
  * Authenticates a user with username and password, returning an active session token.
+ * Dynamically upgrades legacy hashes to modern PBKDF2 upon successful verification.
  */
 export function loginUser(
   rawUsername: string,
@@ -282,18 +529,42 @@ export function loginUser(
     }
   }
 
-  if (!foundUser || !verifyPassword(password, foundUser.salt, foundUser.hash)) {
+  if (!foundUser) {
     throw new Error('Invalid username or password.');
   }
 
-  // Issue new session token
-  const token = `tok_${crypto.randomBytes(24).toString('hex')}`;
+  const { valid, needsRehash } = verifyPasswordWithUpgrade(password, foundUser.salt, foundUser.hash);
+  if (!valid) {
+    throw new Error('Invalid username or password.');
+  }
+
+  if (needsRehash) {
+    const { salt, hash } = hashPassword(password);
+    foundUser.salt = salt;
+    foundUser.hash = hash;
+  }
+
+  // Issue new session token with TTL
+  const now = new Date();
+  const token = `tok_${now.getTime()}_${crypto.randomBytes(24).toString('hex')}`;
+  const expiresAt = new Date(now.getTime() + TOKEN_TTL_MS).toISOString();
+
   if (!Array.isArray(foundUser.tokens)) {
     foundUser.tokens = [];
   }
-  // Keep up to 10 active tokens across devices
-  foundUser.tokens = [token, ...foundUser.tokens.slice(0, 9)];
-  foundUser.updatedAt = new Date().toISOString();
+  if (!foundUser.sessions) {
+    foundUser.sessions = {};
+  }
+
+  foundUser.sessions[token] = {
+    createdAt: now.toISOString(),
+    expiresAt,
+  };
+
+  // Prune any expired tokens and keep up to 10 active tokens across devices
+  const activeUnexpired = foundUser.tokens.filter((t) => !isTokenExpired(foundUser!, t));
+  foundUser.tokens = [token, ...activeUnexpired.slice(0, 9)];
+  foundUser.updatedAt = now.toISOString();
 
   userMemoryStore.set(foundUser.id, foundUser);
   writeUserToDisk(foundUser);
@@ -305,7 +576,7 @@ export function loginUser(
 }
 
 /**
- * Resolves a user account by session token.
+ * Resolves a user account by session token, verifying and revoking expired tokens.
  */
 export function getUserByToken(token: string): UserAccount | null {
   ensureUsersLoaded();
@@ -315,6 +586,17 @@ export function getUserByToken(token: string): UserAccount | null {
 
   for (const user of userMemoryStore.values()) {
     if (Array.isArray(user.tokens) && user.tokens.includes(cleanToken)) {
+      if (isTokenExpired(user, cleanToken)) {
+        // Revoke expired token
+        user.tokens = user.tokens.filter((t) => t !== cleanToken);
+        if (user.sessions) {
+          delete user.sessions[cleanToken];
+        }
+        user.updatedAt = new Date().toISOString();
+        userMemoryStore.set(user.id, user);
+        writeUserToDisk(user);
+        return null;
+      }
       return toPublicUser(user);
     }
   }
@@ -328,8 +610,12 @@ export function getUserByToken(token: string): UserAccount | null {
 export function getUserById(userId: string): UserAccount | null {
   ensureUsersLoaded();
 
-  const cleanId = String(userId ?? '').trim();
-  if (!cleanId) return null;
+  let cleanId: string;
+  try {
+    cleanId = sanitizeUserId(userId);
+  } catch {
+    return null;
+  }
 
   const found = userMemoryStore.get(cleanId);
   return found ? toPublicUser(found) : null;
@@ -345,7 +631,13 @@ export function linkUserTeamClaim(
 ): UserAccount | null {
   ensureUsersLoaded();
 
-  const cleanUserId = String(userId ?? '').trim();
+  let cleanUserId: string;
+  try {
+    cleanUserId = sanitizeUserId(userId);
+  } catch {
+    return null;
+  }
+
   const cleanLeagueId = String(espnLeagueId ?? '').trim();
   const cleanTeamId = String(teamId ?? '').trim();
 
@@ -376,9 +668,14 @@ export function unlinkUserTeamClaim(
 ): UserAccount | null {
   ensureUsersLoaded();
 
-  const cleanUserId = String(userId ?? '').trim();
-  const cleanLeagueId = String(espnLeagueId ?? '').trim();
+  let cleanUserId: string;
+  try {
+    cleanUserId = sanitizeUserId(userId);
+  } catch {
+    return null;
+  }
 
+  const cleanLeagueId = String(espnLeagueId ?? '').trim();
   if (!cleanUserId || !cleanLeagueId) return null;
 
   const user = userMemoryStore.get(cleanUserId);
@@ -406,6 +703,9 @@ export function logoutUser(token: string): boolean {
   for (const user of userMemoryStore.values()) {
     if (Array.isArray(user.tokens) && user.tokens.includes(cleanToken)) {
       user.tokens = user.tokens.filter((t) => t !== cleanToken);
+      if (user.sessions) {
+        delete user.sessions[cleanToken];
+      }
       user.updatedAt = new Date().toISOString();
       userMemoryStore.set(user.id, user);
       writeUserToDisk(user);
@@ -473,6 +773,7 @@ export function clearAllServerUsers(): { deletedUsers: number } {
   const rootSuperu = ensureSuperUserAccount();
   rootSuperu.claimedTeams = {};
   rootSuperu.tokens = [];
+  rootSuperu.sessions = {};
   rootSuperu.updatedAt = new Date().toISOString();
   userMemoryStore.set(rootSuperu.id, rootSuperu);
   writeUserToDisk(rootSuperu);
@@ -500,13 +801,17 @@ export function getAllUsers(): UserAccount[] {
  */
 export function deleteUser(userId: string): boolean {
   ensureUsersLoaded();
-  const cleanUserId = String(userId ?? '').trim();
-  if (!cleanUserId) return false;
+  let cleanUserId: string;
+  try {
+    cleanUserId = sanitizeUserId(userId);
+  } catch {
+    return false;
+  }
 
   const user = userMemoryStore.get(cleanUserId);
   if (!user) return false;
 
-  if (user.normalizedUsername === 'superu' || user.username.toLowerCase() === 'superu') {
+  if (user.id === 'usr_superu_root' || user.normalizedUsername === 'superu' || user.username.toLowerCase() === 'superu') {
     throw new Error('Cannot delete the root super user account.');
   }
 
@@ -522,7 +827,9 @@ export function deleteUser(userId: string): boolean {
     if (dir && fs.existsSync(dir)) {
       try {
         const filePath = path.join(dir, `${cleanUserId}.json`);
-        if (fs.existsSync(filePath)) {
+        const resolvedPath = path.resolve(filePath);
+        const resolvedDir = path.resolve(dir);
+        if (resolvedPath.startsWith(resolvedDir) && fs.existsSync(filePath)) {
           fs.unlinkSync(filePath);
         }
       } catch (e) {

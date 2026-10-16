@@ -154,11 +154,16 @@ export async function linkTeamToAccount(
   if (!targetUserId) return null;
 
   try {
+    const token = getStoredToken();
     const res = await fetch('/api/auth', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify({
         action: 'link_claim',
+        token,
         userId: targetUserId,
         leagueId: String(leagueId).trim(),
         teamId: String(teamId).trim(),

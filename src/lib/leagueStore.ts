@@ -355,6 +355,21 @@ export function getSavedLeagues(): League[] {
   return leagues;
 }
 
+function getAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (typeof window !== 'undefined') {
+    try {
+      const token = localStorage.getItem('tradehorny_auth_token');
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+    } catch {
+      // Ignore
+    }
+  }
+  return headers;
+}
+
 /**
  * Synchronizes league state (team claims, user's swipes, confirmed matches, and deleted matches) with the backend server.
  */
@@ -366,7 +381,7 @@ export async function syncLeagueStateWithServer(
   try {
     const res = await fetch('/api/league', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({
         action: 'sync_state',
         leagueId: league.espnLeagueId,
@@ -415,7 +430,7 @@ export async function claimTeamOnServer(
   try {
     const res = await fetch('/api/league', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({
         action: 'claim',
         leagueId: espnLeagueId,
@@ -460,7 +475,7 @@ export async function recordSwipeOnServer(
   try {
     const res = await fetch('/api/league', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({
         action: 'swipe',
         leagueId: espnLeagueId,
@@ -504,7 +519,7 @@ export async function undoSwipeOnServer(
   try {
     const res = await fetch('/api/league', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({
         action: 'undo',
         leagueId: espnLeagueId,
@@ -549,7 +564,7 @@ export async function deleteMatchOnServer(
   try {
     const res = await fetch('/api/league', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({
         action: 'delete_match',
         leagueId: espnLeagueId,
@@ -595,7 +610,7 @@ export async function deleteAllMatchesOnServer(
   try {
     const res = await fetch('/api/league', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({
         action: 'delete_all_matches',
         leagueId: espnLeagueId,
@@ -652,7 +667,7 @@ export async function resetLeagueSwipesOnServer(
   try {
     const res = await fetch('/api/league', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({
         action: 'reset_swipes',
         leagueId: cleanId,

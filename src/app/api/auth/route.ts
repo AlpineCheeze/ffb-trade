@@ -167,14 +167,33 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'link_claim') {
-      const { userId, leagueId, teamId } = body;
-      if (!userId || !leagueId || !teamId) {
+      const token = extractToken(req, body);
+      if (!token) {
         return NextResponse.json(
-          { success: false, error: 'userId, leagueId, and teamId are required' },
+          { success: false, error: 'Authentication token required' },
+          { status: 401 }
+        );
+      }
+      const authUser = getUserByToken(token);
+      if (!authUser) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid or expired session' },
+          { status: 401 }
+        );
+      }
+      const { leagueId, teamId } = body;
+      if (!leagueId || !teamId) {
+        return NextResponse.json(
+          { success: false, error: 'leagueId and teamId are required' },
           { status: 400 }
         );
       }
-      const updatedUser = linkUserTeamClaim(userId, leagueId, teamId);
+      // Derive userId strictly from session token unless superuser specifies a target userId
+      const targetUserId = (authUser.isSuperUser && typeof body.userId === 'string' && body.userId.trim())
+        ? body.userId.trim()
+        : authUser.id;
+
+      const updatedUser = linkUserTeamClaim(targetUserId, String(leagueId).trim(), String(teamId).trim());
       if (!updatedUser) {
         return NextResponse.json(
           { success: false, error: 'User not found' },
@@ -188,14 +207,32 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'unlink_claim') {
-      const { userId, leagueId } = body;
-      if (!userId || !leagueId) {
+      const token = extractToken(req, body);
+      if (!token) {
         return NextResponse.json(
-          { success: false, error: 'userId and leagueId are required' },
+          { success: false, error: 'Authentication token required' },
+          { status: 401 }
+        );
+      }
+      const authUser = getUserByToken(token);
+      if (!authUser) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid or expired session' },
+          { status: 401 }
+        );
+      }
+      const { leagueId } = body;
+      if (!leagueId) {
+        return NextResponse.json(
+          { success: false, error: 'leagueId is required' },
           { status: 400 }
         );
       }
-      const updatedUser = unlinkUserTeamClaim(userId, leagueId);
+      const targetUserId = (authUser.isSuperUser && typeof body.userId === 'string' && body.userId.trim())
+        ? body.userId.trim()
+        : authUser.id;
+
+      const updatedUser = unlinkUserTeamClaim(targetUserId, String(leagueId).trim());
       return NextResponse.json({
         success: true,
         user: updatedUser ? enrichUserWithClaimedLeagues(updatedUser) : null,

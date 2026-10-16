@@ -48,6 +48,28 @@ interface DeckItem {
   players: Player[];
 }
 
+function getMatchSignature(m: Match): string {
+  const pairTeams = [m.teamAId, m.teamBId].sort().join('|');
+  const aIds = m.teamAPlayers.map((p) => p.id).sort().join(',');
+  const bIds = m.teamBPlayers.map((p) => p.id).sort().join(',');
+  const pairPlayers = [aIds, bIds].sort().join('::');
+  return `${pairTeams}#${pairPlayers}`;
+}
+
+function mergeMatchesUnique(primary: Match[], secondary: Match[], excludeDeleted: Match[] = []): Match[] {
+  const deletedSigs = new Set(excludeDeleted.map(getMatchSignature));
+  const seen = new Set<string>();
+  const result: Match[] = [];
+  for (const m of [...primary, ...secondary]) {
+    const sig = getMatchSignature(m);
+    if (!seen.has(sig) && !deletedSigs.has(sig)) {
+      seen.add(sig);
+      result.push(m);
+    }
+  }
+  return result;
+}
+
 export default function Home() {
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -141,27 +163,7 @@ export default function Home() {
     leagueRef.current = league;
   }, [league]);
 
-  const getMatchSignature = (m: Match): string => {
-    const pairTeams = [m.teamAId, m.teamBId].sort().join('|');
-    const aIds = m.teamAPlayers.map((p) => p.id).sort().join(',');
-    const bIds = m.teamBPlayers.map((p) => p.id).sort().join(',');
-    const pairPlayers = [aIds, bIds].sort().join('::');
-    return `${pairTeams}#${pairPlayers}`;
-  };
-
-  const mergeMatchesUnique = (primary: Match[], secondary: Match[], excludeDeleted: Match[] = []): Match[] => {
-    const deletedSigs = new Set(excludeDeleted.map(getMatchSignature));
-    const seen = new Set<string>();
-    const result: Match[] = [];
-    for (const m of [...primary, ...secondary]) {
-      const sig = getMatchSignature(m);
-      if (!seen.has(sig) && !deletedSigs.has(sig)) {
-        seen.add(sig);
-        result.push(m);
-      }
-    }
-    return result;
-  };
+  const handleSelectLeagueRef = useRef<(selectedLeague: League, forcedTeamId?: string) => void>(() => {});
 
   // Check URL query parameters on initial mount (e.g. ?leagueId=12345678)
   useEffect(() => {
@@ -176,7 +178,7 @@ export default function Home() {
         if (stored) {
           const found = getLeagueById(queryLeagueId);
           if (found) {
-            handleSelectLeague(found);
+            handleSelectLeagueRef.current(found);
             setActiveTab('lobby');
             return;
           } else {
@@ -184,7 +186,7 @@ export default function Home() {
             fetchEspnLeague({ leagueId: queryLeagueId })
               .then((fetched) => {
                 const saved = saveLeague(fetched);
-                handleSelectLeague(saved);
+                handleSelectLeagueRef.current(saved);
                 setActiveTab('lobby');
               })
               .catch(() => {
@@ -336,6 +338,7 @@ export default function Home() {
       }
     });
   };
+  handleSelectLeagueRef.current = handleSelectLeague;
 
   const handleSelectLeagueAndTeam = async (leagueId: string, teamId: string) => {
     let targetLeague = getLeagueById(leagueId);
@@ -415,6 +418,7 @@ export default function Home() {
   useEffect(() => {
     if (!league?.espnLeagueId) return;
 
+    let isMounted = true;
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
         return;
@@ -424,7 +428,7 @@ export default function Home() {
       const pollVersion = mutationVersionRef.current;
 
       syncLeagueStateWithServer(latestLeague, userTeamId).then((serverView) => {
-        if (!serverView || mutationVersionRef.current !== pollVersion) return;
+        if (!isMounted || !serverView || mutationVersionRef.current !== pollVersion) return;
         setLeague(serverView.league);
         leagueRef.current = serverView.league;
         const isMock =
@@ -461,7 +465,7 @@ export default function Home() {
                 (sm.teamAId === userTeamId || sm.teamBId === userTeamId) &&
                 !prevMatches.some((pm) => pm.id === sm.id)
             );
-            if (brandNewMatch) {
+            if (brandNewMatch && isMounted) {
               setActiveMatchCelebration(brandNewMatch);
             }
           }
@@ -469,7 +473,7 @@ export default function Home() {
         });
 
         // Keep client swipes in sync with server swipes (especially when leaguemates or commissioner reset swipes)
-        if (userTeamId) {
+        if (userTeamId && isMounted) {
           const seeds = createSeedOpponentSwipes(serverView.league);
           setSwipes([
             ...seeds,
@@ -479,7 +483,10 @@ export default function Home() {
       });
     }, 8000);
 
-    return () => clearInterval(interval);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, [league?.espnLeagueId, userTeamId]);
 
   // Current user's team

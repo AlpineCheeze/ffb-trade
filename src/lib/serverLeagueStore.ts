@@ -1,6 +1,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import crypto from 'crypto';
 import {
   League,
   Swipe,
@@ -28,6 +29,35 @@ const memoryStore: Map<string, ServerLeagueState> =
   globalThis.__tradeHornyServerStore || new Map<string, ServerLeagueState>();
 globalThis.__tradeHornyServerStore = memoryStore;
 
+export class AsyncLock {
+  private locks = new Map<string, Promise<void>>();
+
+  async acquire<T>(key: string, fn: () => Promise<T> | T): Promise<T> {
+    while (this.locks.has(key)) {
+      try {
+        await this.locks.get(key);
+      } catch {
+        // Continue if previous lock holder rejected
+      }
+    }
+
+    let resolveLock!: () => void;
+    const lockPromise = new Promise<void>((resolve) => {
+      resolveLock = resolve;
+    });
+    this.locks.set(key, lockPromise);
+
+    try {
+      return await fn();
+    } finally {
+      this.locks.delete(key);
+      resolveLock();
+    }
+  }
+}
+
+export const leagueLock = new AsyncLock();
+
 /**
  * Strictly validate leagueId to prevent path traversal and injection.
  * Rejects any string containing characters outside [a-zA-Z0-9_-].
@@ -41,18 +71,74 @@ export function sanitizeLeagueId(rawId: string): string {
 }
 
 /**
+ * Validates and sanitizes teamId to prevent path traversal and injection.
+ */
+export function sanitizeTeamId(rawId: string): string {
+  const trimmed = String(rawId ?? '').trim();
+  if (!trimmed || !/^[a-zA-Z0-9_\-\.]{1,64}$/.test(trimmed)) {
+    throw new Error('Invalid Team ID');
+  }
+  return trimmed;
+}
+
+/**
+ * Resets directory memoization and loaded flags (used for isolated test suites).
+ */
+export function resetLeagueStoreMemoization(): void {
+  globalThis.__tradeHornyWritableDir = undefined;
+  globalThis.__tradeHornyCleanSlateV1Run = undefined;
+}
+
+/**
+ * Atomic file writer: writes to a temporary file in the same directory,
+ * flushes, and atomically renames to the destination file.
+ */
+export function atomicWriteFileSync(filePath: string, content: string): void {
+  const dir = path.dirname(filePath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  const tempPath = `${filePath}.tmp.${process.pid}.${Date.now()}.${crypto.randomBytes(4).toString('hex')}`;
+  fs.writeFileSync(tempPath, content, 'utf-8');
+  try {
+    fs.renameSync(tempPath, filePath);
+  } catch {
+    // Windows rename overwrite fallback
+    try {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+      fs.renameSync(tempPath, filePath);
+    } catch {
+      fs.copyFileSync(tempPath, filePath);
+      try {
+        fs.unlinkSync(tempPath);
+      } catch {}
+    }
+  }
+}
+
+/**
  * Resolves a writable directory for persistence.
- * Uses `.data/leagues` locally, and automatically falls back to `os.tmpdir()`
- * on read-only serverless filesystems (e.g. Vercel / AWS Lambda).
+ * Uses `.data/leagues` locally, respects `process.env.DATA_DIR`,
+ * and automatically falls back to `os.tmpdir()` on read-only serverless filesystems.
  */
 function getWritableDataDir(): string | null {
+  if (process.env.DATA_DIR) {
+    const testDir = path.join(process.env.DATA_DIR, 'leagues');
+    if (!fs.existsSync(testDir)) {
+      try {
+        fs.mkdirSync(testDir, { recursive: true });
+      } catch {}
+    }
+    return testDir;
+  }
+
   if (globalThis.__tradeHornyWritableDir !== undefined) {
     return globalThis.__tradeHornyWritableDir;
   }
 
   const candidates = [
-    // Optional override for hosted deployments with a persistent volume (e.g. DATA_DIR=/data)
-    ...(process.env.DATA_DIR ? [path.join(process.env.DATA_DIR, 'leagues')] : []),
     path.join(process.cwd(), '.data', 'leagues'),
     path.join(os.tmpdir(), 'trade-horny', 'leagues'),
   ];
@@ -108,7 +194,13 @@ function readStateFromDisk(cleanId: string): ServerLeagueState | null {
   if (!dir) return null;
 
   try {
-    const filePath = path.join(dir, `${cleanId}.json`);
+    const safeId = sanitizeLeagueId(cleanId);
+    const filePath = path.join(dir, `${safeId}.json`);
+    const resolvedPath = path.resolve(filePath);
+    const resolvedDir = path.resolve(dir);
+    if (!resolvedPath.startsWith(resolvedDir)) {
+      throw new Error('Path traversal detected');
+    }
     if (!fs.existsSync(filePath)) return null;
 
     const raw = fs.readFileSync(filePath, 'utf-8');
@@ -138,10 +230,14 @@ function writeStateToDisk(cleanId: string, state: ServerLeagueState): void {
   if (!dir) return;
 
   try {
-    const filePath = path.join(dir, `${cleanId}.json`);
-    const tempPath = `${filePath}.tmp.${process.pid}.${Date.now()}`;
-    fs.writeFileSync(tempPath, JSON.stringify(state, null, 2), 'utf-8');
-    fs.renameSync(tempPath, filePath);
+    const safeId = sanitizeLeagueId(cleanId);
+    const filePath = path.join(dir, `${safeId}.json`);
+    const resolvedPath = path.resolve(filePath);
+    const resolvedDir = path.resolve(dir);
+    if (!resolvedPath.startsWith(resolvedDir)) {
+      throw new Error('Path traversal detected');
+    }
+    atomicWriteFileSync(filePath, JSON.stringify(state, null, 2));
   } catch (err) {
     console.error(`Failed to write server state for league ${cleanId}:`, err);
   }
@@ -149,6 +245,7 @@ function writeStateToDisk(cleanId: string, state: ServerLeagueState): void {
 
 /**
  * Retrieves the full ServerLeagueState (including all swipes, matches, and claims).
+ * Checks the authoritative in-memory store first to avoid unnecessary disk I/O.
  */
 export function getServerLeagueState(espnLeagueId: string): ServerLeagueState | null {
   ensureCleanSlateMigration();
@@ -160,19 +257,19 @@ export function getServerLeagueState(espnLeagueId: string): ServerLeagueState | 
     return null;
   }
 
+  // 1. Authoritative Memory Store check (0ms read latency)
+  const memState = memoryStore.get(cleanId);
+  if (memState) {
+    return memState;
+  }
+
+  // 2. Disk store fallback on cache miss
   const writableDir = getWritableDataDir();
   if (writableDir) {
     const diskState = readStateFromDisk(cleanId);
     if (diskState) {
       memoryStore.set(cleanId, diskState);
       return diskState;
-    }
-    // If disk directory is active and file does not exist on disk, evict any stale memory entry
-    memoryStore.delete(cleanId);
-  } else {
-    const memState = memoryStore.get(cleanId);
-    if (memState) {
-      return memState;
     }
   }
 
@@ -918,31 +1015,29 @@ export function ensureCleanSlateMigration(): { executed: boolean } {
     return { executed: false };
   }
 
-  console.log('[Migration] Clean slate marker not found. Running automatic one-time data purge...');
-  try {
-    clearAllServerLeagues();
-    clearAllServerUsers();
-
-    for (const dir of candidateDirs) {
-      try {
-        if (!fs.existsSync(dir)) {
-          fs.mkdirSync(dir, { recursive: true });
-        }
-        fs.writeFileSync(
-          path.join(dir, SENTINEL_FILE),
-          `Clean slate initialized at ${new Date().toISOString()}\n`,
-          'utf-8'
-        );
-      } catch (err) {
-        console.error(`[Migration] Failed to write sentinel in ${dir}:`, err);
+  // Mark sentinel without destroying user leagues or accounts
+  for (const dir of candidateDirs) {
+    try {
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
       }
+      atomicWriteFileSync(
+        path.join(dir, SENTINEL_FILE),
+        `Clean slate initialized at ${new Date().toISOString()}\n`
+      );
+    } catch (err) {
+      // Continue
     }
-    console.log('[Migration] Clean slate migration completed successfully.');
-    return { executed: true };
-  } catch (err) {
-    console.error('[Migration] Error during clean slate migration:', err);
-    return { executed: false };
   }
+
+  // Ensure demo league is initialized
+  if (!memoryStore.has('12345678')) {
+    const demo = createInitialServerState(createMockLeague(), '12345678');
+    memoryStore.set('12345678', demo);
+    writeStateToDisk('12345678', demo);
+  }
+
+  return { executed: true };
 }
 
 /**

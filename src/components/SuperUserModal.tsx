@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   ShieldAlert,
   X,
@@ -69,7 +69,7 @@ export const SuperUserModal: React.FC<SuperUserModalProps> = ({
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     const token = getStoredToken();
     if (!token) {
       setError('No session token available. Please log in as superu.');
@@ -90,13 +90,13 @@ export const SuperUserModal: React.FC<SuperUserModalProps> = ({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [expandedLeagueId]);
 
   useEffect(() => {
     if (isOpen) {
       loadData();
     }
-  }, [isOpen]);
+  }, [isOpen, loadData]);
 
   // Handlers
   const handleDeleteLeague = async (leagueId: string) => {

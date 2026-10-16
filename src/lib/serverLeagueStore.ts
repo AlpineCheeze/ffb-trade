@@ -983,7 +983,9 @@ export function clearAllServerLeagues(): { deletedLeagues: string[]; demoReseede
   }
 
   // Re-seed demo league 12345678 with a clean initial state
-  const demoState = getServerLeagueState('12345678');
+  const demoState = createInitialServerState(createMockLeague(), '12345678');
+  memoryStore.set('12345678', demoState);
+  writeStateToDisk('12345678', demoState);
 
   return {
     deletedLeagues: Array.from(deletedSet),

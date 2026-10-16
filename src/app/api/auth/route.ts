@@ -8,6 +8,7 @@ import {
   unlinkUserTeamClaim,
   logoutUser,
 } from '@/lib/serverUserStore';
+import { ensureCleanSlateMigration } from '@/lib/serverLeagueStore';
 
 function extractToken(req: NextRequest, body?: any): string | null {
   const authHeader = req.headers.get('Authorization');
@@ -25,6 +26,7 @@ function extractToken(req: NextRequest, body?: any): string | null {
 }
 
 export async function GET(req: NextRequest) {
+  ensureCleanSlateMigration();
   try {
     const token = extractToken(req);
     if (!token) {

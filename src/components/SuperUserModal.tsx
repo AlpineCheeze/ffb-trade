@@ -82,15 +82,15 @@ export const SuperUserModal: React.FC<SuperUserModalProps> = ({
       const res = await fetchAdminOverview(token);
       setUsers(res.users);
       setLeagues(res.leagues);
-      if (res.leagues.length > 0 && !expandedLeagueId) {
-        setExpandedLeagueId(res.leagues[0].espnLeagueId);
+      if (res.leagues.length > 0) {
+        setExpandedLeagueId((prev) => prev || res.leagues[0].espnLeagueId);
       }
     } catch (err: any) {
       setError(err.message || 'Failed to load superuser console data.');
     } finally {
       setIsLoading(false);
     }
-  }, [expandedLeagueId]);
+  }, []);
 
   useEffect(() => {
     if (isOpen) {

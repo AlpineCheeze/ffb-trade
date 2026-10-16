@@ -14,7 +14,7 @@ import {
   leagueLock,
 } from '@/lib/serverLeagueStore';
 import { fetchEspnLeagueServer } from '@/lib/espn';
-import { linkUserTeamClaim, getUserByToken } from '@/lib/serverUserStore';
+import { linkUserTeamClaim, getUserByToken, userLock } from '@/lib/serverUserStore';
 import { Swipe, TradeType, Match, UserAccount, ServerLeagueState } from '@/types/fantasy';
 
 function extractToken(req: NextRequest, body?: any): string | null {
@@ -192,8 +192,10 @@ export async function POST(req: NextRequest) {
             ? sanitizeTeamId(previousTeamId)
             : undefined;
 
-        // Derive authenticated userId from token if present, otherwise fallback to userId payload
-        const safeUserId = authUser?.id || (typeof userId === 'string' && userId.trim() ? userId.trim() : undefined);
+        // Derive authenticated userId strictly from session token (or target userId if superuser)
+        const safeUserId = authUser?.isSuperUser && typeof userId === 'string' && userId.trim()
+          ? userId.trim()
+          : authUser?.id;
 
         // Pre-claim conflict verification: if team is already claimed by another user, return 409 Conflict
         const currentState = getServerLeagueState(cleanId);
@@ -241,7 +243,9 @@ export async function POST(req: NextRequest) {
         }
 
         if (safeUserId) {
-          linkUserTeamClaim(safeUserId, cleanId, teamId);
+          await userLock.acquire(safeUserId, async () => {
+            linkUserTeamClaim(safeUserId, cleanId, teamId);
+          });
         }
 
         const view = toClientLeagueView(updatedState, teamId);
@@ -386,6 +390,17 @@ export async function POST(req: NextRequest) {
               { status: 403 }
             );
           }
+        } else if (authUser) {
+          if (
+            !authUser.isSuperUser &&
+            authUser.claimedTeams?.[cleanId] &&
+            authUser.claimedTeams[cleanId] !== teamId
+          ) {
+            return NextResponse.json(
+              { error: 'Forbidden: You do not own this team' },
+              { status: 403 }
+            );
+          }
         }
 
         const updatedState = undoServerSwipe(cleanId, teamId, tradeType, offeredPlayerIds);
@@ -441,6 +456,17 @@ export async function POST(req: NextRequest) {
             !authUser.isSuperUser &&
             authUser.id !== teamObj.claimedByUserId &&
             authUser.claimedTeams?.[cleanId] !== teamId
+          ) {
+            return NextResponse.json(
+              { error: 'Forbidden: You do not own this team' },
+              { status: 403 }
+            );
+          }
+        } else if (authUser) {
+          if (
+            !authUser.isSuperUser &&
+            authUser.claimedTeams?.[cleanId] &&
+            authUser.claimedTeams[cleanId] !== teamId
           ) {
             return NextResponse.json(
               { error: 'Forbidden: You do not own this team' },
@@ -507,6 +533,17 @@ export async function POST(req: NextRequest) {
             !authUser.isSuperUser &&
             authUser.id !== teamObj.claimedByUserId &&
             authUser.claimedTeams?.[cleanId] !== teamId
+          ) {
+            return NextResponse.json(
+              { error: 'Forbidden: You do not own this team' },
+              { status: 403 }
+            );
+          }
+        } else if (authUser) {
+          if (
+            !authUser.isSuperUser &&
+            authUser.claimedTeams?.[cleanId] &&
+            authUser.claimedTeams[cleanId] !== teamId
           ) {
             return NextResponse.json(
               { error: 'Forbidden: You do not own this team' },

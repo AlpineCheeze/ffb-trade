@@ -7,6 +7,7 @@ import {
   linkUserTeamClaim,
   unlinkUserTeamClaim,
   logoutUser,
+  userLock,
 } from '@/lib/serverUserStore';
 import { ensureCleanSlateMigration, getServerLeagueState } from '@/lib/serverLeagueStore';
 import { UserAccount, UserClaimedLeagueSummary } from '@/types/fantasy';
@@ -119,7 +120,10 @@ export async function POST(req: NextRequest) {
   try {
     if (action === 'register') {
       const { username, password } = body;
-      const result = createUser(username, password);
+      const cleanUsername = String(username || '').toLowerCase().trim();
+      const result = await userLock.acquire(`register_${cleanUsername}`, async () => {
+        return createUser(username, password);
+      });
       return NextResponse.json({
         success: true,
         user: enrichUserWithClaimedLeagues(result.user),
@@ -129,7 +133,10 @@ export async function POST(req: NextRequest) {
 
     if (action === 'login') {
       const { username, password } = body;
-      const result = loginUser(username, password);
+      const cleanUsername = String(username || '').toLowerCase().trim();
+      const result = await userLock.acquire(`login_${cleanUsername}`, async () => {
+        return loginUser(username, password);
+      });
       return NextResponse.json({
         success: true,
         user: enrichUserWithClaimedLeagues(result.user),
@@ -193,7 +200,9 @@ export async function POST(req: NextRequest) {
         ? body.userId.trim()
         : authUser.id;
 
-      const updatedUser = linkUserTeamClaim(targetUserId, String(leagueId).trim(), String(teamId).trim());
+      const updatedUser = await userLock.acquire(targetUserId, async () => {
+        return linkUserTeamClaim(targetUserId, String(leagueId).trim(), String(teamId).trim());
+      });
       if (!updatedUser) {
         return NextResponse.json(
           { success: false, error: 'User not found' },
@@ -232,7 +241,9 @@ export async function POST(req: NextRequest) {
         ? body.userId.trim()
         : authUser.id;
 
-      const updatedUser = unlinkUserTeamClaim(targetUserId, String(leagueId).trim());
+      const updatedUser = await userLock.acquire(targetUserId, async () => {
+        return unlinkUserTeamClaim(targetUserId, String(leagueId).trim());
+      });
       return NextResponse.json({
         success: true,
         user: updatedUser ? enrichUserWithClaimedLeagues(updatedUser) : null,

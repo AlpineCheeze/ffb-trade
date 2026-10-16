@@ -30,28 +30,24 @@ const memoryStore: Map<string, ServerLeagueState> =
 globalThis.__tradeHornyServerStore = memoryStore;
 
 export class AsyncLock {
-  private locks = new Map<string, Promise<void>>();
+  private queues = new Map<string, Promise<void>>();
 
   async acquire<T>(key: string, fn: () => Promise<T> | T): Promise<T> {
-    while (this.locks.has(key)) {
-      try {
-        await this.locks.get(key);
-      } catch {
-        // Continue if previous lock holder rejected
-      }
-    }
-
+    const prev = this.queues.get(key) || Promise.resolve();
     let resolveLock!: () => void;
-    const lockPromise = new Promise<void>((resolve) => {
+    const current = new Promise<void>((resolve) => {
       resolveLock = resolve;
     });
-    this.locks.set(key, lockPromise);
+    this.queues.set(key, current);
 
     try {
+      await prev.catch(() => {});
       return await fn();
     } finally {
-      this.locks.delete(key);
       resolveLock();
+      if (this.queues.get(key) === current) {
+        this.queues.delete(key);
+      }
     }
   }
 }
@@ -100,20 +96,38 @@ export function atomicWriteFileSync(filePath: string, content: string): void {
   }
   const tempPath = `${filePath}.tmp.${process.pid}.${Date.now()}.${crypto.randomBytes(4).toString('hex')}`;
   fs.writeFileSync(tempPath, content, 'utf-8');
+
   try {
     fs.renameSync(tempPath, filePath);
+    return;
   } catch {
-    // Windows rename overwrite fallback
-    try {
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
+    // Windows fallback: retry unlink + rename loop to handle transient file locks
+    let lastErr: any;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+        fs.renameSync(tempPath, filePath);
+        return;
+      } catch (err) {
+        lastErr = err;
       }
-      fs.renameSync(tempPath, filePath);
-    } catch {
+    }
+
+    try {
       fs.copyFileSync(tempPath, filePath);
       try {
         fs.unlinkSync(tempPath);
       } catch {}
+      return;
+    } catch {
+      try {
+        if (fs.existsSync(tempPath)) {
+          fs.unlinkSync(tempPath);
+        }
+      } catch {}
+      throw lastErr;
     }
   }
 }

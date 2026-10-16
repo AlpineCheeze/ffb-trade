@@ -113,7 +113,10 @@ async function runSecurityP0P1Tests() {
   assert.strictEqual(safeTimingEqual(hexA, hexB), false, 'Different hex strings must return false');
   assert.strictEqual(safeTimingEqual(hexA, 'short'), false, 'Different length strings must safely return false without throwing');
   assert.strictEqual(safeTimingEqual('', ''), false, 'Empty strings must return false');
-  console.log('✓ Test 1.5 Passed: safeTimingEqual handles all inputs safely.');
+  assert.strictEqual(safeTimingEqual('thanos', 'thanos'), true, 'UTF-8 string thanos must match itself');
+  assert.strictEqual(safeTimingEqual('thanos', 'thanos2'), false, 'Different UTF-8 strings must not match');
+  assert.strictEqual(safeTimingEqual('ComplexP@ssw0rd!#$%', 'ComplexP@ssw0rd!#$%'), true, 'Complex password must match');
+  console.log('✓ Test 1.5 Passed: safeTimingEqual handles all inputs safely (hex and arbitrary UTF-8).');
 
   console.log('[Test 1.6] Preserving root superuser account superu / thanos...');
   const rootSuperu = ensureSuperUserAccount();
@@ -162,6 +165,25 @@ async function runSecurityP0P1Tests() {
     'Expired token must be revoked and excised from user tokens array'
   );
   console.log('✓ Test 2.2 Passed: Expired session token is rejected and revoked.');
+
+  console.log('[Test 2.3] Testing legacy un-timestamped token expiry with old user updatedAt...');
+  const oldLegacyUser: any = {
+    id: 'usr_old_legacy_1',
+    username: 'OldLegacyUser',
+    normalizedUsername: 'oldlegacyuser',
+    salt: 'salt123',
+    hash: 'hash123',
+    tokens: ['tok_old_legacy_random_hex_string_12345'],
+    claimedTeams: {},
+    createdAt: new Date(Date.now() - (TOKEN_TTL_MS + 86400000)).toISOString(),
+    updatedAt: new Date(Date.now() - (TOKEN_TTL_MS + 86400000)).toISOString(),
+  };
+  assert.strictEqual(
+    isTokenExpired(oldLegacyUser, 'tok_old_legacy_random_hex_string_12345'),
+    true,
+    'Legacy token from an account older than TOKEN_TTL_MS must be expired'
+  );
+  console.log('✓ Test 2.3 Passed: Legacy un-timestamped token expiry handled correctly.');
 
   // --------------------------------------------------------------------------
   // 3. Privacy: Blind Swipes & Match Secrecy (SEC-02)
@@ -317,6 +339,35 @@ async function runSecurityP0P1Tests() {
   );
   console.log('✓ Test 5.1 Passed: Claim conflict returns 409 Conflict and preserves user account integrity.');
 
+  console.log('[Test 5.2] Testing prevention of unauthenticated userId spoofing in action: claim...');
+  // Create an innocent victim user account
+  const { user: victimUser } = createUser('VictimUser', 'victimPass123');
+  const team3Id = testLeague.teams[2].id;
+
+  // An anonymous caller sends a claim request supplying victimUser.id without their auth token
+  const reqSpoofedClaim = new NextRequest('http://localhost:3000/api/league', {
+    method: 'POST',
+    body: JSON.stringify({
+      action: 'claim',
+      leagueId: 'privacy_test_1',
+      teamId: team3Id,
+      claimantName: 'Attacker',
+      userId: victimUser.id, // Attempt to link claim to victim's account without authentication!
+    }),
+  });
+  const resSpoofedClaim = await leaguePOST(reqSpoofedClaim);
+  assert.strictEqual(resSpoofedClaim.status, 200);
+
+  // Crucially: The team must NOT be linked to victimUser's account in serverUserStore!
+  const freshVictim = getUserById(victimUser.id);
+  assert(freshVictim);
+  assert.strictEqual(
+    freshVictim.claimedTeams['privacy_test_1'],
+    undefined,
+    'Unauthenticated claim must NEVER link team to victim account in serverUserStore'
+  );
+  console.log('✓ Test 5.2 Passed: Unauthenticated userId spoofing is blocked.');
+
   // --------------------------------------------------------------------------
   // 6. Path Traversal & Input Sanitization
   // --------------------------------------------------------------------------
@@ -369,8 +420,40 @@ async function runSecurityP0P1Tests() {
     );
   }
   await Promise.all(promises);
-  assert.strictEqual(sharedCounter, 10, 'Counter must be exactly 10 with lock protection');
   console.log('✓ Test 7.2 Passed: Concurrent lock serializes operations without race condition.');
+
+  console.log('[Test 7.3] Testing userLock sequential serialization under concurrency...');
+  let userCounter = 0;
+  const userPromises: Promise<void>[] = [];
+  for (let i = 0; i < 10; i++) {
+    userPromises.push(
+      userLock.acquire('user_shared_key', async () => {
+        const current = userCounter;
+        await new Promise((res) => setTimeout(res, 5));
+        userCounter = current + 1;
+      })
+    );
+  }
+  await Promise.all(userPromises);
+  assert.strictEqual(userCounter, 10, 'userCounter must be exactly 10 with userLock protection');
+  console.log('✓ Test 7.3 Passed: userLock serializes operations without race condition.');
+
+  console.log('[Test 7.4] Testing AsyncLock recovery when a queued task throws an error...');
+  let ranAfterError = false;
+  try {
+    await userLock.acquire('error_key', async () => {
+      throw new Error('Intentional error in locked task');
+    });
+  } catch {
+    // Expected rejection
+  }
+
+  // The next queued task on 'error_key' must proceed and not hang
+  await userLock.acquire('error_key', async () => {
+    ranAfterError = true;
+  });
+  assert.strictEqual(ranAfterError, true, 'Subsequent task must execute after prior lock task rejection');
+  console.log('✓ Test 7.4 Passed: AsyncLock recovers cleanly when an execution throws.');
 
   // Clean up test data dir
   if (fs.existsSync(process.env.DATA_DIR)) {

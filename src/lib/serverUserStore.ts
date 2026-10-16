@@ -43,28 +43,24 @@ const userMemoryStore: Map<string, StoredUser> =
 globalThis.__tradeHornyUserStore = userMemoryStore;
 
 export class AsyncLock {
-  private locks = new Map<string, Promise<void>>();
+  private queues = new Map<string, Promise<void>>();
 
   async acquire<T>(key: string, fn: () => Promise<T> | T): Promise<T> {
-    while (this.locks.has(key)) {
-      try {
-        await this.locks.get(key);
-      } catch {
-        // Continue if previous lock holder rejected
-      }
-    }
-
+    const prev = this.queues.get(key) || Promise.resolve();
     let resolveLock!: () => void;
-    const lockPromise = new Promise<void>((resolve) => {
+    const current = new Promise<void>((resolve) => {
       resolveLock = resolve;
     });
-    this.locks.set(key, lockPromise);
+    this.queues.set(key, current);
 
     try {
+      await prev.catch(() => {});
       return await fn();
     } finally {
-      this.locks.delete(key);
       resolveLock();
+      if (this.queues.get(key) === current) {
+        this.queues.delete(key);
+      }
     }
   }
 }
@@ -90,20 +86,38 @@ export function atomicWriteFileSync(filePath: string, content: string): void {
   }
   const tempPath = `${filePath}.tmp.${process.pid}.${Date.now()}.${crypto.randomBytes(4).toString('hex')}`;
   fs.writeFileSync(tempPath, content, 'utf-8');
+
   try {
     fs.renameSync(tempPath, filePath);
+    return;
   } catch {
-    // Windows rename overwrite fallback
-    try {
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
+    // Windows fallback: retry unlink + rename loop to handle transient file locks
+    let lastErr: any;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+        fs.renameSync(tempPath, filePath);
+        return;
+      } catch (err) {
+        lastErr = err;
       }
-      fs.renameSync(tempPath, filePath);
-    } catch {
+    }
+
+    try {
       fs.copyFileSync(tempPath, filePath);
       try {
         fs.unlinkSync(tempPath);
       } catch {}
+      return;
+    } catch {
+      try {
+        if (fs.existsSync(tempPath)) {
+          fs.unlinkSync(tempPath);
+        }
+      } catch {}
+      throw lastErr;
     }
   }
 }
@@ -181,19 +195,17 @@ export function sanitizeUsername(raw: string): string {
 }
 
 /**
- * Constant-time comparison for hex strings to eliminate timing attacks.
+ * Constant-time comparison for strings to eliminate timing attacks.
+ * Uses SHA-256 digest hashing before comparison so any string format
+ * (hex, utf-8, arbitrary length) can be compared in strict constant time.
  */
 export function safeTimingEqual(a: string, b: string): boolean {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  if (!a || !b) return false;
   try {
-    const bufA = Buffer.from(a, 'hex');
-    const bufB = Buffer.from(b, 'hex');
-    if (bufA.length === 0 || bufA.length !== bufB.length) {
-      if (bufA.length > 0) {
-        crypto.timingSafeEqual(bufA, bufA);
-      }
-      return false;
-    }
-    return crypto.timingSafeEqual(bufA, bufB);
+    const hashA = crypto.createHash('sha256').update(a, 'utf-8').digest();
+    const hashB = crypto.createHash('sha256').update(b, 'utf-8').digest();
+    return crypto.timingSafeEqual(hashA, hashB) && a.length === b.length;
   } catch {
     return false;
   }
@@ -285,14 +297,22 @@ export function verifyPassword(password: string, salt: string, expectedHash: str
 export function isTokenExpired(user: StoredUser, token: string): boolean {
   if (user.sessions && user.sessions[token]) {
     const expiry = new Date(user.sessions[token].expiresAt).getTime();
-    if (Date.now() > expiry) return true;
+    if (!isNaN(expiry)) {
+      return Date.now() > expiry;
+    }
   }
   const match = token.match(/^tok_(\d+)_/);
   if (match) {
     const created = parseInt(match[1], 10);
-    if (!isNaN(created) && Date.now() - created > TOKEN_TTL_MS) {
-      return true;
+    if (!isNaN(created)) {
+      return Date.now() - created > TOKEN_TTL_MS;
     }
+  }
+  // For un-timestamped legacy tokens without session records:
+  // Fallback to checking the user's updatedAt or createdAt timestamp
+  const refTime = new Date(user.updatedAt || user.createdAt).getTime();
+  if (!isNaN(refTime)) {
+    return Date.now() - refTime > TOKEN_TTL_MS;
   }
   return false;
 }

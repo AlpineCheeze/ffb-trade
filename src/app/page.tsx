@@ -11,9 +11,13 @@ import {
   saveLocalSwipes,
   getLocalMatches,
   saveLocalMatches,
+  getLocalDeletedMatches,
+  saveLocalDeletedMatches,
   syncLeagueStateWithServer,
   recordSwipeOnServer,
   undoSwipeOnServer,
+  deleteMatchOnServer,
+  deleteAllMatchesOnServer,
 } from '@/lib/leagueStore';
 import { checkForMutualMatch, createSeedOpponentSwipes, arraysEqualIgnoreOrder } from '@/lib/matchmaking';
 import { recordPackageSwipeEloUpdate } from '@/lib/elo';
@@ -47,6 +51,7 @@ export default function Home() {
   // Swipes and matches state
   const [swipes, setSwipes] = useState<Swipe[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
+  const [deletedMatches, setDeletedMatches] = useState<Match[]>([]);
   const [activeMatchCelebration, setActiveMatchCelebration] = useState<Match | null>(null);
 
   // Refs to prevent stale closures and out-of-order network race conditions
@@ -57,16 +62,21 @@ export default function Home() {
     leagueRef.current = league;
   }, [league]);
 
-  const mergeMatchesUnique = (primary: Match[], secondary: Match[]): Match[] => {
+  const getMatchSignature = (m: Match): string => {
+    const pairTeams = [m.teamAId, m.teamBId].sort().join('|');
+    const aIds = m.teamAPlayers.map((p) => p.id).sort().join(',');
+    const bIds = m.teamBPlayers.map((p) => p.id).sort().join(',');
+    const pairPlayers = [aIds, bIds].sort().join('::');
+    return `${pairTeams}#${pairPlayers}`;
+  };
+
+  const mergeMatchesUnique = (primary: Match[], secondary: Match[], excludeDeleted: Match[] = []): Match[] => {
+    const deletedSigs = new Set(excludeDeleted.map(getMatchSignature));
     const seen = new Set<string>();
     const result: Match[] = [];
     for (const m of [...primary, ...secondary]) {
-      const pairTeams = [m.teamAId, m.teamBId].sort().join('|');
-      const aIds = m.teamAPlayers.map((p) => p.id).sort().join(',');
-      const bIds = m.teamBPlayers.map((p) => p.id).sort().join(',');
-      const pairPlayers = [aIds, bIds].sort().join('::');
-      const sig = `${pairTeams}#${pairPlayers}`;
-      if (!seen.has(sig)) {
+      const sig = getMatchSignature(m);
+      if (!seen.has(sig) && !deletedSigs.has(sig)) {
         seen.add(sig);
         result.push(m);
       }
@@ -118,8 +128,10 @@ export default function Home() {
       ...localSwipes.filter((ls) => !seedSwipes.some((ss) => ss.id === ls.id)),
     ];
     setSwipes(mergedInitialSwipes);
+    const localDeleted = getLocalDeletedMatches(selectedLeague.espnLeagueId);
     const localMatches = getLocalMatches(selectedLeague.espnLeagueId);
-    setMatches(localMatches);
+    setDeletedMatches(localDeleted);
+    setMatches(mergeMatchesUnique(localMatches, [], localDeleted));
 
     // Check if the current user previously claimed a team on this device
     let resolvedTeamId: string | null = null;
@@ -151,15 +163,21 @@ export default function Home() {
       }
     }
 
-    // Hydrate latest team claims, user swipes, and matches from backend server
+    // Hydrate latest team claims, user swipes, matches, and deleted matches from backend server
     syncLeagueStateWithServer(selectedLeague, resolvedTeamId).then((serverView) => {
       if (!serverView || mutationVersionRef.current !== reqVersion) return;
       setLeague(serverView.league);
       leagueRef.current = serverView.league;
       const isMock =
         serverView.league.id === 'league_mock_123' || serverView.league.espnLeagueId === '12345678';
+      const serverDeleted = serverView.deletedMatches || [];
+      setDeletedMatches((prevDel) =>
+        isMock ? mergeMatchesUnique(serverDeleted, prevDel) : serverDeleted
+      );
       setMatches((prev) =>
-        isMock ? mergeMatchesUnique(serverView.matches, prev) : serverView.matches
+        isMock
+          ? mergeMatchesUnique(serverView.matches, prev, serverDeleted)
+          : serverView.matches
       );
       if (resolvedTeamId) {
         const seeds = createSeedOpponentSwipes(serverView.league);
@@ -196,8 +214,14 @@ export default function Home() {
         leagueRef.current = serverView.league;
         const isMock =
           serverView.league.id === 'league_mock_123' || serverView.league.espnLeagueId === '12345678';
+        const serverDeleted = serverView.deletedMatches || [];
+        setDeletedMatches((prevDel) =>
+          isMock ? mergeMatchesUnique(serverDeleted, prevDel) : serverDeleted
+        );
         setMatches((prev) =>
-          isMock ? mergeMatchesUnique(serverView.matches, prev) : serverView.matches
+          isMock
+            ? mergeMatchesUnique(serverView.matches, prev, serverDeleted)
+            : serverView.matches
         );
         const seeds = createSeedOpponentSwipes(serverView.league);
         setSwipes([
@@ -227,9 +251,13 @@ export default function Home() {
         leagueRef.current = serverView.league;
         const isMock =
           serverView.league.id === 'league_mock_123' || serverView.league.espnLeagueId === '12345678';
+        const serverDeleted = serverView.deletedMatches || [];
+        setDeletedMatches((prevDel) =>
+          isMock ? mergeMatchesUnique(serverDeleted, prevDel) : serverDeleted
+        );
         setMatches((prevMatches) => {
           const nextMatches = isMock
-            ? mergeMatchesUnique(serverView.matches, prevMatches)
+            ? mergeMatchesUnique(serverView.matches, prevMatches, serverDeleted)
             : serverView.matches;
           // If a leaguemate just completed a mutual match with our team, celebrate!
           if (userTeamId && nextMatches.length > prevMatches.length) {
@@ -435,9 +463,13 @@ export default function Home() {
     recordSwipeOnServer(league.espnLeagueId, newSwipe, league).then((serverView) => {
       if (!serverView || mutationVersionRef.current !== swipeVersion) return;
       const isMock = league.id === 'league_mock_123' || league.espnLeagueId === '12345678';
+      const serverDeleted = serverView.deletedMatches || [];
+      setDeletedMatches((prevDel) =>
+        isMock ? mergeMatchesUnique(serverDeleted, prevDel) : serverDeleted
+      );
       setMatches((prev) => {
         const next = isMock
-          ? mergeMatchesUnique(serverView.matches, prev)
+          ? mergeMatchesUnique(serverView.matches, prev, serverDeleted)
           : serverView.matches;
         saveLocalMatches(league.espnLeagueId, next);
         return next;
@@ -501,13 +533,179 @@ export default function Home() {
       (serverView) => {
         if (!serverView || mutationVersionRef.current !== undoVersion) return;
         const isMock = league.id === 'league_mock_123' || league.espnLeagueId === '12345678';
+        const serverDeleted = serverView.deletedMatches || [];
+        setDeletedMatches((prevDel) =>
+          isMock ? mergeMatchesUnique(serverDeleted, prevDel) : serverDeleted
+        );
         setMatches((prev) => {
-          const next = isMock ? mergeMatchesUnique(prev, serverView.matches) : serverView.matches;
+          const next = isMock
+            ? mergeMatchesUnique(prev, serverView.matches, serverDeleted)
+            : serverView.matches;
           saveLocalMatches(league.espnLeagueId, next);
           return next;
         });
       }
     );
+  };
+
+  // Handle Delete Single Match (removes from both users' active matches and archives under deletedMatches)
+  const handleDeleteMatch = (matchToDelete: Match) => {
+    if (!userTeam || !league) return;
+
+    mutationVersionRef.current += 1;
+    const deleteVersion = mutationVersionRef.current;
+
+    const targetSig = getMatchSignature(matchToDelete);
+    const archivedMatch: Match = {
+      ...matchToDelete,
+      deletedAt: new Date().toISOString(),
+      deletedByTeamId: userTeam.id,
+      deletedByName: userTeam.claimedBy || userTeam.ownerName || 'Manager',
+    };
+
+    if (activeMatchCelebration && getMatchSignature(activeMatchCelebration) === targetSig) {
+      setActiveMatchCelebration(null);
+    }
+
+    setMatches((prev) => {
+      const next = prev.filter((m) => getMatchSignature(m) !== targetSig);
+      saveLocalMatches(league.espnLeagueId, next);
+      return next;
+    });
+
+    setDeletedMatches((prev) => {
+      const next = mergeMatchesUnique([archivedMatch], prev);
+      saveLocalDeletedMatches(league.espnLeagueId, next);
+      return next;
+    });
+
+    // Flip deleting user's swipe for this trade to isInterested: false so it doesn't auto-retrigger
+    const isDeletingTeamA = matchToDelete.teamAId === userTeam.id;
+    const myOfferedIds = (
+      isDeletingTeamA ? matchToDelete.teamAPlayers : matchToDelete.teamBPlayers
+    ).map((p) => p.id);
+    const partnerTargetIds = (
+      isDeletingTeamA ? matchToDelete.teamBPlayers : matchToDelete.teamAPlayers
+    ).map((p) => p.id);
+    const partnerTeamId = isDeletingTeamA ? matchToDelete.teamBId : matchToDelete.teamAId;
+
+    setSwipes((prev) => {
+      const next = prev.map((s) => {
+        if (
+          s.teamId === userTeam.id &&
+          s.targetTeamId === partnerTeamId &&
+          s.isInterested &&
+          arraysEqualIgnoreOrder(s.offeredPlayerIds, myOfferedIds) &&
+          arraysEqualIgnoreOrder(s.targetPlayerIds, partnerTargetIds)
+        ) {
+          return { ...s, isInterested: false };
+        }
+        return s;
+      });
+      saveLocalSwipes(
+        league.espnLeagueId,
+        next.filter((s) => s.teamId === userTeam.id)
+      );
+      return next;
+    });
+
+    deleteMatchOnServer(
+      league.espnLeagueId,
+      userTeam.id,
+      matchToDelete.id,
+      league,
+      matchToDelete
+    ).then((serverView) => {
+      if (!serverView || mutationVersionRef.current !== deleteVersion) return;
+      const isMock = league.id === 'league_mock_123' || league.espnLeagueId === '12345678';
+      const serverDeleted = serverView.deletedMatches || [];
+      setDeletedMatches((prevDel) => {
+        const nextDel = isMock ? mergeMatchesUnique(serverDeleted, prevDel) : serverDeleted;
+        saveLocalDeletedMatches(league.espnLeagueId, nextDel);
+        return nextDel;
+      });
+      setMatches((prev) => {
+        const next = isMock
+          ? mergeMatchesUnique(serverView.matches, prev, serverDeleted)
+          : serverView.matches;
+        saveLocalMatches(league.espnLeagueId, next);
+        return next;
+      });
+    });
+  };
+
+  // Handle Delete All Matches for current user (removes from both users' active matches and archives under deletedMatches)
+  const handleDeleteAllMatches = () => {
+    if (!userTeam || !league) return;
+
+    const myActiveMatches = matches.filter(
+      (m) => m.teamAId === userTeam.id || m.teamBId === userTeam.id
+    );
+    if (myActiveMatches.length === 0) return;
+
+    mutationVersionRef.current += 1;
+    const deleteAllVersion = mutationVersionRef.current;
+
+    const nowIso = new Date().toISOString();
+    const deletedByName = userTeam.claimedBy || userTeam.ownerName || 'Manager';
+    const newlyArchived: Match[] = myActiveMatches.map((m) => ({
+      ...m,
+      deletedAt: nowIso,
+      deletedByTeamId: userTeam.id,
+      deletedByName,
+    }));
+
+    setActiveMatchCelebration(null);
+    setMatches([]);
+    saveLocalMatches(league.espnLeagueId, []);
+
+    setDeletedMatches((prev) => {
+      const next = mergeMatchesUnique(newlyArchived, prev);
+      saveLocalDeletedMatches(league.espnLeagueId, next);
+      return next;
+    });
+
+    // Flip deleting user's swipes for all deleted matches to isInterested: false
+    setSwipes((prev) => {
+      const next = prev.map((s) => {
+        if (s.teamId !== userTeam.id || !s.isInterested) return s;
+        const wasInDeletedMatch = myActiveMatches.some((m) => {
+          const isDeletingTeamA = m.teamAId === userTeam.id;
+          const myOfferedIds = (isDeletingTeamA ? m.teamAPlayers : m.teamBPlayers).map((p) => p.id);
+          const partnerTargetIds = (isDeletingTeamA ? m.teamBPlayers : m.teamAPlayers).map((p) => p.id);
+          const partnerTeamId = isDeletingTeamA ? m.teamBId : m.teamAId;
+          return (
+            s.targetTeamId === partnerTeamId &&
+            arraysEqualIgnoreOrder(s.offeredPlayerIds, myOfferedIds) &&
+            arraysEqualIgnoreOrder(s.targetPlayerIds, partnerTargetIds)
+          );
+        });
+        return wasInDeletedMatch ? { ...s, isInterested: false } : s;
+      });
+      saveLocalSwipes(
+        league.espnLeagueId,
+        next.filter((s) => s.teamId === userTeam.id)
+      );
+      return next;
+    });
+
+    deleteAllMatchesOnServer(
+      league.espnLeagueId,
+      userTeam.id,
+      league,
+      myActiveMatches
+    ).then((serverView) => {
+      if (!serverView || mutationVersionRef.current !== deleteAllVersion) return;
+      const isMock = league.id === 'league_mock_123' || league.espnLeagueId === '12345678';
+      const serverDeleted = serverView.deletedMatches || [];
+      setDeletedMatches((prevDel) => {
+        const nextDel = isMock ? mergeMatchesUnique(serverDeleted, prevDel) : serverDeleted;
+        saveLocalDeletedMatches(league.espnLeagueId, nextDel);
+        return nextDel;
+      });
+      setMatches(serverView.matches);
+      saveLocalMatches(league.espnLeagueId, serverView.matches);
+    });
   };
 
   const handleSelectAllPositions = () => {
@@ -812,8 +1010,11 @@ export default function Home() {
           <div className="w-full">
             <MatchesView
               matches={matches}
+              deletedMatches={deletedMatches}
               currentTeamId={userTeamId}
               onStartSwiping={() => setActiveTab('deck')}
+              onDeleteMatch={handleDeleteMatch}
+              onDeleteAllMatches={handleDeleteAllMatches}
             />
           </div>
         )}

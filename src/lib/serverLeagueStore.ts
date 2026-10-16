@@ -92,6 +92,7 @@ function createInitialServerState(league: League, forcedCleanId?: string): Serve
     league: normalizedLeague,
     swipes: createSeedOpponentSwipes(normalizedLeague),
     matches: [],
+    deletedMatches: [],
     elo: {},
     updatedAt: new Date().toISOString(),
   };
@@ -116,6 +117,9 @@ function readStateFromDisk(cleanId: string): ServerLeagueState | null {
     }
 
     if (parsed && parsed.league && Array.isArray(parsed.swipes)) {
+      if (!Array.isArray(parsed.deletedMatches)) {
+        parsed.deletedMatches = [];
+      }
       return parsed as ServerLeagueState;
     }
   } catch (err) {
@@ -179,6 +183,9 @@ export function getServerLeagueState(espnLeagueId: string): ServerLeagueState | 
 export function saveServerLeagueState(state: ServerLeagueState): ServerLeagueState {
   const cleanId = sanitizeLeagueId(state.league.espnLeagueId);
   state.updatedAt = new Date().toISOString();
+  if (!Array.isArray(state.deletedMatches)) {
+    state.deletedMatches = [];
+  }
   memoryStore.set(cleanId, state);
   writeStateToDisk(cleanId, state);
   return state;
@@ -255,6 +262,7 @@ export function saveServerLeagueSnapshot(freshLeague: League, forcedCleanId?: st
     league: mergedLeague,
     swipes: validSwipes,
     matches: validMatches,
+    deletedMatches: existingState.deletedMatches || [],
     updatedAt: new Date().toISOString(),
   };
 
@@ -481,6 +489,26 @@ export function recordServerSwipe(
 
       if (!alreadyExists) {
         state.matches = [candidateMatch, ...state.matches];
+        // If this trade pair was previously deleted, remove its old deleted record now that both managers re-matched
+        if (Array.isArray(state.deletedMatches)) {
+          const cPlayersA = candidateMatch.teamAPlayers.map((p) => p.id);
+          const cPlayersB = candidateMatch.teamBPlayers.map((p) => p.id);
+          state.deletedMatches = state.deletedMatches.filter((dm) => {
+            const dmPlayersA = dm.teamAPlayers.map((p) => p.id);
+            const dmPlayersB = dm.teamBPlayers.map((p) => p.id);
+            const sameDir =
+              dm.teamAId === candidateMatch.teamAId &&
+              dm.teamBId === candidateMatch.teamBId &&
+              arraysEqualIgnoreOrder(dmPlayersA, cPlayersA) &&
+              arraysEqualIgnoreOrder(dmPlayersB, cPlayersB);
+            const revDir =
+              dm.teamAId === candidateMatch.teamBId &&
+              dm.teamBId === candidateMatch.teamAId &&
+              arraysEqualIgnoreOrder(dmPlayersA, cPlayersB) &&
+              arraysEqualIgnoreOrder(dmPlayersB, cPlayersA);
+            return !(sameDir || revDir);
+          });
+        }
         matchFound = candidateMatch;
       } else {
         matchFound =
@@ -587,6 +615,200 @@ export function undoServerSwipe(
   return saveServerLeagueState(state);
 }
 
+function isSameTradeMatch(a: Match, b: Match): boolean {
+  if (a.id === b.id) return true;
+  const aPlayersA = a.teamAPlayers.map((p) => p.id);
+  const aPlayersB = a.teamBPlayers.map((p) => p.id);
+  const bPlayersA = b.teamAPlayers.map((p) => p.id);
+  const bPlayersB = b.teamBPlayers.map((p) => p.id);
+
+  const sameDir =
+    a.teamAId === b.teamAId &&
+    a.teamBId === b.teamBId &&
+    arraysEqualIgnoreOrder(aPlayersA, bPlayersA) &&
+    arraysEqualIgnoreOrder(aPlayersB, bPlayersB);
+
+  const revDir =
+    a.teamAId === b.teamBId &&
+    a.teamBId === b.teamAId &&
+    arraysEqualIgnoreOrder(aPlayersA, bPlayersB) &&
+    arraysEqualIgnoreOrder(aPlayersB, bPlayersA);
+
+  return sameDir || revDir;
+}
+
+/**
+ * Deletes a single match on behalf of `teamId`, removing it from active `matches` for both
+ * involved teams, archiving it in `deletedMatches` for both teams, and marking `teamId`'s
+ * corresponding swipe as passed (`isInterested: false`) so it doesn't auto-rematch.
+ */
+export function deleteServerMatch(
+  espnLeagueId: string,
+  teamId: string,
+  matchId: string,
+  fallbackLeague?: League,
+  matchSnapshot?: Match
+): ServerLeagueState | null {
+  const cleanId = sanitizeLeagueId(espnLeagueId);
+  let state = getServerLeagueState(cleanId);
+
+  if (!state && fallbackLeague && Array.isArray(fallbackLeague.teams)) {
+    state = createInitialServerState({ ...fallbackLeague, espnLeagueId: cleanId }, cleanId);
+  }
+  if (!state) return null;
+
+  let targetMatch = state.matches.find(
+    (m) =>
+      (m.id === matchId || (matchSnapshot && isSameTradeMatch(m, matchSnapshot))) &&
+      (m.teamAId === teamId || m.teamBId === teamId)
+  );
+
+  if (
+    !targetMatch &&
+    matchSnapshot &&
+    (matchSnapshot.teamAId === teamId || matchSnapshot.teamBId === teamId)
+  ) {
+    targetMatch = matchSnapshot;
+  }
+
+  if (!targetMatch) {
+    return state;
+  }
+
+  const deletingTeam = state.league.teams.find((t) => t.id === teamId);
+  const deletedByName = deletingTeam?.claimedBy || deletingTeam?.ownerName || 'Manager';
+  const nowIso = new Date().toISOString();
+
+  const archivedMatch: Match = {
+    ...targetMatch,
+    deletedAt: nowIso,
+    deletedByTeamId: teamId,
+    deletedByName,
+  };
+
+  // Remove from active matches for both teams
+  state.matches = state.matches.filter((m) => !isSameTradeMatch(m, targetMatch!));
+
+  // Add to deletedMatches archive (deduplicating any older archive of the same trade)
+  const existingDeleted = Array.isArray(state.deletedMatches) ? state.deletedMatches : [];
+  state.deletedMatches = [
+    archivedMatch,
+    ...existingDeleted.filter((dm) => !isSameTradeMatch(dm, archivedMatch)),
+  ];
+
+  // Mark deleting team's swipe for this trade as not interested so it won't auto-retrigger
+  const isDeletingTeamA = targetMatch.teamAId === teamId;
+  const myOfferedIds = (isDeletingTeamA ? targetMatch.teamAPlayers : targetMatch.teamBPlayers).map(
+    (p) => p.id
+  );
+  const partnerTargetIds = (isDeletingTeamA ? targetMatch.teamBPlayers : targetMatch.teamAPlayers).map(
+    (p) => p.id
+  );
+  const partnerTeamId = isDeletingTeamA ? targetMatch.teamBId : targetMatch.teamAId;
+
+  state.swipes = state.swipes.map((s) => {
+    if (
+      s.teamId === teamId &&
+      s.targetTeamId === partnerTeamId &&
+      s.isInterested &&
+      arraysEqualIgnoreOrder(s.offeredPlayerIds, myOfferedIds) &&
+      arraysEqualIgnoreOrder(s.targetPlayerIds, partnerTargetIds)
+    ) {
+      return { ...s, isInterested: false };
+    }
+    return s;
+  });
+
+  return saveServerLeagueState(state);
+}
+
+/**
+ * Deletes ALL active matches involving `teamId`, removing them from active `matches`
+ * for both `teamId` and each matched partner, and archiving them under `deletedMatches`.
+ */
+export function deleteAllServerMatches(
+  espnLeagueId: string,
+  teamId: string,
+  fallbackLeague?: League,
+  clientMatches?: Match[]
+): ServerLeagueState | null {
+  const cleanId = sanitizeLeagueId(espnLeagueId);
+  let state = getServerLeagueState(cleanId);
+
+  if (!state && fallbackLeague && Array.isArray(fallbackLeague.teams)) {
+    state = createInitialServerState({ ...fallbackLeague, espnLeagueId: cleanId }, cleanId);
+  }
+  if (!state) return null;
+
+  const serverTeamMatches = state.matches.filter(
+    (m) => m.teamAId === teamId || m.teamBId === teamId
+  );
+
+  // Merge any client-provided matches (e.g. demo seed matches) that involve this team
+  const combinedToDelete: Match[] = [...serverTeamMatches];
+  if (Array.isArray(clientMatches)) {
+    for (const cm of clientMatches) {
+      if (
+        cm &&
+        (cm.teamAId === teamId || cm.teamBId === teamId) &&
+        !combinedToDelete.some((existing) => isSameTradeMatch(existing, cm))
+      ) {
+        combinedToDelete.push(cm);
+      }
+    }
+  }
+
+  if (combinedToDelete.length === 0) {
+    return state;
+  }
+
+  const deletingTeam = state.league.teams.find((t) => t.id === teamId);
+  const deletedByName = deletingTeam?.claimedBy || deletingTeam?.ownerName || 'Manager';
+  const nowIso = new Date().toISOString();
+
+  const newlyArchived: Match[] = combinedToDelete.map((m) => ({
+    ...m,
+    deletedAt: nowIso,
+    deletedByTeamId: teamId,
+    deletedByName,
+  }));
+
+  // Remove all matches involving teamId from active matches
+  state.matches = state.matches.filter(
+    (m) => m.teamAId !== teamId && m.teamBId !== teamId
+  );
+
+  // Prepend newly archived matches to deletedMatches
+  const existingDeleted = Array.isArray(state.deletedMatches) ? state.deletedMatches : [];
+  const filteredExistingDeleted = existingDeleted.filter(
+    (dm) => !newlyArchived.some((na) => isSameTradeMatch(dm, na))
+  );
+  state.deletedMatches = [...newlyArchived, ...filteredExistingDeleted];
+
+  // Flip deleting user's swipes for all deleted matches to isInterested: false
+  for (const m of combinedToDelete) {
+    const isDeletingTeamA = m.teamAId === teamId;
+    const myOfferedIds = (isDeletingTeamA ? m.teamAPlayers : m.teamBPlayers).map((p) => p.id);
+    const partnerTargetIds = (isDeletingTeamA ? m.teamBPlayers : m.teamAPlayers).map((p) => p.id);
+    const partnerTeamId = isDeletingTeamA ? m.teamBId : m.teamAId;
+
+    state.swipes = state.swipes.map((s) => {
+      if (
+        s.teamId === teamId &&
+        s.targetTeamId === partnerTeamId &&
+        s.isInterested &&
+        arraysEqualIgnoreOrder(s.offeredPlayerIds, myOfferedIds) &&
+        arraysEqualIgnoreOrder(s.targetPlayerIds, partnerTargetIds)
+      ) {
+        return { ...s, isInterested: false };
+      }
+      return s;
+    });
+  }
+
+  return saveServerLeagueState(state);
+}
+
 /**
  * Builds a privacy-safe ClientLeagueView for a specific team.
  * Unreciprocated swipes AND matches belonging only to third-party teams are NEVER exposed.
@@ -600,10 +822,14 @@ export function toClientLeagueView(
   const myMatches = teamId
     ? state.matches.filter((m) => m.teamAId === teamId || m.teamBId === teamId)
     : [];
+  const myDeletedMatches = teamId
+    ? (state.deletedMatches || []).filter((m) => m.teamAId === teamId || m.teamBId === teamId)
+    : [];
   return {
     league: state.league,
     mySwipes,
     matches: myMatches,
+    deletedMatches: myDeletedMatches,
     matchFound: matchFound ?? null,
   };
 }

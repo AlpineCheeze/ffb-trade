@@ -5,11 +5,13 @@ import {
   claimServerTeam,
   recordServerSwipe,
   undoServerSwipe,
+  deleteServerMatch,
+  deleteAllServerMatches,
   toClientLeagueView,
   sanitizeLeagueId,
 } from '@/lib/serverLeagueStore';
 import { fetchEspnLeagueServer } from '@/lib/espn';
-import { Swipe, TradeType } from '@/types/fantasy';
+import { Swipe, TradeType, Match } from '@/types/fantasy';
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -186,6 +188,76 @@ export async function POST(req: NextRequest) {
       }
 
       const updatedState = undoServerSwipe(cleanId, teamId, tradeType, offeredPlayerIds);
+      if (!updatedState) {
+        return NextResponse.json(
+          { error: 'League not found on server' },
+          { status: 404 }
+        );
+      }
+
+      const view = toClientLeagueView(updatedState, teamId);
+      return NextResponse.json({
+        success: true,
+        ...view,
+      });
+    }
+
+    if (action === 'delete_match') {
+      const { teamId, matchId, fallbackLeague, matchSnapshot } = body as {
+        teamId: string;
+        matchId: string;
+        fallbackLeague?: any;
+        matchSnapshot?: Match;
+      };
+
+      if (!teamId || typeof teamId !== 'string' || !matchId || typeof matchId !== 'string') {
+        return NextResponse.json(
+          { error: 'Valid teamId and matchId are required to delete a match' },
+          { status: 400 }
+        );
+      }
+
+      const updatedState = deleteServerMatch(
+        cleanId,
+        teamId,
+        matchId,
+        fallbackLeague,
+        matchSnapshot
+      );
+      if (!updatedState) {
+        return NextResponse.json(
+          { error: 'League not found on server' },
+          { status: 404 }
+        );
+      }
+
+      const view = toClientLeagueView(updatedState, teamId);
+      return NextResponse.json({
+        success: true,
+        ...view,
+      });
+    }
+
+    if (action === 'delete_all_matches') {
+      const { teamId, fallbackLeague, clientMatches } = body as {
+        teamId: string;
+        fallbackLeague?: any;
+        clientMatches?: Match[];
+      };
+
+      if (!teamId || typeof teamId !== 'string') {
+        return NextResponse.json(
+          { error: 'Valid teamId is required to delete all matches' },
+          { status: 400 }
+        );
+      }
+
+      const updatedState = deleteAllServerMatches(
+        cleanId,
+        teamId,
+        fallbackLeague,
+        clientMatches
+      );
       if (!updatedState) {
         return NextResponse.json(
           { error: 'League not found on server' },

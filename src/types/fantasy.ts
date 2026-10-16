@@ -75,6 +75,9 @@ export interface Match {
   teamA: Team;
   teamB: Team;
   createdAt: string;
+  deletedAt?: string;
+  deletedByTeamId?: string;
+  deletedByName?: string;
 }
 
 export interface InternalEloRecord {
@@ -88,6 +91,7 @@ export interface ServerLeagueState {
   league: League;
   swipes: Swipe[];
   matches: Match[];
+  deletedMatches?: Match[];
   elo: Record<string, InternalEloRecord>;
   updatedAt: string;
 }
@@ -96,6 +100,8 @@ export interface ClientLeagueView {
   league: League;
   mySwipes: Swipe[];
   matches: Match[];
+  deletedMatches?: Match[];
   matchFound?: Match | null;
 }
+
 

@@ -18,6 +18,7 @@ const CLAIM_STORAGE_PREFIX = 'tradehorny_claim_';
 const LEGACY_CLAIM_STORAGE_PREFIXES = ['tradehonry_claim_', 'tradehorney_claim_', 'workballs_claim_'];
 const SWIPES_STORAGE_PREFIX = 'tradehorny_swipes_';
 const MATCHES_STORAGE_PREFIX = 'tradehorny_matches_';
+const DELETED_MATCHES_STORAGE_PREFIX = 'tradehorny_deleted_matches_';
 
 export function getLeagueById(espnLeagueId: string): League | undefined {
   const cleanId = espnLeagueId.trim();
@@ -176,6 +177,28 @@ export function saveLocalMatches(espnLeagueId: string, matches: Match[]): void {
   }
 }
 
+export function getLocalDeletedMatches(espnLeagueId: string): Match[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(DELETED_MATCHES_STORAGE_PREFIX + espnLeagueId.trim());
+    return raw ? (JSON.parse(raw) as Match[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveLocalDeletedMatches(espnLeagueId: string, deletedMatches: Match[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(
+      DELETED_MATCHES_STORAGE_PREFIX + espnLeagueId.trim(),
+      JSON.stringify(deletedMatches)
+    );
+  } catch {
+    // Ignore localStorage errors
+  }
+}
+
 export function getAllRegisteredLeagues(): League[] {
   return Array.from(leaguesRegistry.values());
 }
@@ -215,7 +238,7 @@ export function getSavedLeagues(): League[] {
 }
 
 /**
- * Synchronizes league state (team claims, user's swipes, and confirmed matches) with the backend server.
+ * Synchronizes league state (team claims, user's swipes, confirmed matches, and deleted matches) with the backend server.
  */
 export async function syncLeagueStateWithServer(
   league: League,
@@ -239,10 +262,14 @@ export async function syncLeagueStateWithServer(
       saveLeague(data.league);
       if (Array.isArray(data.mySwipes)) saveLocalSwipes(league.espnLeagueId, data.mySwipes);
       if (Array.isArray(data.matches)) saveLocalMatches(league.espnLeagueId, data.matches);
+      if (Array.isArray(data.deletedMatches)) {
+        saveLocalDeletedMatches(league.espnLeagueId, data.deletedMatches);
+      }
       return {
         league: data.league,
         mySwipes: data.mySwipes || [],
         matches: data.matches || [],
+        deletedMatches: data.deletedMatches || [],
       };
     }
   } catch {
@@ -281,10 +308,14 @@ export async function claimTeamOnServer(
       saveLeague(data.league);
       if (Array.isArray(data.mySwipes)) saveLocalSwipes(espnLeagueId, data.mySwipes);
       if (Array.isArray(data.matches)) saveLocalMatches(espnLeagueId, data.matches);
+      if (Array.isArray(data.deletedMatches)) {
+        saveLocalDeletedMatches(espnLeagueId, data.deletedMatches);
+      }
       return {
         league: data.league,
         mySwipes: data.mySwipes || [],
         matches: data.matches || [],
+        deletedMatches: data.deletedMatches || [],
       };
     }
   } catch {
@@ -319,10 +350,14 @@ export async function recordSwipeOnServer(
       saveLeague(data.league);
       if (Array.isArray(data.mySwipes)) saveLocalSwipes(espnLeagueId, data.mySwipes);
       if (Array.isArray(data.matches)) saveLocalMatches(espnLeagueId, data.matches);
+      if (Array.isArray(data.deletedMatches)) {
+        saveLocalDeletedMatches(espnLeagueId, data.deletedMatches);
+      }
       return {
         league: data.league,
         mySwipes: data.mySwipes || [],
         matches: data.matches || [],
+        deletedMatches: data.deletedMatches || [],
         matchFound: data.matchFound || null,
       };
     }
@@ -360,10 +395,105 @@ export async function undoSwipeOnServer(
       saveLeague(data.league);
       if (Array.isArray(data.mySwipes)) saveLocalSwipes(espnLeagueId, data.mySwipes);
       if (Array.isArray(data.matches)) saveLocalMatches(espnLeagueId, data.matches);
+      if (Array.isArray(data.deletedMatches)) {
+        saveLocalDeletedMatches(espnLeagueId, data.deletedMatches);
+      }
       return {
         league: data.league,
         mySwipes: data.mySwipes || [],
         matches: data.matches || [],
+        deletedMatches: data.deletedMatches || [],
+      };
+    }
+  } catch {
+    // Fallback to local state if offline
+  }
+  return null;
+}
+
+/**
+ * Deletes a single match on the backend server for both involved teams and archives it under deletedMatches.
+ */
+export async function deleteMatchOnServer(
+  espnLeagueId: string,
+  teamId: string,
+  matchId: string,
+  fallbackLeague?: League,
+  matchSnapshot?: Match
+): Promise<ClientLeagueView | null> {
+  if (typeof window === 'undefined') return null;
+  try {
+    const res = await fetch('/api/league', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'delete_match',
+        leagueId: espnLeagueId,
+        teamId,
+        matchId,
+        fallbackLeague,
+        matchSnapshot,
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data && data.league) {
+      saveLeague(data.league);
+      if (Array.isArray(data.mySwipes)) saveLocalSwipes(espnLeagueId, data.mySwipes);
+      if (Array.isArray(data.matches)) saveLocalMatches(espnLeagueId, data.matches);
+      if (Array.isArray(data.deletedMatches)) {
+        saveLocalDeletedMatches(espnLeagueId, data.deletedMatches);
+      }
+      return {
+        league: data.league,
+        mySwipes: data.mySwipes || [],
+        matches: data.matches || [],
+        deletedMatches: data.deletedMatches || [],
+      };
+    }
+  } catch {
+    // Fallback to local state if offline
+  }
+  return null;
+}
+
+/**
+ * Deletes ALL active matches for `teamId` on the backend server (and for each matched partner)
+ * and archives them under deletedMatches.
+ */
+export async function deleteAllMatchesOnServer(
+  espnLeagueId: string,
+  teamId: string,
+  fallbackLeague?: League,
+  clientMatches?: Match[]
+): Promise<ClientLeagueView | null> {
+  if (typeof window === 'undefined') return null;
+  try {
+    const res = await fetch('/api/league', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'delete_all_matches',
+        leagueId: espnLeagueId,
+        teamId,
+        fallbackLeague,
+        clientMatches,
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data && data.league) {
+      saveLeague(data.league);
+      if (Array.isArray(data.mySwipes)) saveLocalSwipes(espnLeagueId, data.mySwipes);
+      if (Array.isArray(data.matches)) saveLocalMatches(espnLeagueId, data.matches);
+      if (Array.isArray(data.deletedMatches)) {
+        saveLocalDeletedMatches(espnLeagueId, data.deletedMatches);
+      }
+      return {
+        league: data.league,
+        mySwipes: data.mySwipes || [],
+        matches: data.matches || [],
+        deletedMatches: data.deletedMatches || [],
       };
     }
   } catch {

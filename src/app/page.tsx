@@ -3,7 +3,18 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { createMockLeague, fetchEspnLeague } from '@/lib/espn';
-import { getLeagueById, saveLeague, getStoredUserClaim } from '@/lib/leagueStore';
+import {
+  getLeagueById,
+  saveLeague,
+  getStoredUserClaim,
+  getLocalSwipes,
+  saveLocalSwipes,
+  getLocalMatches,
+  saveLocalMatches,
+  syncLeagueStateWithServer,
+  recordSwipeOnServer,
+  undoSwipeOnServer,
+} from '@/lib/leagueStore';
 import { checkForMutualMatch, createSeedOpponentSwipes, arraysEqualIgnoreOrder } from '@/lib/matchmaking';
 import { recordPackageSwipeEloUpdate } from '@/lib/elo';
 import { League, Team, Player, Swipe, Match, Position, TradeType } from '@/types/fantasy';
@@ -51,7 +62,7 @@ export default function Home() {
           setActiveTab('lobby');
           return;
         } else {
-          // If a league link was shared with someone who has not cached it yet, fetch from ESPN
+          // If a league link was shared with someone who has not cached it yet, fetch from server/ESPN
           fetchEspnLeague({ leagueId: queryLeagueId })
             .then((fetched) => {
               const saved = saveLeague(fetched);
@@ -69,34 +80,57 @@ export default function Home() {
 
   const handleSelectLeague = (selectedLeague: League) => {
     setLeague(selectedLeague);
-    setSwipes(createSeedOpponentSwipes(selectedLeague));
-    setMatches([]);
+
+    const seedSwipes = createSeedOpponentSwipes(selectedLeague);
+    const localSwipes = getLocalSwipes(selectedLeague.espnLeagueId);
+    const mergedInitialSwipes = [
+      ...seedSwipes,
+      ...localSwipes.filter((ls) => !seedSwipes.some((ss) => ss.id === ls.id)),
+    ];
+    setSwipes(mergedInitialSwipes);
+    setMatches(getLocalMatches(selectedLeague.espnLeagueId));
 
     // Check if the current user previously claimed a team on this device
+    let resolvedTeamId: string | null = null;
     const storedClaimedTeamId = getStoredUserClaim(selectedLeague.espnLeagueId);
     if (storedClaimedTeamId && selectedLeague.teams.some((t) => t.id === storedClaimedTeamId)) {
+      resolvedTeamId = storedClaimedTeamId;
       setUserTeamId(storedClaimedTeamId);
       const team = selectedLeague.teams.find((t) => t.id === storedClaimedTeamId);
       if (team && team.roster.length > 0) {
         setSelectedOfferedPlayerIds([team.roster[0].id]);
       }
-      return;
+    } else {
+      // In demo league, default user to Team 1 ("You (Manager)")
+      const isMock = selectedLeague.id === 'league_mock_123' || selectedLeague.espnLeagueId === '12345678';
+      if (isMock && selectedLeague.teams.length > 0) {
+        const firstTeam = selectedLeague.teams[0];
+        resolvedTeamId = firstTeam.id;
+        setUserTeamId(firstTeam.id);
+        if (firstTeam.roster.length > 0) {
+          setSelectedOfferedPlayerIds([firstTeam.roster[0].id]);
+        }
+      } else {
+        // In real leagues, let manager pick their team in the Locker Room
+        setUserTeamId(null);
+        setSelectedOfferedPlayerIds([]);
+        setActiveTab('lobby');
+      }
     }
 
-    // In demo league, default user to Team 1 ("You (Manager)")
-    const isMock = selectedLeague.id === 'league_mock_123' || selectedLeague.espnLeagueId === '12345678';
-    if (isMock && selectedLeague.teams.length > 0) {
-      const firstTeam = selectedLeague.teams[0];
-      setUserTeamId(firstTeam.id);
-      if (firstTeam.roster.length > 0) {
-        setSelectedOfferedPlayerIds([firstTeam.roster[0].id]);
+    // Hydrate latest team claims, user swipes, and matches from backend server
+    syncLeagueStateWithServer(selectedLeague, resolvedTeamId).then((serverView) => {
+      if (!serverView) return;
+      setLeague(serverView.league);
+      setMatches(serverView.matches);
+      if (resolvedTeamId) {
+        const seeds = createSeedOpponentSwipes(serverView.league);
+        setSwipes([
+          ...seeds,
+          ...serverView.mySwipes.filter((ms) => !seeds.some((s) => s.id === ms.id)),
+        ]);
       }
-    } else {
-      // In real leagues, let manager pick their team in the Locker Room
-      setUserTeamId(null);
-      setSelectedOfferedPlayerIds([]);
-      setActiveTab('lobby');
-    }
+    });
   };
 
   const handleClaimAndEnterDeck = (teamId: string) => {
@@ -112,9 +146,52 @@ export default function Home() {
           setSelectedOfferedPlayerIds([team.roster[0].id]);
         }
       }
+
+      // Sync swipes and matches for this newly claimed team from backend
+      syncLeagueStateWithServer(league, teamId).then((serverView) => {
+        if (!serverView) return;
+        setLeague(serverView.league);
+        setMatches(serverView.matches);
+        const seeds = createSeedOpponentSwipes(serverView.league);
+        setSwipes([
+          ...seeds,
+          ...serverView.mySwipes.filter((ms) => !seeds.some((s) => s.id === ms.id)),
+        ]);
+      });
     }
     setActiveTab('deck');
   };
+
+  // Live background polling to sync team claims and incoming mutual matches from leaguemates
+  useEffect(() => {
+    if (!league) return;
+
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return;
+      }
+      syncLeagueStateWithServer(league, userTeamId).then((serverView) => {
+        if (!serverView) return;
+        setLeague(serverView.league);
+        setMatches((prevMatches) => {
+          // If a leaguemate just completed a mutual match with our team, celebrate!
+          if (userTeamId && serverView.matches.length > prevMatches.length) {
+            const brandNewMatch = serverView.matches.find(
+              (sm) =>
+                (sm.teamAId === userTeamId || sm.teamBId === userTeamId) &&
+                !prevMatches.some((pm) => pm.id === sm.id)
+            );
+            if (brandNewMatch) {
+              setActiveMatchCelebration(brandNewMatch);
+            }
+          }
+          return serverView.matches;
+        });
+      });
+    }, 8000);
+
+    return () => clearInterval(interval);
+  }, [league?.espnLeagueId, userTeamId]);
 
   // Current user's team
   const userTeam = useMemo(() => {
@@ -265,23 +342,42 @@ export default function Home() {
 
     const updatedSwipes = [...swipes, newSwipe];
     setSwipes(updatedSwipes);
+    saveLocalSwipes(
+      league.espnLeagueId,
+      updatedSwipes.filter((s) => s.teamId === userTeam.id)
+    );
 
     // Update internal Elo privately in background
     recordPackageSwipeEloUpdate(selectedOfferedPlayerIds, targetPlayerIds, isInterested);
 
-    // Check for mutual match
+    // Check for immediate local match (e.g. demo seed swipes)
+    let triggeredLocalMatch = false;
     if (isInterested) {
-      const matchFound = checkForMutualMatch(newSwipe, updatedSwipes, league);
-      if (matchFound) {
-        setMatches((prev) => [matchFound, ...prev]);
-        setActiveMatchCelebration(matchFound);
+      const localMatch = checkForMutualMatch(newSwipe, updatedSwipes, league);
+      if (localMatch) {
+        triggeredLocalMatch = true;
+        setMatches((prev) => {
+          const next = [localMatch, ...prev];
+          saveLocalMatches(league.espnLeagueId, next);
+          return next;
+        });
+        setActiveMatchCelebration(localMatch);
       }
     }
+
+    // Record swipe on backend server and check against all leaguemates' secret swipes
+    recordSwipeOnServer(league.espnLeagueId, newSwipe, league).then((serverView) => {
+      if (!serverView) return;
+      setMatches(serverView.matches);
+      if (serverView.matchFound && !triggeredLocalMatch) {
+        setActiveMatchCelebration(serverView.matchFound);
+      }
+    });
   };
 
-  // Handle Undo Last Swipe (LOGIC-08 FIX)
+  // Handle Undo Last Swipe
   const handleUndo = () => {
-    if (selectedOfferedPlayerIds.length === 0 || !userTeam) return;
+    if (selectedOfferedPlayerIds.length === 0 || !userTeam || !league) return;
     const userSwipesForPackage = swipes.filter(
       (s) =>
         s.teamId === userTeam.id &&
@@ -292,22 +388,43 @@ export default function Home() {
     if (userSwipesForPackage.length === 0) return;
 
     const lastSwipe = userSwipesForPackage[userSwipesForPackage.length - 1];
-    setSwipes((prev) => prev.filter((s) => s.id !== lastSwipe.id));
+    const nextSwipes = swipes.filter((s) => s.id !== lastSwipe.id);
+    setSwipes(nextSwipes);
+    saveLocalSwipes(
+      league.espnLeagueId,
+      nextSwipes.filter((s) => s.teamId === userTeam.id)
+    );
 
     // Only revert matches if this specific swipe was an interested swipe
     if (lastSwipe.isInterested) {
-      setMatches((prev) =>
-        prev.filter(
-          (m) =>
-            !(
-              m.teamAId === lastSwipe.teamId &&
-              m.tradeType === lastSwipe.tradeType &&
-              m.teamAPlayers.every((p) => lastSwipe.offeredPlayerIds.includes(p.id)) &&
-              m.teamBPlayers.every((p) => lastSwipe.targetPlayerIds.includes(p.id))
-            )
-        )
-      );
+      setMatches((prev) => {
+        const filtered = prev.filter((m) => {
+          const mA = m.teamAPlayers.map((p) => p.id);
+          const mB = m.teamBPlayers.map((p) => p.id);
+          const isForward =
+            m.teamAId === lastSwipe.teamId &&
+            m.teamBId === lastSwipe.targetTeamId &&
+            arraysEqualIgnoreOrder(mA, lastSwipe.offeredPlayerIds) &&
+            arraysEqualIgnoreOrder(mB, lastSwipe.targetPlayerIds);
+          const isReverse =
+            m.teamBId === lastSwipe.teamId &&
+            m.teamAId === lastSwipe.targetTeamId &&
+            arraysEqualIgnoreOrder(mB, lastSwipe.offeredPlayerIds) &&
+            arraysEqualIgnoreOrder(mA, lastSwipe.targetPlayerIds);
+          return !(isForward || isReverse);
+        });
+        saveLocalMatches(league.espnLeagueId, filtered);
+        return filtered;
+      });
     }
+
+    // Sync undo with backend server
+    undoSwipeOnServer(league.espnLeagueId, userTeam.id, tradeType, selectedOfferedPlayerIds).then(
+      (serverView) => {
+        if (!serverView) return;
+        setMatches(serverView.matches);
+      }
+    );
   };
 
   const handleSelectAllPositions = () => {

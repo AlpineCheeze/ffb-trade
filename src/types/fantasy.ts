@@ -83,3 +83,19 @@ export interface InternalEloRecord {
   matchesCount: number;
   lastUpdated: string;
 }
+
+export interface ServerLeagueState {
+  league: League;
+  swipes: Swipe[];
+  matches: Match[];
+  elo: Record<string, InternalEloRecord>;
+  updatedAt: string;
+}
+
+export interface ClientLeagueView {
+  league: League;
+  mySwipes: Swipe[];
+  matches: Match[];
+  matchFound?: Match | null;
+}
+

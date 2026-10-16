@@ -117,6 +117,7 @@ export async function fetchEspnLeague(params: {
     if (!res.ok) {
       const err = new Error(data.error || `Failed to fetch ESPN league (HTTP ${res.status})`);
       (err as any).isPrivate = data.isPrivate;
+      (err as any).isNotFound = data.isNotFound;
       throw err;
     }
     return data.league;
@@ -180,15 +181,15 @@ export async function fetchEspnLeagueServer(params: {
     cookieHeadersToTry.push(`espn_s2=${s2}; SWID=${swNoBraces}`);
   }
 
-  // Base API hosts: lm-api-reads is ESPN's dedicated fantasy API gateway
-  const baseHosts = [
-    'https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl',
-    'https://fantasy.espn.com/apis/v3/games/ffl',
-  ];
+  // Dedicated ESPN fantasy API read host
+  const baseHost = 'https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl';
 
   // Seasons to try: user requested / current season first (e.g. 2026), then recent active seasons
   const currentSeason = getCurrentNFLSeason();
   const seasonsToTry = Array.from(new Set([primarySeason, currentSeason, '2026', '2025', '2024', '2023']));
+
+  let sawAuthError = false;
+  let sawNotFound = false;
 
   async function executeEspnFetch(url: string, cookieHeader?: string) {
     const reqHeaders = { ...baseHeaders };
@@ -196,12 +197,25 @@ export async function fetchEspnLeagueServer(params: {
       reqHeaders['Cookie'] = cookieHeader;
     }
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
     try {
-      const res = await fetch(url, { headers: reqHeaders, cache: 'no-store' });
+      const res = await fetch(url, {
+        headers: reqHeaders,
+        cache: 'no-store',
+        signal: controller.signal,
+      });
       const contentType = res.headers.get('content-type') || '';
 
       if (res.status === 401 || res.status === 403) {
+        sawAuthError = true;
         return { success: false, status: res.status };
+      }
+
+      if (res.status === 404) {
+        sawNotFound = true;
+        return { success: false, status: 404 };
       }
 
       if (!res.ok || contentType.includes('text/html')) {
@@ -220,57 +234,84 @@ export async function fetchEspnLeagueServer(params: {
       }
 
       if (!data) {
+        sawNotFound = true;
         return { success: false, status: 404 };
       }
 
       if (data.messages && Array.isArray(data.messages) && data.messages.length > 0) {
+        sawAuthError = true;
         return { success: false, status: 401, error: String(data.messages[0]) };
       }
 
       return { success: true, data };
     } catch {
       return { success: false, status: 500 };
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 
   let resultData: any = null;
   let resolvedSeason = primarySeason;
 
-  // Run through candidates
   const cookieList = cookieHeadersToTry.length > 0 ? cookieHeadersToTry : [undefined];
 
-  for (const host of baseHosts) {
+  for (const season of seasonsToTry) {
     if (resultData) break;
-    for (const season of seasonsToTry) {
-      if (resultData) break;
-      for (const cookieHeader of cookieList) {
-        // Try standard league endpoint
-        const standardUrl = `${host}/seasons/${encodeURIComponent(season)}/segments/0/leagues/${safeLeagueId}?view=mRoster&view=mTeam&view=mSettings&view=mMatchupScore`;
+
+    let standardSeasonNotFound = false;
+    let historySeasonNotFound = false;
+
+    for (const cookieHeader of cookieList) {
+      if (!standardSeasonNotFound) {
+        const standardUrl = `${baseHost}/seasons/${encodeURIComponent(season)}/segments/0/leagues/${safeLeagueId}?view=mRoster&view=mTeam&view=mSettings&view=mMatchupScore`;
         const res = await executeEspnFetch(standardUrl, cookieHeader);
         if (res.success && res.data) {
           resultData = res.data;
           resolvedSeason = season;
           break;
         }
+        if (res.status === 404) {
+          standardSeasonNotFound = true;
+        }
+      }
 
-        // Try leagueHistory endpoint (used for archived / off-season leagues)
-        const historyUrl = `${host}/leagueHistory/${safeLeagueId}?seasonId=${encodeURIComponent(season)}&view=mRoster&view=mTeam&view=mSettings&view=mMatchupScore`;
+      if (!historySeasonNotFound) {
+        const historyUrl = `${baseHost}/leagueHistory/${safeLeagueId}?seasonId=${encodeURIComponent(season)}&view=mRoster&view=mTeam&view=mSettings&view=mMatchupScore`;
         const resHistory = await executeEspnFetch(historyUrl, cookieHeader);
         if (resHistory.success && resHistory.data) {
           resultData = resHistory.data;
           resolvedSeason = season;
           break;
         }
+        if (resHistory.status === 404) {
+          historySeasonNotFound = true;
+        }
+      }
+
+      // If both endpoints returned 404 for this season, no need to retry other cookie formats on this season
+      if (standardSeasonNotFound && historySeasonNotFound) {
+        break;
       }
     }
   }
 
   if (!resultData) {
     const hadCookies = Boolean(cookies.espnS2 && cookies.swid);
+    if (!sawAuthError && sawNotFound) {
+      const err = new Error(
+        `ESPN League #${params.leagueId} was not found. Please double-check your League ID.`
+      );
+      (err as any).isNotFound = true;
+      throw err;
+    }
+
     if (hadCookies) {
-      throw new Error(
+      const err = new Error(
         `ESPN rejected the credentials for League #${params.leagueId}. Please double-check your espn_s2 and SWID cookies, and ensure this league is active.`
       );
+      (err as any).isPrivate = true;
+      throw err;
     } else {
       const err = new Error(
         `League #${params.leagueId} is private. Please provide your ESPN espn_s2 and SWID cookies below to sync your league.`
@@ -280,11 +321,18 @@ export async function fetchEspnLeagueServer(params: {
     }
   }
 
-  return normalizeEspnData(resultData, params.leagueId, resolvedSeason);
+  const isPrivateLeague =
+    resultData?.settings?.isPublic === false || Boolean(cookies.espnS2 && cookies.swid);
+  return normalizeEspnData(resultData, params.leagueId, resolvedSeason, isPrivateLeague);
 }
 
 // Transform raw ESPN JSON into our clean TypeScript schema
-export function normalizeEspnData(raw: any, leagueId: string, seasonId: string): League {
+export function normalizeEspnData(
+  raw: any,
+  leagueId: string,
+  seasonId: string,
+  isPrivate = false
+): League {
   // Map members (managers) to their display names
   const memberMap = new Map<string, string>();
   if (Array.isArray(raw.members)) {
@@ -393,7 +441,7 @@ export function normalizeEspnData(raw: any, leagueId: string, seasonId: string):
     espnLeagueId: leagueId,
     seasonId,
     name: raw.settings?.name || `ESPN Fantasy League #${leagueId}`,
-    isPrivate: false,
+    isPrivate,
     teams,
     lastSyncedAt: new Date().toISOString(),
   };

@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { League, Team } from '@/types/fantasy';
-import { claimTeam, saveLeague } from '@/lib/leagueStore';
+import { claimTeam, claimTeamOnServer, saveLeague } from '@/lib/leagueStore';
 import { fetchEspnLeague } from '@/lib/espn';
 import { Users, Copy, Check, Sparkles, ArrowRight, ShieldCheck, Flame, UserCheck, AlertCircle, RefreshCw } from 'lucide-react';
 
@@ -29,6 +29,10 @@ export const LeagueLockerRoom: React.FC<LeagueLockerRoomProps> = ({
   const [localLeague, setLocalLeague] = useState<League>(league);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshMessage, setRefreshMessage] = useState<{ text: string; isError?: boolean } | null>(null);
+
+  useEffect(() => {
+    setLocalLeague(league);
+  }, [league]);
 
   const claimedCount = localLeague.teams.filter((t) => t.isClaimed || t.id === currentTeamId).length;
   const totalCount = localLeague.teams.length;
@@ -120,12 +124,23 @@ export const LeagueLockerRoom: React.FC<LeagueLockerRoomProps> = ({
     if (!claimingTeam) return;
 
     const name = managerName.trim() || claimingTeam.ownerName || 'Manager';
-    const updated = claimTeam(localLeague.espnLeagueId, claimingTeam.id, name);
+    const teamId = claimingTeam.id;
+    const updated = claimTeam(localLeague.espnLeagueId, teamId, name);
     if (updated) {
       setLocalLeague(updated);
       onUpdateLeague?.(updated);
     }
-    const teamId = claimingTeam.id;
+
+    // Persist claim to server so all other leaguemates see this team claimed
+    claimTeamOnServer(localLeague.espnLeagueId, teamId, name, updated || localLeague).then(
+      (serverView) => {
+        if (serverView?.league) {
+          setLocalLeague(serverView.league);
+          onUpdateLeague?.(serverView.league);
+        }
+      }
+    );
+
     setClaimingTeam(null);
     setManagerName('');
     onEnterDeck(teamId);

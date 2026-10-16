@@ -77,7 +77,8 @@ export function claimTeam(
   espnLeagueId: string,
   teamId: string,
   claimantName: string,
-  previousTeamId?: string | null
+  previousTeamId?: string | null,
+  userId?: string | null
 ): League | null {
   const cleanId = espnLeagueId.trim();
   const league = getLeagueById(cleanId);
@@ -91,6 +92,7 @@ export function claimTeam(
         ...t,
         isClaimed: false,
         claimedBy: undefined,
+        claimedByUserId: undefined,
       };
     }
     if (t.id === teamId) {
@@ -98,6 +100,7 @@ export function claimTeam(
         ...t,
         isClaimed: true,
         claimedBy: claimantName.trim() || t.ownerName,
+        claimedByUserId: userId || t.claimedByUserId || undefined,
       };
     }
     return t;
@@ -316,7 +319,8 @@ export async function claimTeamOnServer(
   teamId: string,
   claimantName: string,
   fallbackLeague?: League,
-  previousTeamId?: string | null
+  previousTeamId?: string | null,
+  userId?: string | null
 ): Promise<ClientLeagueView | null> {
   if (typeof window === 'undefined') return null;
   try {
@@ -329,6 +333,7 @@ export async function claimTeamOnServer(
         teamId,
         claimantName,
         previousTeamId: previousTeamId || undefined,
+        userId: userId || undefined,
         fallbackLeague,
       }),
     });

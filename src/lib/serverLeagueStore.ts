@@ -222,6 +222,7 @@ export function saveServerLeagueSnapshot(freshLeague: League, forcedCleanId?: st
         ...ft,
         isClaimed: true,
         claimedBy: prevTeam.claimedBy,
+        claimedByUserId: prevTeam.claimedByUserId,
       };
     }
     return ft;
@@ -288,7 +289,8 @@ export function claimServerTeam(
   teamId: string,
   claimantName: string,
   fallbackLeague?: League,
-  previousTeamId?: string | null
+  previousTeamId?: string | null,
+  userId?: string | null
 ): ServerLeagueState | null {
   const cleanId = sanitizeLeagueId(espnLeagueId);
   let state = getServerLeagueState(cleanId);
@@ -304,29 +306,38 @@ export function claimServerTeam(
   }
 
   const normalizedClaimant = claimantName.trim() || targetTeam.ownerName || 'Manager';
+  const cleanUserId = userId ? String(userId).trim() : undefined;
 
-  // Prevent overwriting a team already claimed by a different manager
-  if (
-    targetTeam.isClaimed &&
-    targetTeam.claimedBy &&
-    targetTeam.claimedBy.trim().toLowerCase() !== normalizedClaimant.toLowerCase()
-  ) {
-    return state;
+  // Prevent overwriting a team already claimed by a different user account or manager
+  if (targetTeam.isClaimed) {
+    if (cleanUserId && targetTeam.claimedByUserId && targetTeam.claimedByUserId !== cleanUserId) {
+      return state;
+    }
+    if (
+      !targetTeam.claimedByUserId &&
+      targetTeam.claimedBy &&
+      targetTeam.claimedBy.trim().toLowerCase() !== normalizedClaimant.toLowerCase()
+    ) {
+      return state;
+    }
   }
 
   const updatedTeams = state.league.teams.map((t) => {
-    // Release previous team if the manager is switching teams (by previousTeamId or same claimantName)
-    if (
+    // Release previous team if the manager is switching teams (by previousTeamId, same userId, or same claimantName)
+    const isPreviousTeam =
       t.id !== teamId &&
       ((previousTeamId && t.id === previousTeamId) ||
+        (cleanUserId && t.claimedByUserId === cleanUserId) ||
         (t.isClaimed &&
           t.claimedBy &&
-          t.claimedBy.trim().toLowerCase() === normalizedClaimant.toLowerCase()))
-    ) {
+          t.claimedBy.trim().toLowerCase() === normalizedClaimant.toLowerCase()));
+
+    if (isPreviousTeam) {
       return {
         ...t,
         isClaimed: false,
         claimedBy: undefined,
+        claimedByUserId: undefined,
       };
     }
     if (t.id === teamId) {
@@ -334,6 +345,7 @@ export function claimServerTeam(
         ...t,
         isClaimed: true,
         claimedBy: normalizedClaimant,
+        claimedByUserId: cleanUserId || t.claimedByUserId,
       };
     }
     return t;

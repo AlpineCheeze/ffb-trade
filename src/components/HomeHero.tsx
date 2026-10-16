@@ -3,16 +3,51 @@
 import React, { useState, useEffect } from 'react';
 import { fetchEspnLeague, normalizeEspnCookies } from '@/lib/espn';
 import { getLeagueById, saveLeague, getSavedLeagues } from '@/lib/leagueStore';
-import { League } from '@/types/fantasy';
-import { Search, Sparkles, ArrowRight, KeyRound, HelpCircle, Loader2, ShieldCheck, Users, Trophy } from 'lucide-react';
+import { registerAccount, loginAccount, logoutAccount } from '@/lib/authStore';
+import { League, UserAccount } from '@/types/fantasy';
+import {
+  Search,
+  Sparkles,
+  ArrowRight,
+  KeyRound,
+  HelpCircle,
+  Loader2,
+  ShieldCheck,
+  Users,
+  Trophy,
+  User,
+  Lock,
+  UserCheck,
+  LogOut,
+  UserPlus,
+  LogIn,
+  Smartphone,
+  CheckCircle2,
+} from 'lucide-react';
 import { UnicornLogo } from './UnicornLogo';
 
 interface HomeHeroProps {
+  currentUser: UserAccount | null;
+  onUserChange: (user: UserAccount | null) => void;
   onSelectLeague: (league: League) => void;
   onOpenDemo: () => void;
 }
 
-export const HomeHero: React.FC<HomeHeroProps> = ({ onSelectLeague, onOpenDemo }) => {
+export const HomeHero: React.FC<HomeHeroProps> = ({
+  currentUser,
+  onUserChange,
+  onSelectLeague,
+  onOpenDemo,
+}) => {
+  // Account Form State
+  const [authMode, setAuthMode] = useState<'register' | 'login'>('register');
+  const [usernameInput, setUsernameInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authSuccessMsg, setAuthSuccessMsg] = useState<string | null>(null);
+
+  // League Search State
   const [leagueIdInput, setLeagueIdInput] = useState('');
   const [espnS2, setEspnS2] = useState('');
   const [swid, setSwid] = useState('');
@@ -44,6 +79,47 @@ export const HomeHero: React.FC<HomeHeroProps> = ({ onSelectLeague, onOpenDemo }
     }
   };
 
+  const handleAuthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanUser = usernameInput.trim();
+    if (!cleanUser) {
+      setAuthError('Please enter a username.');
+      return;
+    }
+    if (!passwordInput) {
+      setAuthError('Please enter a password.');
+      return;
+    }
+
+    setIsAuthLoading(true);
+    setAuthError(null);
+    setAuthSuccessMsg(null);
+
+    try {
+      let user: UserAccount;
+      if (authMode === 'register') {
+        user = await registerAccount(cleanUser, passwordInput);
+        setAuthSuccessMsg(`Account created! Welcome, @${user.username}.`);
+      } else {
+        user = await loginAccount(cleanUser, passwordInput);
+        setAuthSuccessMsg(`Logged in as @${user.username}.`);
+      }
+      setIsAuthLoading(false);
+      setUsernameInput('');
+      setPasswordInput('');
+      onUserChange(user);
+      setTimeout(() => setAuthSuccessMsg(null), 3500);
+    } catch (err: any) {
+      setIsAuthLoading(false);
+      setAuthError(err.message || 'Authentication failed. Please try again.');
+    }
+  };
+
+  const handleLogout = async () => {
+    await logoutAccount();
+    onUserChange(null);
+  };
+
   const handleSearchOrRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanId = leagueIdInput.trim();
@@ -70,7 +146,7 @@ export const HomeHero: React.FC<HomeHeroProps> = ({ onSelectLeague, onOpenDemo }
         }
       }
 
-      // 3. Fetch from ESPN and register it (season auto-detected, 2026 prioritized)
+      // 3. Fetch from ESPN and register it
       const fetched = await fetchEspnLeague({
         leagueId: cleanId,
         espnS2: norm.espnS2,
@@ -115,12 +191,166 @@ export const HomeHero: React.FC<HomeHeroProps> = ({ onSelectLeague, onOpenDemo }
         Sync your ESPN league, shop your surplus players, and swipe <strong className="text-emerald-400">Yes</strong> or <strong className="text-rose-400">No</strong> on opponents. When both sides align, <span className="text-blue-400 font-bold">Trade Horny</span> makes the match.
       </p>
 
-      {/* Search / Register League Box */}
-      <div className="w-full max-w-lg mt-8 p-5 rounded-3xl bg-slate-900/90 border border-slate-800 shadow-2xl backdrop-blur-md">
+      {/* ========================================================================= */}
+      {/* STEP 1: CREATE ACCOUNT / LOGIN (BEFORE FINDING YOUR LEAGUE) */}
+      {/* ========================================================================= */}
+      <div className="w-full max-w-lg mt-8 p-5 rounded-3xl bg-slate-900/90 border border-slate-800 shadow-2xl backdrop-blur-md text-left">
+        {currentUser ? (
+          /* LOGGED IN VIEW */
+          <div className="space-y-3">
+            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-slate-400">
+              <span className="flex items-center gap-1.5 text-emerald-400">
+                <UserCheck className="w-4 h-4" />
+                Account Active
+              </span>
+              <span className="text-emerald-400 font-semibold lowercase">cross-device linked</span>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-slate-950/90 border border-emerald-500/30 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-black text-sm">
+                  {currentUser.username.slice(0, 2).toUpperCase()}
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-white flex items-center gap-1.5">
+                    <span>@{currentUser.username}</span>
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block animate-pulse" />
+                  </div>
+                  <div className="text-[11px] text-slate-400">
+                    Logged in • Claimed teams are linked across all your devices
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1 transition"
+                title="Log out of this account"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Log Out</span>
+              </button>
+            </div>
+
+            {authSuccessMsg && (
+              <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-medium flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                <span>{authSuccessMsg}</span>
+              </div>
+            )}
+          </div>
+        ) : (
+          /* CREATE ACCOUNT / LOGIN FORM */
+          <form onSubmit={handleAuthSubmit} className="space-y-3.5">
+            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-slate-400">
+              <span className="flex items-center gap-1.5 text-blue-400">
+                <Smartphone className="w-3.5 h-3.5" />
+                Step 1: Your Trade Horny Account
+              </span>
+              <span className="text-blue-400 font-semibold lowercase">cross-device sync</span>
+            </div>
+
+            {/* Mode Switcher Tabs */}
+            <div className="flex p-1 rounded-2xl bg-slate-950 border border-slate-800">
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMode('register');
+                  setAuthError(null);
+                }}
+                className={`flex-1 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition ${
+                  authMode === 'register'
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>Create Account</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMode('login');
+                  setAuthError(null);
+                }}
+                className={`flex-1 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition ${
+                  authMode === 'login'
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span>Log In</span>
+              </button>
+            </div>
+
+            <p className="text-[11px] text-slate-400">
+              {authMode === 'register'
+                ? 'Create a quick account before finding your league so your claimed team is linked across your phone, tablet, and PC.'
+                : 'Log in with your username and password to restore your claimed teams on this device.'}
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="relative">
+                <User className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder={authMode === 'register' ? 'Username (e.g. BlitzKing)' : 'Username'}
+                  value={usernameInput}
+                  onChange={(e) => setUsernameInput(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-xs font-semibold text-white placeholder-slate-600 outline-none transition"
+                />
+              </div>
+
+              <div className="relative">
+                <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="password"
+                  placeholder={authMode === 'register' ? 'Password (min 4 chars)' : 'Password'}
+                  value={passwordInput}
+                  onChange={(e) => setPasswordInput(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-xs font-semibold text-white placeholder-slate-600 outline-none transition"
+                />
+              </div>
+            </div>
+
+            {authError && (
+              <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-medium">
+                {authError}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={isAuthLoading}
+              className="w-full py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 text-white font-bold text-xs shadow-lg shadow-blue-600/25 flex items-center justify-center gap-1.5 transition hover:scale-[1.01] active:scale-95"
+            >
+              {isAuthLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <>
+                  <span>
+                    {authMode === 'register'
+                      ? 'Create Account & Continue to League'
+                      : 'Log In & Continue to League'}
+                  </span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
+            </button>
+          </form>
+        )}
+      </div>
+
+      {/* ========================================================================= */}
+      {/* STEP 2: FIND OR REGISTER ESPN LEAGUE */}
+      {/* ========================================================================= */}
+      <div className="w-full max-w-lg mt-5 p-5 rounded-3xl bg-slate-900/90 border border-slate-800 shadow-2xl backdrop-blur-md">
         <form onSubmit={handleSearchOrRegister} className="space-y-3">
           <div className="text-left text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
-            <span>Find or Register Your ESPN League</span>
-            <span className="text-blue-400 font-semibold lowercase">step 1 of 2</span>
+            <span>Step 2: Find or Register Your ESPN League</span>
+            <span className="text-blue-400 font-semibold lowercase">step 2 of 2</span>
           </div>
 
           <div className="flex gap-2">
@@ -278,9 +508,9 @@ export const HomeHero: React.FC<HomeHeroProps> = ({ onSelectLeague, onOpenDemo }
           <div className="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center font-black text-sm mb-2">
             1
           </div>
-          <h3 className="font-bold text-white text-sm">Register Once, Share Link</h3>
+          <h3 className="font-bold text-white text-sm">Cross-Device Account</h3>
           <p className="text-xs text-slate-400 mt-1">
-            One manager registers the league ID. All other 11 managers join with a single invite link.
+            Create an account with simple username and password. Your claimed team follows you on any device.
           </p>
         </div>
 

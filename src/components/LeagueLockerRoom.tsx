@@ -1,27 +1,32 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { League, Team } from '@/types/fantasy';
+import { League, Team, UserAccount } from '@/types/fantasy';
 import { claimTeam, claimTeamOnServer, saveLeague } from '@/lib/leagueStore';
+import { linkTeamToAccount } from '@/lib/authStore';
 import { fetchEspnLeague } from '@/lib/espn';
 import { Users, Copy, Check, Sparkles, ArrowRight, ShieldCheck, Flame, UserCheck, AlertCircle, RefreshCw } from 'lucide-react';
 
 interface LeagueLockerRoomProps {
   league: League;
   currentTeamId: string | null;
+  currentUser?: UserAccount | null;
   onEnterDeck: (teamId: string) => void;
   onSwitchLeague: () => void;
   onUpdateLeague?: (league: League) => void;
   onOpenSync?: () => void;
+  onOpenAuth?: () => void;
 }
 
 export const LeagueLockerRoom: React.FC<LeagueLockerRoomProps> = ({
   league,
   currentTeamId,
+  currentUser,
   onEnterDeck,
   onSwitchLeague,
   onUpdateLeague,
   onOpenSync,
+  onOpenAuth,
 }) => {
   const [copied, setCopied] = useState(false);
   const [claimingTeam, setClaimingTeam] = useState<Team | null>(null);
@@ -123,10 +128,12 @@ export const LeagueLockerRoom: React.FC<LeagueLockerRoomProps> = ({
     e.preventDefault();
     if (!claimingTeam) return;
 
-    const name = managerName.trim() || claimingTeam.ownerName || 'Manager';
+    const name = managerName.trim() || currentUser?.username || claimingTeam.ownerName || 'Manager';
     const teamId = claimingTeam.id;
     const previousTeamId = currentTeamId;
-    const updated = claimTeam(localLeague.espnLeagueId, teamId, name, previousTeamId);
+    const userId = currentUser?.id || undefined;
+
+    const updated = claimTeam(localLeague.espnLeagueId, teamId, name, previousTeamId, userId);
     if (updated) {
       setLocalLeague(updated);
       onUpdateLeague?.(updated);
@@ -138,13 +145,18 @@ export const LeagueLockerRoom: React.FC<LeagueLockerRoomProps> = ({
       teamId,
       name,
       updated || localLeague,
-      previousTeamId
+      previousTeamId,
+      userId
     ).then((serverView) => {
       if (serverView?.league) {
         setLocalLeague(serverView.league);
         onUpdateLeague?.(serverView.league);
       }
     });
+
+    if (currentUser) {
+      linkTeamToAccount(localLeague.espnLeagueId, teamId, currentUser.id);
+    }
 
     setClaimingTeam(null);
     setManagerName('');
@@ -303,7 +315,7 @@ export const LeagueLockerRoom: React.FC<LeagueLockerRoomProps> = ({
                   onEnterDeck(team.id);
                 } else if (!isClaimedByOther) {
                   setClaimingTeam(team);
-                  setManagerName(team.ownerName || '');
+                  setManagerName(currentUser?.username || team.ownerName || '');
                 }
               }}
             >
@@ -382,7 +394,7 @@ export const LeagueLockerRoom: React.FC<LeagueLockerRoomProps> = ({
                     onClick={(e) => {
                       e.stopPropagation();
                       setClaimingTeam(team);
-                      setManagerName(team.ownerName || '');
+                      setManagerName(currentUser?.username || team.ownerName || '');
                     }}
                     className="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-emerald-400 hover:text-emerald-300 text-xs font-bold flex items-center justify-center gap-1.5 transition"
                   >
@@ -403,11 +415,36 @@ export const LeagueLockerRoom: React.FC<LeagueLockerRoomProps> = ({
             <h3 className="text-xl font-black text-white">
               Claim {claimingTeam.name}
             </h3>
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-xs text-slate-400 mt-1 mb-4">
               You will manage this roster and shop players from this team to league mates.
             </p>
 
-            <form onSubmit={handleConfirmClaim} className="mt-5 space-y-4">
+            {currentUser ? (
+              <div className="flex items-center gap-2 p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-medium mb-4">
+                <UserCheck className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                <span>
+                  Linking to account <strong className="text-white">@{currentUser.username}</strong>. This team will automatically sync across all your devices.
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between p-3 rounded-2xl bg-blue-500/10 border border-blue-500/30 text-blue-300 text-xs font-medium mb-4">
+                <span>Want to access this team on other devices?</span>
+                {onOpenAuth && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setClaimingTeam(null);
+                      onOpenAuth();
+                    }}
+                    className="underline font-bold text-white hover:text-blue-200 ml-2 flex-shrink-0"
+                  >
+                    Log In First
+                  </button>
+                )}
+              </div>
+            )}
+
+            <form onSubmit={handleConfirmClaim} className="space-y-4">
               <div>
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
                   Your Name or Fantasy Handle

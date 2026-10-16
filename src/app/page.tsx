@@ -21,15 +21,17 @@ import {
   deleteMatchOnServer,
   deleteAllMatchesOnServer,
 } from '@/lib/leagueStore';
+import { getStoredUser, fetchCurrentUser, logoutAccount, AUTH_CHANGE_EVENT } from '@/lib/authStore';
 import { checkForMutualMatch, createSeedOpponentSwipes, arraysEqualIgnoreOrder } from '@/lib/matchmaking';
 import { recordPackageSwipeEloUpdate } from '@/lib/elo';
-import { League, Team, Player, Swipe, Match, Position, TradeType } from '@/types/fantasy';
+import { League, Team, Player, Swipe, Match, Position, TradeType, UserAccount } from '@/types/fantasy';
 import { Navbar } from '@/components/Navbar';
 import { SwipeCard } from '@/components/SwipeCard';
 import { ShoppingRoster } from '@/components/ShoppingRoster';
 import { MatchesView } from '@/components/MatchesView';
 import { MatchCelebrationModal } from '@/components/MatchCelebrationModal';
 import { LeagueSyncModal } from '@/components/LeagueSyncModal';
+import { AuthModal } from '@/components/AuthModal';
 import { PositionFilterBar, ALL_POSITIONS } from '@/components/PositionFilterBar';
 import { HomeHero } from '@/components/HomeHero';
 import { LeagueLockerRoom } from '@/components/LeagueLockerRoom';
@@ -42,6 +44,11 @@ interface DeckItem {
 }
 
 export default function Home() {
+  const [currentUser, setCurrentUser] = useState<UserAccount | null>(null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authModalMode, setAuthModalMode] = useState<'register' | 'login'>('register');
+  const currentUserRef = useRef<UserAccount | null>(null);
+
   const [league, setLeague] = useState<League | null>(null);
   const [userTeamId, setUserTeamId] = useState<string | null>(null);
   const [tradeType, setTradeType] = useState<TradeType>('1-for-1');
@@ -63,6 +70,60 @@ export default function Home() {
   // Refs to prevent stale closures and out-of-order network race conditions
   const leagueRef = useRef<League | null>(null);
   const mutationVersionRef = useRef(0);
+
+  useEffect(() => {
+    currentUserRef.current = currentUser;
+  }, [currentUser]);
+
+  useEffect(() => {
+    // 1. Initial cached user load
+    const stored = getStoredUser();
+    if (stored) {
+      setCurrentUser(stored);
+      currentUserRef.current = stored;
+    }
+    // 2. Fetch fresh user details & claims from server in background
+    fetchCurrentUser().then((fresh) => {
+      if (fresh) {
+        setCurrentUser(fresh);
+        currentUserRef.current = fresh;
+      }
+    });
+
+    // 3. React to auth changes across windows / components
+    const handleAuthEvent = (e: Event) => {
+      const custom = e as CustomEvent<UserAccount | null>;
+      const user = custom.detail || null;
+      setCurrentUser(user);
+      currentUserRef.current = user;
+
+      // Auto-connect claimed team in active league if user just logged in
+      const activeLeague = leagueRef.current;
+      if (activeLeague && user) {
+        const cleanLeagueId = activeLeague.espnLeagueId;
+        const targetTeamId =
+          user.claimedTeams[cleanLeagueId] ||
+          activeLeague.teams.find(
+            (t) =>
+              t.claimedByUserId === user.id ||
+              (t.isClaimed &&
+                t.claimedBy &&
+                t.claimedBy.trim().toLowerCase() === user.username.toLowerCase())
+          )?.id;
+
+        if (targetTeamId && activeLeague.teams.some((t) => t.id === targetTeamId)) {
+          setUserTeamId(targetTeamId);
+          const team = activeLeague.teams.find((t) => t.id === targetTeamId);
+          if (team && team.roster.length > 0) {
+            setSelectedOfferedPlayerIds([team.roster[0].id]);
+          }
+        }
+      }
+    };
+
+    window.addEventListener(AUTH_CHANGE_EVENT, handleAuthEvent);
+    return () => window.removeEventListener(AUTH_CHANGE_EVENT, handleAuthEvent);
+  }, []);
 
   useEffect(() => {
     leagueRef.current = league;
@@ -139,13 +200,44 @@ export default function Home() {
     setDeletedMatches(localDeleted);
     setMatches(mergeMatchesUnique(localMatches, [], localDeleted));
 
-    // Check if the current user previously claimed a team on this device
+    // Check if the current user has a claimed team on their account or on this device
     let resolvedTeamId: string | null = null;
-    const storedClaimedTeamId = getStoredUserClaim(selectedLeague.espnLeagueId);
-    if (storedClaimedTeamId && selectedLeague.teams.some((t) => t.id === storedClaimedTeamId)) {
-      resolvedTeamId = storedClaimedTeamId;
-      setUserTeamId(storedClaimedTeamId);
-      const team = selectedLeague.teams.find((t) => t.id === storedClaimedTeamId);
+    const cleanLeagueId = selectedLeague.espnLeagueId;
+    const activeUser = currentUserRef.current;
+
+    // 1. Check user account claimed teams
+    if (activeUser && activeUser.claimedTeams && activeUser.claimedTeams[cleanLeagueId]) {
+      const accountTeamId = activeUser.claimedTeams[cleanLeagueId];
+      if (selectedLeague.teams.some((t) => t.id === accountTeamId)) {
+        resolvedTeamId = accountTeamId;
+      }
+    }
+
+    // 2. Check league teams claimed by user's ID or username
+    if (!resolvedTeamId && activeUser) {
+      const userClaimedTeam = selectedLeague.teams.find(
+        (t) =>
+          t.claimedByUserId === activeUser.id ||
+          (t.isClaimed &&
+            t.claimedBy &&
+            t.claimedBy.trim().toLowerCase() === activeUser.username.toLowerCase())
+      );
+      if (userClaimedTeam) {
+        resolvedTeamId = userClaimedTeam.id;
+      }
+    }
+
+    // 3. Fallback to localStorage user claim
+    if (!resolvedTeamId) {
+      const storedClaimedTeamId = getStoredUserClaim(cleanLeagueId);
+      if (storedClaimedTeamId && selectedLeague.teams.some((t) => t.id === storedClaimedTeamId)) {
+        resolvedTeamId = storedClaimedTeamId;
+      }
+    }
+
+    if (resolvedTeamId) {
+      setUserTeamId(resolvedTeamId);
+      const team = selectedLeague.teams.find((t) => t.id === resolvedTeamId);
       if (team && team.roster.length > 0) {
         setSelectedOfferedPlayerIds([team.roster[0].id]);
       } else {
@@ -175,6 +267,26 @@ export default function Home() {
       if (!serverView || mutationVersionRef.current !== reqVersion) return;
       setLeague(serverView.league);
       leagueRef.current = serverView.league;
+
+      // If user had not resolved a team yet, check if server league links to their account
+      const currentAuthedUser = currentUserRef.current;
+      if (!resolvedTeamId && currentAuthedUser) {
+        const serverUserTeam = serverView.league.teams.find(
+          (t) =>
+            t.claimedByUserId === currentAuthedUser.id ||
+            (t.isClaimed &&
+              t.claimedBy &&
+              t.claimedBy.trim().toLowerCase() === currentAuthedUser.username.toLowerCase())
+        );
+        if (serverUserTeam) {
+          resolvedTeamId = serverUserTeam.id;
+          setUserTeamId(serverUserTeam.id);
+          if (serverUserTeam.roster.length > 0) {
+            setSelectedOfferedPlayerIds([serverUserTeam.roster[0].id]);
+          }
+        }
+      }
+
       const isMock =
         serverView.league.id === 'league_mock_123' || serverView.league.espnLeagueId === '12345678';
       const serverDeleted = serverView.deletedMatches || [];
@@ -827,6 +939,44 @@ export default function Home() {
     }
   };
 
+  const handleUserChange = (newUser: UserAccount | null) => {
+    setCurrentUser(newUser);
+    currentUserRef.current = newUser;
+
+    // If a league is already loaded and the user has a claimed team in it, auto-link
+    const currentLeague = leagueRef.current;
+    if (currentLeague && newUser) {
+      const cleanLeagueId = currentLeague.espnLeagueId;
+      const targetTeamId =
+        newUser.claimedTeams[cleanLeagueId] ||
+        currentLeague.teams.find(
+          (t) =>
+            t.claimedByUserId === newUser.id ||
+            (t.isClaimed &&
+              t.claimedBy &&
+              t.claimedBy.trim().toLowerCase() === newUser.username.toLowerCase())
+        )?.id;
+
+      if (targetTeamId && currentLeague.teams.some((t) => t.id === targetTeamId)) {
+        setUserTeamId(targetTeamId);
+        const team = currentLeague.teams.find((t) => t.id === targetTeamId);
+        if (team && team.roster.length > 0) {
+          setSelectedOfferedPlayerIds([team.roster[0].id]);
+        }
+      }
+    }
+  };
+
+  const handleLogout = async () => {
+    await logoutAccount();
+    handleUserChange(null);
+  };
+
+  const handleOpenAuth = (mode: 'register' | 'login' = 'login') => {
+    setAuthModalMode(mode);
+    setIsAuthModalOpen(true);
+  };
+
   // If no league is loaded yet, show the Home Hero
   if (!league) {
     return (
@@ -834,14 +984,19 @@ export default function Home() {
         <Navbar
           league={null}
           currentTeam={null}
+          currentUser={currentUser}
           activeTab="lobby"
           matchCount={0}
           onTabChange={() => {}}
           onGoHome={handleGoHome}
           onOpenSync={() => setIsSyncModalOpen(true)}
+          onOpenAuth={() => handleOpenAuth('login')}
+          onLogout={handleLogout}
         />
         <main className="flex-1 flex flex-col justify-center items-center py-6">
           <HomeHero
+            currentUser={currentUser}
+            onUserChange={handleUserChange}
             onSelectLeague={(l) => {
               handleSelectLeague(l);
               setActiveTab('lobby');
@@ -860,6 +1015,12 @@ export default function Home() {
             onLeagueLoaded={handleLeagueLoaded}
           />
         )}
+        <AuthModal
+          isOpen={isAuthModalOpen}
+          onClose={() => setIsAuthModalOpen(false)}
+          initialMode={authModalMode}
+          onSuccess={handleUserChange}
+        />
       </div>
     );
   }
@@ -871,20 +1032,25 @@ export default function Home() {
         <Navbar
           league={league}
           currentTeam={null}
+          currentUser={currentUser}
           activeTab="lobby"
           matchCount={matches.length}
           onTabChange={setActiveTab}
           onGoHome={handleGoHome}
           onOpenSync={() => setIsSyncModalOpen(true)}
+          onOpenAuth={() => handleOpenAuth('login')}
+          onLogout={handleLogout}
         />
         <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6">
           <LeagueLockerRoom
             league={league}
             currentTeamId={userTeamId}
+            currentUser={currentUser}
             onEnterDeck={handleClaimAndEnterDeck}
             onSwitchLeague={handleGoHome}
             onUpdateLeague={setLeague}
             onOpenSync={() => setIsSyncModalOpen(true)}
+            onOpenAuth={() => handleOpenAuth('register')}
           />
         </main>
         {isSyncModalOpen && (
@@ -894,6 +1060,12 @@ export default function Home() {
             onLeagueLoaded={handleLeagueLoaded}
           />
         )}
+        <AuthModal
+          isOpen={isAuthModalOpen}
+          onClose={() => setIsAuthModalOpen(false)}
+          initialMode={authModalMode}
+          onSuccess={handleUserChange}
+        />
       </div>
     );
   }
@@ -904,11 +1076,14 @@ export default function Home() {
       <Navbar
         league={league}
         currentTeam={userTeam}
+        currentUser={currentUser}
         activeTab={activeTab}
         matchCount={matches.length}
         onTabChange={setActiveTab}
         onGoHome={handleGoHome}
         onOpenSync={() => setIsSyncModalOpen(true)}
+        onOpenAuth={() => handleOpenAuth('login')}
+        onLogout={handleLogout}
       />
 
       <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6 flex flex-col items-center justify-center">
@@ -917,10 +1092,12 @@ export default function Home() {
           <LeagueLockerRoom
             league={league}
             currentTeamId={userTeamId}
+            currentUser={currentUser}
             onEnterDeck={handleClaimAndEnterDeck}
             onSwitchLeague={handleGoHome}
             onUpdateLeague={setLeague}
             onOpenSync={() => setIsSyncModalOpen(true)}
+            onOpenAuth={() => handleOpenAuth('register')}
           />
         )}
 
@@ -1190,6 +1367,14 @@ export default function Home() {
         isOpen={isSyncModalOpen}
         onClose={() => setIsSyncModalOpen(false)}
         onLeagueLoaded={handleLeagueLoaded}
+      />
+
+      {/* Universal Auth Modal */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        initialMode={authModalMode}
+        onSuccess={handleUserChange}
       />
     </div>
   );

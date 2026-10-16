@@ -38,6 +38,14 @@ export interface Team {
   roster: Player[];
   isClaimed?: boolean;
   claimedBy?: string;
+  claimedByUserId?: string;
+}
+
+export interface UserAccount {
+  id: string;
+  username: string;
+  claimedTeams: Record<string, string>; // leagueId -> teamId
+  createdAt: string;
 }
 
 export interface League {

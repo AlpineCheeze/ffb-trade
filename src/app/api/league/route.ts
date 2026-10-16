@@ -11,6 +11,7 @@ import {
   sanitizeLeagueId,
 } from '@/lib/serverLeagueStore';
 import { fetchEspnLeagueServer } from '@/lib/espn';
+import { linkUserTeamClaim } from '@/lib/serverUserStore';
 import { Swipe, TradeType, Match } from '@/types/fantasy';
 
 export async function GET(req: NextRequest) {
@@ -97,7 +98,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'claim') {
-      const { teamId, claimantName, fallbackLeague, previousTeamId } = body;
+      const { teamId, claimantName, fallbackLeague, previousTeamId, userId } = body;
       if (!teamId || typeof teamId !== 'string') {
         return NextResponse.json(
           { error: 'Valid teamId is required to claim a team' },
@@ -110,19 +111,26 @@ export async function POST(req: NextRequest) {
         typeof previousTeamId === 'string' && previousTeamId.trim()
           ? previousTeamId.trim()
           : undefined;
+      const safeUserId =
+        typeof userId === 'string' && userId.trim() ? userId.trim() : undefined;
 
       const updatedState = claimServerTeam(
         cleanId,
         teamId,
         safeName,
         fallbackLeague,
-        safePrevTeamId
+        safePrevTeamId,
+        safeUserId
       );
       if (!updatedState) {
         return NextResponse.json(
           { error: 'League or team not found on server' },
           { status: 404 }
         );
+      }
+
+      if (safeUserId) {
+        linkUserTeamClaim(safeUserId, cleanId, teamId);
       }
 
       const view = toClientLeagueView(updatedState, teamId);

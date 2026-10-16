@@ -1,8 +1,8 @@
 'use client';
 
 import React from 'react';
-import { League, Team } from '@/types/fantasy';
-import { Layers, ArrowLeftRight, Users, RefreshCw, LayoutGrid, Home } from 'lucide-react';
+import { League, Team, UserAccount } from '@/types/fantasy';
+import { Layers, ArrowLeftRight, Users, RefreshCw, LayoutGrid, Home, LogOut, UserPlus } from 'lucide-react';
 import { UnicornLogo } from './UnicornLogo';
 
 interface NavbarProps {
@@ -10,9 +10,12 @@ interface NavbarProps {
   currentTeam?: Team | null;
   activeTab: 'deck' | 'matches' | 'roster' | 'lobby';
   matchCount: number;
+  currentUser?: UserAccount | null;
   onTabChange: (tab: 'deck' | 'matches' | 'roster' | 'lobby') => void;
   onGoHome: () => void;
   onOpenSync: () => void;
+  onOpenAuth?: () => void;
+  onLogout?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -20,9 +23,12 @@ export const Navbar: React.FC<NavbarProps> = ({
   currentTeam,
   activeTab,
   matchCount,
+  currentUser,
   onTabChange,
   onGoHome,
   onOpenSync,
+  onOpenAuth,
+  onLogout,
 }) => {
   return (
     <header className="sticky top-0 z-40 w-full bg-slate-950/80 backdrop-blur-lg border-b border-slate-800">
@@ -106,7 +112,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </nav>
         )}
 
-        {/* Right Action: Sync ESPN / Switch League */}
+        {/* Right Action: Sync ESPN / Switch League / Account */}
         <div className="flex items-center gap-2">
           {league && (
             <button
@@ -127,6 +133,43 @@ export const Navbar: React.FC<NavbarProps> = ({
             <RefreshCw className="w-3.5 h-3.5 text-blue-400" />
             <span className="hidden sm:inline">Sync ESPN</span>
           </button>
+
+          {/* Account Status / Login */}
+          {currentUser ? (
+            <div className="flex items-center gap-1.5 pl-1 border-l border-slate-800">
+              <div
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs font-semibold text-slate-200"
+                title={`Logged in as @${currentUser.username}`}
+              >
+                <div className="w-5 h-5 rounded-lg bg-emerald-500/20 text-emerald-400 font-black text-[10px] flex items-center justify-center">
+                  {currentUser.username.slice(0, 1).toUpperCase()}
+                </div>
+                <span className="hidden sm:inline font-bold truncate max-w-[100px]">
+                  @{currentUser.username}
+                </span>
+              </div>
+              {onLogout && (
+                <button
+                  onClick={onLogout}
+                  className="p-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-rose-400 transition"
+                  title="Log out"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          ) : (
+            onOpenAuth && (
+              <button
+                onClick={onOpenAuth}
+                className="px-3 py-1.5 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-300 hover:text-white text-xs font-bold flex items-center gap-1.5 transition"
+                title="Create account or log in"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Sign In</span>
+              </button>
+            )
+          )}
         </div>
       </div>
     </header>

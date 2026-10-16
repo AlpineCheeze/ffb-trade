@@ -92,7 +92,7 @@ async function runClaimTests() {
   }
 }
 
-runClaimTests().catch((err) => {
+export const testPromise = runClaimTests().catch((err) => {
   console.error('Claim test failed:', err);
   process.exit(1);
 });

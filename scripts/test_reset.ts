@@ -278,7 +278,7 @@ async function runTests() {
   }
 }
 
-runTests().catch((err) => {
+export const testPromise = runTests().catch((err) => {
   console.error('Test Suite Failed:', err);
   process.exit(1);
 });

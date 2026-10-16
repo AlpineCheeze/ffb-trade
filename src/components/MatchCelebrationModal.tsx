@@ -95,7 +95,7 @@ export const MatchCelebrationModal: React.FC<MatchCelebrationModalProps> = ({
         </h2>
 
         <p className="text-xs sm:text-sm text-slate-400 mt-2 max-w-sm mx-auto">
-          You and <span className="text-blue-400 font-semibold">{partnerTeam.ownerName}</span> ({partnerTeam.name}) mutually aligned on this {tradeLabel} trade!
+          You and <span className="text-blue-400 font-semibold">{partnerTeam.claimedBy || partnerTeam.ownerName || 'Opponent'}</span> ({partnerTeam.name}) mutually aligned on this {tradeLabel} trade!
         </p>
 
         {/* Matched Players Comparison */}

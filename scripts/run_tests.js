@@ -5,5 +5,18 @@ const jiti = createJiti(__filename, {
     '@': path.resolve(__dirname, '../src'),
   },
 });
-jiti('./test_reset.ts');
-jiti('./test_claims.ts');
+async function run() {
+  const resetModule = jiti('./test_reset.ts');
+  if (resetModule && resetModule.testPromise) {
+    await resetModule.testPromise;
+  }
+  const claimsModule = jiti('./test_claims.ts');
+  if (claimsModule && claimsModule.testPromise) {
+    await claimsModule.testPromise;
+  }
+}
+
+run().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

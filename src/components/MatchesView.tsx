@@ -61,7 +61,8 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
     const tradeLabel =
       effectiveType === '1-for-1' ? 'Heads Up' : effectiveType === '2-for-1' ? 'Twofer' : effectiveType;
 
-    const text = `Hey ${partnerTeam.ownerName}! Trade Horny found a mutual ${tradeLabel} trade match: My ${sendNames} for your ${receiveNames}. Sending proposal in ESPN!`;
+    const partnerName = partnerTeam.claimedBy || partnerTeam.ownerName || 'Partner';
+    const text = `Hey ${partnerName}! Trade Horny found a mutual ${tradeLabel} trade match: My ${sendNames} for your ${receiveNames}. Sending proposal in ESPN!`;
 
     try {
       if (navigator?.clipboard?.writeText) {
@@ -165,7 +166,7 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
                   <div className="flex justify-between items-center mb-4 pb-3 border-b border-slate-800 text-xs">
                     <div>
                       <span className="text-slate-400 font-medium">Trade Partner: </span>
-                      <span className="font-bold text-blue-400">{partnerTeam.ownerName}</span>
+                      <span className="font-bold text-blue-400">{partnerTeam.claimedBy || partnerTeam.ownerName || 'Opponent'}</span>
                       <span className="text-slate-500"> ({partnerTeam.name})</span>
                     </div>
                     <span className="text-[11px] text-emerald-400 font-semibold bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full uppercase">
@@ -322,7 +323,7 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
               );
               const deletedByLabel = deletedByCurrentUser
                 ? 'Deleted by you'
-                : `Deleted by ${m.deletedByName || partnerTeam.ownerName}`;
+                : `Deleted by ${m.deletedByName || partnerTeam.claimedBy || partnerTeam.ownerName}`;
 
               return (
                 <div
@@ -332,7 +333,7 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
                   <div className="flex flex-wrap justify-between items-center gap-2 mb-3 pb-2 border-b border-slate-800/60 text-xs">
                     <div>
                       <span className="text-slate-500 font-medium">Former Partner: </span>
-                      <span className="font-bold text-slate-300">{partnerTeam.ownerName}</span>
+                      <span className="font-bold text-slate-300">{partnerTeam.claimedBy || partnerTeam.ownerName || 'Opponent'}</span>
                       <span className="text-slate-500"> ({partnerTeam.name})</span>
                     </div>
                     <div className="flex items-center gap-2">

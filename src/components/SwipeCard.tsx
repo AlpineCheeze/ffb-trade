@@ -143,7 +143,7 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
                   </h2>
                   <div className="flex items-center justify-between gap-1 mt-0.5">
                     <p className="text-xs text-slate-400 font-medium truncate flex-1">
-                      Current Owner: <span className="text-blue-400 font-semibold">{ownerTeam?.claimedBy || ownerTeam?.ownerName || 'Opponent'}</span> ({ownerTeam?.name})
+                      Current Owner: <span className="text-blue-400 font-semibold">{ownerTeam?.claimedBy || ownerTeam?.ownerName || 'Opponent'}</span>{ownerTeam?.name ? ` (${ownerTeam.name})` : ''}
                     </p>
                     {onExcludeOwner && ownerTeam && (
                       <button
@@ -263,7 +263,7 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
               </span>
               <div className="flex items-center gap-2 mt-1">
                 <span className="text-xs text-slate-400 font-semibold truncate">
-                  From: <span className="text-blue-400">{ownerTeam?.claimedBy || ownerTeam?.ownerName || 'Opponent'}</span> ({ownerTeam?.name})
+                  From: <span className="text-blue-400">{ownerTeam?.claimedBy || ownerTeam?.ownerName || 'Opponent'}</span>{ownerTeam?.name ? ` (${ownerTeam.name})` : ''}
                 </span>
                 {onExcludeOwner && ownerTeam && (
                   <button

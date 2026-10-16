@@ -13,6 +13,8 @@ import {
   saveLocalMatches,
   getLocalDeletedMatches,
   saveLocalDeletedMatches,
+  getLocalExcludedTeamIds,
+  saveLocalExcludedTeamIds,
   syncLeagueStateWithServer,
   recordSwipeOnServer,
   undoSwipeOnServer,
@@ -31,7 +33,7 @@ import { LeagueSyncModal } from '@/components/LeagueSyncModal';
 import { PositionFilterBar, ALL_POSITIONS } from '@/components/PositionFilterBar';
 import { HomeHero } from '@/components/HomeHero';
 import { LeagueLockerRoom } from '@/components/LeagueLockerRoom';
-import { X, Check, RotateCcw, UserCheck, Sparkles } from 'lucide-react';
+import { X, Check, RotateCcw, UserCheck, Sparkles, UserX, Users } from 'lucide-react';
 
 interface DeckItem {
   id: string;
@@ -53,6 +55,10 @@ export default function Home() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [deletedMatches, setDeletedMatches] = useState<Match[]>([]);
   const [activeMatchCelebration, setActiveMatchCelebration] = useState<Match | null>(null);
+
+  // Excluded opponent teams in trade deck filter
+  const [excludedTeamIds, setExcludedTeamIds] = useState<string[]>([]);
+  const [excludeNotification, setExcludeNotification] = useState<string | null>(null);
 
   // Refs to prevent stale closures and out-of-order network race conditions
   const leagueRef = useRef<League | null>(null);
@@ -161,6 +167,7 @@ export default function Home() {
         setSelectedOfferedPlayerIds([]);
         setActiveTab('lobby');
       }
+      setExcludedTeamIds(getLocalExcludedTeamIds(selectedLeague.espnLeagueId, resolvedTeamId));
     }
 
     // Hydrate latest team claims, user swipes, matches, and deleted matches from backend server
@@ -196,6 +203,7 @@ export default function Home() {
     setUserTeamId(teamId);
     const currentLeague = leagueRef.current || league;
     if (currentLeague) {
+      setExcludedTeamIds(getLocalExcludedTeamIds(currentLeague.espnLeagueId, teamId));
       const team = currentLeague.teams.find((t) => t.id === teamId);
       if (team && team.roster.length > 0) {
         const isTwoRequired = tradeType === '2-for-1' || tradeType === '2-for-2';
@@ -338,12 +346,84 @@ export default function Home() {
     }
   };
 
-  // Generate swipe deck based on tradeType (1 target or 2 targets)
+  // All opponent teams in the league (excluding own claimed team)
+  const allOpponentTeams = useMemo(() => {
+    if (!league || !userTeam) return [];
+    return league.teams.filter((t) => t.id !== userTeam.id);
+  }, [league, userTeam]);
+
+  // Opponent teams currently included by the Trade With filter
+  const includedOpponentTeams = useMemo(() => {
+    return allOpponentTeams.filter((t) => !excludedTeamIds.includes(t.id));
+  }, [allOpponentTeams, excludedTeamIds]);
+
+  const allOpponentsExcluded = allOpponentTeams.length > 0 && includedOpponentTeams.length === 0;
+
+  // Toggle single team inclusion / exclusion
+  const handleToggleTeamExcluded = (teamId: string) => {
+    setExcludedTeamIds((prev) => {
+      const isExcluded = prev.includes(teamId);
+      const next = isExcluded ? prev.filter((id) => id !== teamId) : [...prev, teamId];
+      if (league) {
+        saveLocalExcludedTeamIds(league.espnLeagueId, next, userTeamId);
+      }
+      return next;
+    });
+  };
+
+  // Include all opponent teams
+  const handleIncludeAllTeams = () => {
+    setExcludedTeamIds([]);
+    setExcludeNotification(null);
+    if (league) {
+      saveLocalExcludedTeamIds(league.espnLeagueId, [], userTeamId);
+    }
+  };
+
+  // Exclude all opponent teams
+  const handleExcludeAllTeams = () => {
+    const allIds = allOpponentTeams.map((t) => t.id);
+    setExcludedTeamIds(allIds);
+    if (league) {
+      saveLocalExcludedTeamIds(league.espnLeagueId, allIds, userTeamId);
+    }
+  };
+
+  // Trade exclusively with one team (isolate partner)
+  const handleOnlyTradeWithTeam = (teamId: string) => {
+    const otherIds = allOpponentTeams.filter((t) => t.id !== teamId).map((t) => t.id);
+    setExcludedTeamIds(otherIds);
+    if (league) {
+      saveLocalExcludedTeamIds(league.espnLeagueId, otherIds, userTeamId);
+    }
+    const targetTeam = allOpponentTeams.find((t) => t.id === teamId);
+    if (targetTeam) {
+      const ownerName = targetTeam.claimedBy || targetTeam.ownerName || targetTeam.name;
+      setExcludeNotification(`Trading exclusively with ${ownerName}'s team.`);
+      setTimeout(() => setExcludeNotification(null), 3500);
+    }
+  };
+
+  // Exclude owner directly from SwipeCard
+  const handleExcludeOwner = (teamId: string, ownerName: string) => {
+    setExcludedTeamIds((prev) => {
+      if (prev.includes(teamId)) return prev;
+      const next = [...prev, teamId];
+      if (league) {
+        saveLocalExcludedTeamIds(league.espnLeagueId, next, userTeamId);
+      }
+      return next;
+    });
+    setExcludeNotification(`Excluded ${ownerName}'s team from trade deck.`);
+    setTimeout(() => setExcludeNotification(null), 3500);
+  };
+
+  // Generate swipe deck based on tradeType (1 target or 2 targets) and active team/position filters
   const deckItems = useMemo<DeckItem[]>(() => {
     if (!league || !userTeam || offeredPlayers.length !== requiredOfferedCount) return [];
 
     const isTargetTwoPlayers = tradeType === '1-for-2' || tradeType === '2-for-2';
-    const opponentTeams = league.teams.filter((t) => t.id !== userTeam.id);
+    const opponentTeams = includedOpponentTeams;
     const activeOfferedIds = offeredPlayers.map((p) => p.id);
 
     const matchesPositionFilter = (pos: Position) =>
@@ -407,7 +487,16 @@ export default function Home() {
     }
 
     return items;
-  }, [league, userTeam, offeredPlayers, requiredOfferedCount, tradeType, swipes, selectedPositions]);
+  }, [
+    league,
+    userTeam,
+    offeredPlayers,
+    requiredOfferedCount,
+    tradeType,
+    swipes,
+    selectedPositions,
+    includedOpponentTeams,
+  ]);
 
   // Current top item to swipe on
   const currentCard = deckItems[0] || null;
@@ -885,7 +974,24 @@ export default function Home() {
               </button>
             </div>
 
-            {/* Target Positions Filter Bar */}
+            {/* Excluded Owner Notification Toast */}
+            {excludeNotification && (
+              <div className="w-full max-w-sm mb-3 px-3.5 py-2.5 rounded-2xl bg-slate-900 border border-rose-500/30 text-xs font-semibold flex items-center justify-between shadow-xl shadow-rose-950/20 animate-in fade-in slide-in-from-top-1 duration-200">
+                <div className="flex items-center gap-2 text-rose-300 truncate">
+                  <UserX className="w-4 h-4 text-rose-400 flex-shrink-0" />
+                  <span className="truncate">{excludeNotification}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleIncludeAllTeams}
+                  className="text-xs font-bold text-blue-400 hover:text-white underline ml-2 flex-shrink-0"
+                >
+                  Undo
+                </button>
+              </div>
+            )}
+
+            {/* Target Positions & Trade With Filter Bar */}
             <PositionFilterBar
               selectedPositions={selectedPositions}
               onTogglePosition={handleTogglePosition}
@@ -893,6 +999,12 @@ export default function Home() {
               onSelectPreset={handleSelectPresetPositions}
               availableCount={deckItems.length}
               offeredPlayerPosition={offeredPlayers[0]?.position}
+              teams={allOpponentTeams}
+              excludedTeamIds={excludedTeamIds}
+              onToggleTeam={handleToggleTeamExcluded}
+              onIncludeAllTeams={handleIncludeAllTeams}
+              onExcludeAllTeams={handleExcludeAllTeams}
+              onOnlyTradeWithTeam={handleOnlyTradeWithTeam}
             />
 
             {/* The Interactive Card Stack */}
@@ -917,6 +1029,7 @@ export default function Home() {
                     ownerTeam={currentCard.ownerTeam}
                     isFront={true}
                     onSwipe={handleSwipe}
+                    onExcludeOwner={handleExcludeOwner}
                   />
                 </AnimatePresence>
               ) : offeredPlayers.length < requiredOfferedCount ? (
@@ -940,6 +1053,24 @@ export default function Home() {
                     Select Players to Shop
                   </button>
                 </div>
+              ) : allOpponentsExcluded ? (
+                /* All Opponents Excluded State */
+                <div className="w-full h-[540px] rounded-3xl bg-slate-900/70 border border-dashed border-rose-500/30 flex flex-col items-center justify-center p-8 text-center">
+                  <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-center justify-center mb-4">
+                    <UserX className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-xl font-black text-white">All Opponents Excluded</h3>
+                  <p className="text-xs text-slate-400 mt-2 max-w-xs leading-relaxed">
+                    You have excluded all {allOpponentTeams.length} opponent teams in the &quot;Trade With&quot; filter. Include at least one team to view trade cards.
+                  </p>
+                  <button
+                    onClick={handleIncludeAllTeams}
+                    className="mt-6 py-2.5 px-6 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-lg shadow-blue-500/25 transition flex items-center gap-2"
+                  >
+                    <UserCheck className="w-4 h-4" />
+                    <span>Include All Opponents</span>
+                  </button>
+                </div>
               ) : (
                 /* Cleared Deck State */
                 <div className="w-full h-[540px] rounded-3xl bg-slate-900/70 border border-dashed border-slate-800 flex flex-col items-center justify-center p-8 text-center">
@@ -948,10 +1079,19 @@ export default function Home() {
                   </div>
                   <h3 className="text-xl font-black text-white">Deck Cleared!</h3>
                   <p className="text-xs text-slate-400 mt-2 max-w-xs leading-relaxed">
-                    You have reviewed all available {tradeType} opportunities for your selected positions.
+                    You have reviewed all available {tradeType} opportunities for your selected positions and trade partners.
                   </p>
 
                   <div className="mt-6 flex flex-col gap-2.5 w-full max-w-xs">
+                    {excludedTeamIds.length > 0 && (
+                      <button
+                        onClick={handleIncludeAllTeams}
+                        className="py-2.5 px-4 rounded-xl bg-amber-600/30 hover:bg-amber-600/40 border border-amber-500/40 text-amber-300 text-xs font-bold transition flex items-center justify-center gap-1.5"
+                      >
+                        <UserCheck className="w-4 h-4" />
+                        <span>Include {excludedTeamIds.length} Excluded Opponent{excludedTeamIds.length > 1 ? 's' : ''}</span>
+                      </button>
+                    )}
                     {selectedPositions.length < ALL_POSITIONS.length && (
                       <button
                         onClick={handleSelectAllPositions}

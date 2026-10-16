@@ -19,6 +19,7 @@ const LEGACY_CLAIM_STORAGE_PREFIXES = ['tradehonry_claim_', 'tradehorney_claim_'
 const SWIPES_STORAGE_PREFIX = 'tradehorny_swipes_';
 const MATCHES_STORAGE_PREFIX = 'tradehorny_matches_';
 const DELETED_MATCHES_STORAGE_PREFIX = 'tradehorny_deleted_matches_';
+const EXCLUDED_TEAMS_STORAGE_PREFIX = 'tradehorny_excluded_teams_';
 
 export function getLeagueById(espnLeagueId: string): League | undefined {
   const cleanId = espnLeagueId.trim();
@@ -194,6 +195,35 @@ export function saveLocalDeletedMatches(espnLeagueId: string, deletedMatches: Ma
       DELETED_MATCHES_STORAGE_PREFIX + espnLeagueId.trim(),
       JSON.stringify(deletedMatches)
     );
+  } catch {
+    // Ignore localStorage errors
+  }
+}
+
+export function getLocalExcludedTeamIds(espnLeagueId: string, userTeamId?: string | null): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const key = userTeamId
+      ? `${EXCLUDED_TEAMS_STORAGE_PREFIX}${espnLeagueId.trim()}_${userTeamId.trim()}`
+      : `${EXCLUDED_TEAMS_STORAGE_PREFIX}${espnLeagueId.trim()}`;
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveLocalExcludedTeamIds(
+  espnLeagueId: string,
+  excludedIds: string[],
+  userTeamId?: string | null
+): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const key = userTeamId
+      ? `${EXCLUDED_TEAMS_STORAGE_PREFIX}${espnLeagueId.trim()}_${userTeamId.trim()}`
+      : `${EXCLUDED_TEAMS_STORAGE_PREFIX}${espnLeagueId.trim()}`;
+    localStorage.setItem(key, JSON.stringify(excludedIds));
   } catch {
     // Ignore localStorage errors
   }

@@ -3,13 +3,14 @@
 import React, { useState } from 'react';
 import { motion, useMotionValue, useTransform, PanInfo } from 'framer-motion';
 import { Player, Team } from '@/types/fantasy';
-import { ShieldAlert, Calendar, Check, X, Info, Plus, Zap, TrendingUp } from 'lucide-react';
+import { ShieldAlert, Calendar, Check, X, Info, Plus, Zap, TrendingUp, UserX } from 'lucide-react';
 
 interface SwipeCardProps {
   players: Player[];
   ownerTeam?: Team;
   isFront: boolean;
   onSwipe: (isInterested: boolean) => void;
+  onExcludeOwner?: (teamId: string, ownerName: string) => void;
 }
 
 export const SwipeCard: React.FC<SwipeCardProps> = ({
@@ -17,6 +18,7 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
   ownerTeam,
   isFront,
   onSwipe,
+  onExcludeOwner,
 }) => {
   const [showStats, setShowStats] = useState(false);
   const [imgErrors, setImgErrors] = useState<Record<string, boolean>>({});
@@ -139,9 +141,25 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
                   <h2 className="text-2xl font-black tracking-tight text-white truncate">
                     {players[0].fullName}
                   </h2>
-                  <p className="text-xs text-slate-400 font-medium mt-0.5 truncate">
-                    Current Owner: <span className="text-blue-400 font-semibold">{ownerTeam?.ownerName || 'Opponent'}</span> ({ownerTeam?.name})
-                  </p>
+                  <div className="flex items-center justify-between gap-1 mt-0.5">
+                    <p className="text-xs text-slate-400 font-medium truncate flex-1">
+                      Current Owner: <span className="text-blue-400 font-semibold">{ownerTeam?.ownerName || 'Opponent'}</span> ({ownerTeam?.name})
+                    </p>
+                    {onExcludeOwner && ownerTeam && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onExcludeOwner(ownerTeam.id, ownerTeam.ownerName || ownerTeam.name);
+                        }}
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-slate-800 hover:border-rose-500/30 transition-all flex-shrink-0"
+                        title={`Exclude ${ownerTeam.ownerName || ownerTeam.name} from trade deck`}
+                      >
+                        <UserX className="w-3 h-3 text-rose-400" />
+                        <span>Exclude Owner</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {players[0].stats && (
@@ -242,8 +260,24 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
               <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-indigo-500/20 border border-indigo-500/40 text-indigo-400">
                 2-Player Package
               </span>
-              <div className="text-xs text-slate-400 font-semibold mt-1">
-                From: <span className="text-blue-400">{ownerTeam?.ownerName}</span> ({ownerTeam?.name})
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-xs text-slate-400 font-semibold truncate">
+                  From: <span className="text-blue-400">{ownerTeam?.ownerName}</span> ({ownerTeam?.name})
+                </span>
+                {onExcludeOwner && ownerTeam && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onExcludeOwner(ownerTeam.id, ownerTeam.ownerName || ownerTeam.name);
+                    }}
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-slate-800 hover:border-rose-500/30 transition-all flex-shrink-0"
+                    title={`Exclude ${ownerTeam.ownerName || ownerTeam.name} from trade deck`}
+                  >
+                    <UserX className="w-3 h-3 text-rose-400" />
+                    <span>Exclude</span>
+                  </button>
+                )}
               </div>
             </div>
             <span className="text-[11px] font-bold text-slate-500">2 Assets</span>

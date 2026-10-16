@@ -25,16 +25,29 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
     };
   }, []);
 
+  const visibleMatches = currentTeamId
+    ? matches.filter((m) => m.teamAId === currentTeamId || m.teamBId === currentTeamId)
+    : matches;
+
+  const getEffectiveTradeType = (m: Match, userCount: number, partnerCount: number) => {
+    if (userCount === 2 && partnerCount === 1) return '2-for-1';
+    if (userCount === 1 && partnerCount === 2) return '1-for-2';
+    if (userCount === 2 && partnerCount === 2) return '2-for-2';
+    if (userCount === 1 && partnerCount === 1) return '1-for-1';
+    return m.tradeType;
+  };
+
   const handleCopyProposal = async (m: Match) => {
     const isUserTeamA = !currentTeamId || m.teamAId === currentTeamId;
     const userPlayers = isUserTeamA ? m.teamAPlayers : m.teamBPlayers;
     const partnerPlayers = isUserTeamA ? m.teamBPlayers : m.teamAPlayers;
     const partnerTeam = isUserTeamA ? m.teamB : m.teamA;
+    const effectiveType = getEffectiveTradeType(m, userPlayers.length, partnerPlayers.length);
 
     const sendNames = userPlayers.map((p) => `${p.fullName} (${p.position})`).join(' & ');
     const receiveNames = partnerPlayers.map((p) => `${p.fullName} (${p.position})`).join(' & ');
     const tradeLabel =
-      m.tradeType === '1-for-1' ? 'Heads Up' : m.tradeType === '2-for-1' ? 'Twofer' : m.tradeType;
+      effectiveType === '1-for-1' ? 'Heads Up' : effectiveType === '2-for-1' ? 'Twofer' : effectiveType;
 
     const text = `Hey ${partnerTeam.ownerName}! Trade Horny found a mutual ${tradeLabel} trade match: My ${sendNames} for your ${receiveNames}. Sending proposal in ESPN!`;
 
@@ -55,7 +68,7 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
     setImgErrors((prev) => ({ ...prev, [id]: true }));
   };
 
-  if (matches.length === 0) {
+  if (visibleMatches.length === 0) {
     return (
       <div className="max-w-md mx-auto p-8 rounded-3xl bg-slate-900/90 border border-slate-800 text-center shadow-2xl">
         <div className="w-16 h-16 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center mx-auto mb-4">
@@ -84,17 +97,18 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
             Confirmed Trade Matches
           </h2>
           <p className="text-xs text-slate-400">
-            {matches.length} mutual trade alignment{matches.length === 1 ? '' : 's'} ready to execute
+            {visibleMatches.length} mutual trade alignment{visibleMatches.length === 1 ? '' : 's'} ready to execute
           </p>
         </div>
       </div>
 
       <div className="space-y-4">
-        {matches.map((m) => {
+        {visibleMatches.map((m) => {
           const isUserTeamA = !currentTeamId || m.teamAId === currentTeamId;
           const userPlayers = isUserTeamA ? m.teamAPlayers : m.teamBPlayers;
           const partnerPlayers = isUserTeamA ? m.teamBPlayers : m.teamAPlayers;
           const partnerTeam = isUserTeamA ? m.teamB : m.teamA;
+          const effectiveType = getEffectiveTradeType(m, userPlayers.length, partnerPlayers.length);
 
           return (
             <div
@@ -109,7 +123,7 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
                   <span className="text-slate-500"> ({partnerTeam.name})</span>
                 </div>
                 <span className="text-[11px] text-emerald-400 font-semibold bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full uppercase">
-                  {m.tradeType === '1-for-1' ? 'Heads Up' : m.tradeType === '2-for-1' ? 'Twofer' : m.tradeType} Aligned
+                  {effectiveType === '1-for-1' ? 'Heads Up' : effectiveType === '2-for-1' ? 'Twofer' : effectiveType} Aligned
                 </span>
               </div>
 

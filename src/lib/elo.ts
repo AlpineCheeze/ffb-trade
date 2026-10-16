@@ -83,11 +83,43 @@ export function recordPackageSwipeEloUpdate(
   targetPlayerIds: string[],
   isInterested: boolean
 ) {
-  offeredPlayerIds.forEach((offeredId) => {
-    targetPlayerIds.forEach((targetId) => {
-      recordSwipeEloUpdate(offeredId, targetId, isInterested);
+  if (offeredPlayerIds.length === 0 || targetPlayerIds.length === 0) return;
+
+  const offeredRecords = offeredPlayerIds.map(getPlayerElo);
+  const targetRecords = targetPlayerIds.map(getPlayerElo);
+
+  const avgOfferedRating =
+    offeredRecords.reduce((sum, r) => sum + r.rating, 0) / offeredRecords.length;
+  const avgTargetRating =
+    targetRecords.reduce((sum, r) => sum + r.rating, 0) / targetRecords.length;
+
+  const scoreTarget = isInterested ? 1.0 : 0.0;
+  const scoreOffered = isInterested ? 0.0 : 1.0;
+
+  const expectedTarget = 1 / (1 + Math.pow(10, (avgOfferedRating - avgTargetRating) / 400));
+  const expectedOffered = 1 / (1 + Math.pow(10, (avgTargetRating - avgOfferedRating) / 400));
+
+  const nowIso = new Date().toISOString();
+
+  for (const rec of targetRecords) {
+    const k = rec.matchesCount < 10 ? 40 : DEFAULT_K_FACTOR;
+    internalEloStore.set(rec.playerId, {
+      playerId: rec.playerId,
+      rating: Math.round(rec.rating + k * (scoreTarget - expectedTarget)),
+      matchesCount: rec.matchesCount + 1,
+      lastUpdated: nowIso,
     });
-  });
+  }
+
+  for (const rec of offeredRecords) {
+    const k = rec.matchesCount < 10 ? 40 : DEFAULT_K_FACTOR;
+    internalEloStore.set(rec.playerId, {
+      playerId: rec.playerId,
+      rating: Math.round(rec.rating + k * (scoreOffered - expectedOffered)),
+      matchesCount: rec.matchesCount + 1,
+      lastUpdated: nowIso,
+    });
+  }
 }
 
 // Helper to inspect all internal Elo ratings (for future trade suggestion engine)

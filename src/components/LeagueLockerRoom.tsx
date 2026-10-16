@@ -125,21 +125,26 @@ export const LeagueLockerRoom: React.FC<LeagueLockerRoomProps> = ({
 
     const name = managerName.trim() || claimingTeam.ownerName || 'Manager';
     const teamId = claimingTeam.id;
-    const updated = claimTeam(localLeague.espnLeagueId, teamId, name);
+    const previousTeamId = currentTeamId;
+    const updated = claimTeam(localLeague.espnLeagueId, teamId, name, previousTeamId);
     if (updated) {
       setLocalLeague(updated);
       onUpdateLeague?.(updated);
     }
 
-    // Persist claim to server so all other leaguemates see this team claimed
-    claimTeamOnServer(localLeague.espnLeagueId, teamId, name, updated || localLeague).then(
-      (serverView) => {
-        if (serverView?.league) {
-          setLocalLeague(serverView.league);
-          onUpdateLeague?.(serverView.league);
-        }
+    // Persist claim to server so all other leaguemates see this team claimed (and previous team released)
+    claimTeamOnServer(
+      localLeague.espnLeagueId,
+      teamId,
+      name,
+      updated || localLeague,
+      previousTeamId
+    ).then((serverView) => {
+      if (serverView?.league) {
+        setLocalLeague(serverView.league);
+        onUpdateLeague?.(serverView.league);
       }
-    );
+    });
 
     setClaimingTeam(null);
     setManagerName('');

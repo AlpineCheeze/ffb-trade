@@ -33,9 +33,15 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
     const velocityThreshold = 400;
 
     // Both offset and velocity must not contradict each other
-    if (info.offset.x > threshold || (info.offset.x > 20 && info.velocity.x > velocityThreshold)) {
+    if (
+      (info.offset.x > threshold && info.velocity.x >= -100) ||
+      (info.offset.x > 20 && info.velocity.x > velocityThreshold)
+    ) {
       onSwipe(true);
-    } else if (info.offset.x < -threshold || (info.offset.x < -20 && info.velocity.x < -velocityThreshold)) {
+    } else if (
+      (info.offset.x < -threshold && info.velocity.x <= 100) ||
+      (info.offset.x < -20 && info.velocity.x < -velocityThreshold)
+    ) {
       onSwipe(false);
     }
   };

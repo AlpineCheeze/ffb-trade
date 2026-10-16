@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { fetchEspnLeagueServer } from '@/lib/espn';
+import { fetchEspnLeagueServer, normalizeEspnCookies, createMockLeague } from '@/lib/espn';
 import {
   getServerLeagueSnapshot,
   saveServerLeagueSnapshot,
@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
       leagueId: cleanId,
       seasonId,
     });
-    const mergedLeague = saveServerLeagueSnapshot(freshLeague);
+    const mergedLeague = saveServerLeagueSnapshot(freshLeague, cleanId);
     return NextResponse.json({ success: true, league: mergedLeague });
   } catch (err: any) {
     const isNotFound = Boolean(err.isNotFound);
@@ -66,9 +66,18 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  let body: any;
   try {
-    const body = await req.json();
-    const { leagueId: rawLeagueId, seasonId, espnS2, swid, forceRefresh } = body;
+    body = await req.json();
+  } catch {
+    return NextResponse.json(
+      { error: 'Invalid JSON request body' },
+      { status: 400 }
+    );
+  }
+
+  try {
+    const { leagueId: rawLeagueId, seasonId, espnS2, swid, forceRefresh } = body || {};
 
     if (!rawLeagueId || !String(rawLeagueId).trim()) {
       return NextResponse.json(
@@ -87,7 +96,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const hasCookies = Boolean(espnS2 && swid);
+    // Handle Demo League refresh cleanly without hitting live ESPN
+    if (cleanId === '12345678') {
+      const mergedDemo = saveServerLeagueSnapshot(createMockLeague(), '12345678');
+      return NextResponse.json({ success: true, league: mergedDemo });
+    }
+
+    // Normalize cookies first so combined cookie strings pasted into a single field are detected
+    const normCookies = normalizeEspnCookies(espnS2, swid);
+    const hasCookies = Boolean(normCookies.espnS2 && normCookies.swid);
 
     // If no cookies provided and not forcing a refresh, serve existing server snapshot if present
     if (!hasCookies && !forceRefresh) {
@@ -100,12 +117,12 @@ export async function POST(req: NextRequest) {
     const freshLeague = await fetchEspnLeagueServer({
       leagueId: cleanId,
       seasonId: seasonId ? String(seasonId).trim() : undefined,
-      espnS2: espnS2 ? String(espnS2).trim() : undefined,
-      swid: swid ? String(swid).trim() : undefined,
+      espnS2: normCookies.espnS2,
+      swid: normCookies.swid,
     });
 
-    // Save snapshot on server (preserving existing team claims and swipes)
-    const mergedLeague = saveServerLeagueSnapshot(freshLeague);
+    // Save snapshot on server (preserving existing team claims and valid swipes/matches)
+    const mergedLeague = saveServerLeagueSnapshot(freshLeague, cleanId);
 
     return NextResponse.json({ success: true, league: mergedLeague });
   } catch (err: any) {

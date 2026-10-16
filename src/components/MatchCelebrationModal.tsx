@@ -51,12 +51,23 @@ export const MatchCelebrationModal: React.FC<MatchCelebrationModalProps> = ({
   const partnerPlayers = isUserTeamA ? match.teamBPlayers : match.teamAPlayers;
   const partnerTeam = isUserTeamA ? match.teamB : match.teamA;
 
-  const tradeLabel =
-    match.tradeType === '1-for-1'
-      ? 'Heads Up'
-      : match.tradeType === '2-for-1'
-      ? 'Twofer'
+  const effectiveTradeType =
+    userPlayers.length === 2 && partnerPlayers.length === 1
+      ? '2-for-1'
+      : userPlayers.length === 1 && partnerPlayers.length === 2
+      ? '1-for-2'
+      : userPlayers.length === 2 && partnerPlayers.length === 2
+      ? '2-for-2'
+      : userPlayers.length === 1 && partnerPlayers.length === 1
+      ? '1-for-1'
       : match.tradeType;
+
+  const tradeLabel =
+    effectiveTradeType === '1-for-1'
+      ? 'Heads Up'
+      : effectiveTradeType === '2-for-1'
+      ? 'Twofer'
+      : effectiveTradeType;
 
   const handleImgError = (id: string) => {
     setImgErrors((prev) => ({ ...prev, [id]: true }));

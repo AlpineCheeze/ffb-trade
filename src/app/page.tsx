@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { createMockLeague, fetchEspnLeague } from '@/lib/espn';
 import {
@@ -49,6 +49,31 @@ export default function Home() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [activeMatchCelebration, setActiveMatchCelebration] = useState<Match | null>(null);
 
+  // Refs to prevent stale closures and out-of-order network race conditions
+  const leagueRef = useRef<League | null>(null);
+  const mutationVersionRef = useRef(0);
+
+  useEffect(() => {
+    leagueRef.current = league;
+  }, [league]);
+
+  const mergeMatchesUnique = (primary: Match[], secondary: Match[]): Match[] => {
+    const seen = new Set<string>();
+    const result: Match[] = [];
+    for (const m of [...primary, ...secondary]) {
+      const pairTeams = [m.teamAId, m.teamBId].sort().join('|');
+      const aIds = m.teamAPlayers.map((p) => p.id).sort().join(',');
+      const bIds = m.teamBPlayers.map((p) => p.id).sort().join(',');
+      const pairPlayers = [aIds, bIds].sort().join('::');
+      const sig = `${pairTeams}#${pairPlayers}`;
+      if (!seen.has(sig)) {
+        seen.add(sig);
+        result.push(m);
+      }
+    }
+    return result;
+  };
+
   // Check URL query parameters on initial mount (e.g. ?leagueId=12345678)
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -79,7 +104,12 @@ export default function Home() {
   }, []);
 
   const handleSelectLeague = (selectedLeague: League) => {
+    mutationVersionRef.current += 1;
+    const reqVersion = mutationVersionRef.current;
+
     setLeague(selectedLeague);
+    leagueRef.current = selectedLeague;
+    setTradeType('1-for-1');
 
     const seedSwipes = createSeedOpponentSwipes(selectedLeague);
     const localSwipes = getLocalSwipes(selectedLeague.espnLeagueId);
@@ -88,7 +118,8 @@ export default function Home() {
       ...localSwipes.filter((ls) => !seedSwipes.some((ss) => ss.id === ls.id)),
     ];
     setSwipes(mergedInitialSwipes);
-    setMatches(getLocalMatches(selectedLeague.espnLeagueId));
+    const localMatches = getLocalMatches(selectedLeague.espnLeagueId);
+    setMatches(localMatches);
 
     // Check if the current user previously claimed a team on this device
     let resolvedTeamId: string | null = null;
@@ -99,6 +130,8 @@ export default function Home() {
       const team = selectedLeague.teams.find((t) => t.id === storedClaimedTeamId);
       if (team && team.roster.length > 0) {
         setSelectedOfferedPlayerIds([team.roster[0].id]);
+      } else {
+        setSelectedOfferedPlayerIds([]);
       }
     } else {
       // In demo league, default user to Team 1 ("You (Manager)")
@@ -120,9 +153,14 @@ export default function Home() {
 
     // Hydrate latest team claims, user swipes, and matches from backend server
     syncLeagueStateWithServer(selectedLeague, resolvedTeamId).then((serverView) => {
-      if (!serverView) return;
+      if (!serverView || mutationVersionRef.current !== reqVersion) return;
       setLeague(serverView.league);
-      setMatches(serverView.matches);
+      leagueRef.current = serverView.league;
+      const isMock =
+        serverView.league.id === 'league_mock_123' || serverView.league.espnLeagueId === '12345678';
+      setMatches((prev) =>
+        isMock ? mergeMatchesUnique(serverView.matches, prev) : serverView.matches
+      );
       if (resolvedTeamId) {
         const seeds = createSeedOpponentSwipes(serverView.league);
         setSwipes([
@@ -134,9 +172,13 @@ export default function Home() {
   };
 
   const handleClaimAndEnterDeck = (teamId: string) => {
+    mutationVersionRef.current += 1;
+    const reqVersion = mutationVersionRef.current;
+
     setUserTeamId(teamId);
-    if (league) {
-      const team = league.teams.find((t) => t.id === teamId);
+    const currentLeague = leagueRef.current || league;
+    if (currentLeague) {
+      const team = currentLeague.teams.find((t) => t.id === teamId);
       if (team && team.roster.length > 0) {
         const isTwoRequired = tradeType === '2-for-1' || tradeType === '2-for-2';
         if (isTwoRequired && team.roster.length >= 2) {
@@ -148,10 +190,15 @@ export default function Home() {
       }
 
       // Sync swipes and matches for this newly claimed team from backend
-      syncLeagueStateWithServer(league, teamId).then((serverView) => {
-        if (!serverView) return;
+      syncLeagueStateWithServer(currentLeague, teamId).then((serverView) => {
+        if (!serverView || mutationVersionRef.current !== reqVersion) return;
         setLeague(serverView.league);
-        setMatches(serverView.matches);
+        leagueRef.current = serverView.league;
+        const isMock =
+          serverView.league.id === 'league_mock_123' || serverView.league.espnLeagueId === '12345678';
+        setMatches((prev) =>
+          isMock ? mergeMatchesUnique(serverView.matches, prev) : serverView.matches
+        );
         const seeds = createSeedOpponentSwipes(serverView.league);
         setSwipes([
           ...seeds,
@@ -164,19 +211,29 @@ export default function Home() {
 
   // Live background polling to sync team claims and incoming mutual matches from leaguemates
   useEffect(() => {
-    if (!league) return;
+    if (!league?.espnLeagueId) return;
 
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
         return;
       }
-      syncLeagueStateWithServer(league, userTeamId).then((serverView) => {
-        if (!serverView) return;
+      const latestLeague = leagueRef.current;
+      if (!latestLeague) return;
+      const pollVersion = mutationVersionRef.current;
+
+      syncLeagueStateWithServer(latestLeague, userTeamId).then((serverView) => {
+        if (!serverView || mutationVersionRef.current !== pollVersion) return;
         setLeague(serverView.league);
+        leagueRef.current = serverView.league;
+        const isMock =
+          serverView.league.id === 'league_mock_123' || serverView.league.espnLeagueId === '12345678';
         setMatches((prevMatches) => {
+          const nextMatches = isMock
+            ? mergeMatchesUnique(serverView.matches, prevMatches)
+            : serverView.matches;
           // If a leaguemate just completed a mutual match with our team, celebrate!
-          if (userTeamId && serverView.matches.length > prevMatches.length) {
-            const brandNewMatch = serverView.matches.find(
+          if (userTeamId && nextMatches.length > prevMatches.length) {
+            const brandNewMatch = nextMatches.find(
               (sm) =>
                 (sm.teamAId === userTeamId || sm.teamBId === userTeamId) &&
                 !prevMatches.some((pm) => pm.id === sm.id)
@@ -185,7 +242,7 @@ export default function Home() {
               setActiveMatchCelebration(brandNewMatch);
             }
           }
-          return serverView.matches;
+          return nextMatches;
         });
       });
     }, 8000);
@@ -204,6 +261,8 @@ export default function Home() {
     if (!userTeam) return [];
     return userTeam.roster.filter((p) => selectedOfferedPlayerIds.includes(p.id));
   }, [userTeam, selectedOfferedPlayerIds]);
+
+  const requiredOfferedCount = tradeType === '2-for-1' || tradeType === '2-for-2' ? 2 : 1;
 
   // Handle Trade Type change (adjusting offered player counts)
   const handleTradeTypeChange = (newType: TradeType) => {
@@ -253,12 +312,17 @@ export default function Home() {
 
   // Generate swipe deck based on tradeType (1 target or 2 targets)
   const deckItems = useMemo<DeckItem[]>(() => {
-    if (!league || !userTeam || offeredPlayers.length === 0) return [];
+    if (!league || !userTeam || offeredPlayers.length !== requiredOfferedCount) return [];
 
     const isTargetTwoPlayers = tradeType === '1-for-2' || tradeType === '2-for-2';
     const opponentTeams = league.teams.filter((t) => t.id !== userTeam.id);
+    const activeOfferedIds = offeredPlayers.map((p) => p.id);
 
-    // CRIT-01 FIX: Unique composite key generator using actual offered player IDs
+    const matchesPositionFilter = (pos: Position) =>
+      selectedPositions.includes(pos) ||
+      (selectedPositions.includes('FLEX') && (pos === 'RB' || pos === 'WR' || pos === 'TE'));
+
+    // Unique composite key generator using actual offered player IDs
     const generateSwipeKey = (type: TradeType, offeredIds: string[], targetIds: string[]) => {
       const sortedTargets = [...targetIds].sort().join(',');
       const sortedOffered = [...offeredIds].sort().join(',');
@@ -277,8 +341,8 @@ export default function Home() {
       // SINGLE TARGET (1-for-1 or 2-for-1)
       opponentTeams.forEach((team) => {
         team.roster.forEach((player) => {
-          if (!selectedPositions.includes(player.position)) return;
-          const key = generateSwipeKey(tradeType, selectedOfferedPlayerIds, [player.id]);
+          if (!matchesPositionFilter(player.position)) return;
+          const key = generateSwipeKey(tradeType, activeOfferedIds, [player.id]);
           if (!existingSwipeKeys.has(key)) {
             items.push({
               id: `item_${player.id}`,
@@ -298,12 +362,10 @@ export default function Home() {
             const p1 = roster[i];
             const p2 = roster[j];
 
-            // Check if at least one matches target position filter
-            const matchesPosition =
-              selectedPositions.includes(p1.position) || selectedPositions.includes(p2.position);
-            if (!matchesPosition) continue;
+            // Both players in the target package must match the selected position filters
+            if (!matchesPositionFilter(p1.position) || !matchesPositionFilter(p2.position)) continue;
 
-            const key = generateSwipeKey(tradeType, selectedOfferedPlayerIds, [p1.id, p2.id]);
+            const key = generateSwipeKey(tradeType, activeOfferedIds, [p1.id, p2.id]);
             if (!existingSwipeKeys.has(key)) {
               items.push({
                 id: `pkg_${team.id}_${p1.id}_${p2.id}`,
@@ -317,7 +379,7 @@ export default function Home() {
     }
 
     return items;
-  }, [league, userTeam, offeredPlayers, selectedOfferedPlayerIds, tradeType, swipes, selectedPositions]);
+  }, [league, userTeam, offeredPlayers, requiredOfferedCount, tradeType, swipes, selectedPositions]);
 
   // Current top item to swipe on
   const currentCard = deckItems[0] || null;
@@ -325,15 +387,19 @@ export default function Home() {
 
   // Handle Swipe (Interested or Pass)
   const handleSwipe = (isInterested: boolean) => {
-    if (!currentCard || offeredPlayers.length === 0 || !userTeam || !league) return;
+    if (!currentCard || offeredPlayers.length !== requiredOfferedCount || !userTeam || !league) return;
 
+    mutationVersionRef.current += 1;
+    const swipeVersion = mutationVersionRef.current;
+
+    const activeOfferedIds = offeredPlayers.map((p) => p.id);
     const targetPlayerIds = currentCard.players.map((p) => p.id);
 
     const newSwipe: Swipe = {
       id: `swipe_${Date.now()}_${Math.random().toString(36).substring(7)}`,
       teamId: userTeam.id,
       tradeType,
-      offeredPlayerIds: selectedOfferedPlayerIds,
+      offeredPlayerIds: activeOfferedIds,
       targetPlayerIds,
       targetTeamId: currentCard.ownerTeam.id,
       isInterested,
@@ -348,16 +414,16 @@ export default function Home() {
     );
 
     // Update internal Elo privately in background
-    recordPackageSwipeEloUpdate(selectedOfferedPlayerIds, targetPlayerIds, isInterested);
+    recordPackageSwipeEloUpdate(activeOfferedIds, targetPlayerIds, isInterested);
 
     // Check for immediate local match (e.g. demo seed swipes)
-    let triggeredLocalMatch = false;
+    let triggeredLocalMatch: Match | null = null;
     if (isInterested) {
       const localMatch = checkForMutualMatch(newSwipe, updatedSwipes, league);
       if (localMatch) {
-        triggeredLocalMatch = true;
+        triggeredLocalMatch = localMatch;
         setMatches((prev) => {
-          const next = [localMatch, ...prev];
+          const next = mergeMatchesUnique([localMatch], prev);
           saveLocalMatches(league.espnLeagueId, next);
           return next;
         });
@@ -367,8 +433,15 @@ export default function Home() {
 
     // Record swipe on backend server and check against all leaguemates' secret swipes
     recordSwipeOnServer(league.espnLeagueId, newSwipe, league).then((serverView) => {
-      if (!serverView) return;
-      setMatches(serverView.matches);
+      if (!serverView || mutationVersionRef.current !== swipeVersion) return;
+      const isMock = league.id === 'league_mock_123' || league.espnLeagueId === '12345678';
+      setMatches((prev) => {
+        const next = isMock
+          ? mergeMatchesUnique(serverView.matches, prev)
+          : serverView.matches;
+        saveLocalMatches(league.espnLeagueId, next);
+        return next;
+      });
       if (serverView.matchFound && !triggeredLocalMatch) {
         setActiveMatchCelebration(serverView.matchFound);
       }
@@ -377,15 +450,19 @@ export default function Home() {
 
   // Handle Undo Last Swipe
   const handleUndo = () => {
-    if (selectedOfferedPlayerIds.length === 0 || !userTeam || !league) return;
+    const activeOfferedIds = offeredPlayers.map((p) => p.id);
+    if (activeOfferedIds.length === 0 || !userTeam || !league) return;
     const userSwipesForPackage = swipes.filter(
       (s) =>
         s.teamId === userTeam.id &&
         s.tradeType === tradeType &&
-        arraysEqualIgnoreOrder(s.offeredPlayerIds, selectedOfferedPlayerIds)
+        arraysEqualIgnoreOrder(s.offeredPlayerIds, activeOfferedIds)
     );
 
     if (userSwipesForPackage.length === 0) return;
+
+    mutationVersionRef.current += 1;
+    const undoVersion = mutationVersionRef.current;
 
     const lastSwipe = userSwipesForPackage[userSwipesForPackage.length - 1];
     const nextSwipes = swipes.filter((s) => s.id !== lastSwipe.id);
@@ -397,6 +474,7 @@ export default function Home() {
 
     // Only revert matches if this specific swipe was an interested swipe
     if (lastSwipe.isInterested) {
+      setActiveMatchCelebration(null);
       setMatches((prev) => {
         const filtered = prev.filter((m) => {
           const mA = m.teamAPlayers.map((p) => p.id);
@@ -419,10 +497,15 @@ export default function Home() {
     }
 
     // Sync undo with backend server
-    undoSwipeOnServer(league.espnLeagueId, userTeam.id, tradeType, selectedOfferedPlayerIds).then(
+    undoSwipeOnServer(league.espnLeagueId, userTeam.id, tradeType, activeOfferedIds).then(
       (serverView) => {
-        if (!serverView) return;
-        setMatches(serverView.matches);
+        if (!serverView || mutationVersionRef.current !== undoVersion) return;
+        const isMock = league.id === 'league_mock_123' || league.espnLeagueId === '12345678';
+        setMatches((prev) => {
+          const next = isMock ? mergeMatchesUnique(prev, serverView.matches) : serverView.matches;
+          saveLocalMatches(league.espnLeagueId, next);
+          return next;
+        });
       }
     );
   };
@@ -638,15 +721,19 @@ export default function Home() {
                     onSwipe={handleSwipe}
                   />
                 </AnimatePresence>
-              ) : offeredPlayers.length === 0 ? (
-                /* Empty Selection State */
+              ) : offeredPlayers.length < requiredOfferedCount ? (
+                /* Empty or Incomplete Selection State */
                 <div className="w-full h-[540px] rounded-3xl bg-slate-900/70 border border-dashed border-amber-500/30 flex flex-col items-center justify-center p-8 text-center">
                   <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mb-4">
                     <Sparkles className="w-8 h-8" />
                   </div>
-                  <h3 className="text-xl font-black text-white">No Players on Trade Block</h3>
+                  <h3 className="text-xl font-black text-white">
+                    {offeredPlayers.length === 0 ? 'No Players on Trade Block' : 'Select 1 More Player to Offer'}
+                  </h3>
                   <p className="text-xs text-slate-400 mt-2 max-w-xs leading-relaxed">
-                    Select 1 or 2 players from your roster that you are willing to shop to league opponents.
+                    {requiredOfferedCount === 2
+                      ? `A ${tradeType} trade requires 2 players from your roster in your offered package.`
+                      : 'Select 1 or 2 players from your roster that you are willing to shop to league opponents.'}
                   </p>
                   <button
                     onClick={() => setActiveTab('roster')}

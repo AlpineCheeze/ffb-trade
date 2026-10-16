@@ -26,17 +26,15 @@ const memoryStore: Map<string, ServerLeagueState> =
 globalThis.__tradeHornyServerStore = memoryStore;
 
 /**
- * Strictly sanitize leagueId to prevent path traversal and injection.
+ * Strictly validate leagueId to prevent path traversal and injection.
+ * Rejects any string containing characters outside [a-zA-Z0-9_-].
  */
 export function sanitizeLeagueId(rawId: string): string {
-  const cleaned = String(rawId || '')
-    .trim()
-    .replace(/[^a-zA-Z0-9_-]/g, '')
-    .slice(0, 32);
-  if (!cleaned) {
+  const trimmed = String(rawId ?? '').trim();
+  if (!trimmed || !/^[a-zA-Z0-9_-]{1,32}$/.test(trimmed)) {
     throw new Error('Invalid ESPN League ID');
   }
-  return cleaned;
+  return trimmed;
 }
 
 /**
@@ -59,7 +57,6 @@ function getWritableDataDir(): string | null {
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
       }
-      // Verify write access
       const probeFile = path.join(dir, `.write_probe_${process.pid}`);
       fs.writeFileSync(probeFile, 'ok', 'utf-8');
       fs.unlinkSync(probeFile);
@@ -74,11 +71,12 @@ function getWritableDataDir(): string | null {
   return null;
 }
 
-function createInitialServerState(league: League): ServerLeagueState {
-  const cleanId = sanitizeLeagueId(league.espnLeagueId);
+function createInitialServerState(league: League, forcedCleanId?: string): ServerLeagueState {
+  const cleanId = forcedCleanId || sanitizeLeagueId(league.espnLeagueId);
   const isMock = league.id === 'league_mock_123' || cleanId === '12345678';
   const normalizedLeague: League = {
     ...league,
+    id: isMock ? 'league_mock_123' : `league_${cleanId}`,
     espnLeagueId: cleanId,
     inviteCode: league.inviteCode || cleanId,
   };
@@ -112,7 +110,7 @@ function readStateFromDisk(cleanId: string): ServerLeagueState | null {
 
     // Upgrade legacy raw League snapshot if needed
     if (parsed && parsed.espnLeagueId && Array.isArray(parsed.teams) && !parsed.league) {
-      const upgraded = createInitialServerState(parsed as League);
+      const upgraded = createInitialServerState(parsed as League, cleanId);
       writeStateToDisk(cleanId, upgraded);
       return upgraded;
     }
@@ -151,21 +149,25 @@ export function getServerLeagueState(espnLeagueId: string): ServerLeagueState | 
     return null;
   }
 
-  // Always check disk first if available so multi-worker processes stay synchronized
-  const diskState = readStateFromDisk(cleanId);
-  if (diskState) {
-    memoryStore.set(cleanId, diskState);
-    return diskState;
-  }
-
-  const memState = memoryStore.get(cleanId);
-  if (memState) {
-    return memState;
+  const writableDir = getWritableDataDir();
+  if (writableDir) {
+    const diskState = readStateFromDisk(cleanId);
+    if (diskState) {
+      memoryStore.set(cleanId, diskState);
+      return diskState;
+    }
+    // If disk directory is active and file does not exist on disk, evict any stale memory entry
+    memoryStore.delete(cleanId);
+  } else {
+    const memState = memoryStore.get(cleanId);
+    if (memState) {
+      return memState;
+    }
   }
 
   // Auto-seed demo league if requested
   if (cleanId === '12345678') {
-    const demoState = createInitialServerState(createMockLeague());
+    const demoState = createInitialServerState(createMockLeague(), '12345678');
     memoryStore.set(cleanId, demoState);
     writeStateToDisk(cleanId, demoState);
     return demoState;
@@ -185,19 +187,24 @@ export function saveServerLeagueState(state: ServerLeagueState): ServerLeagueSta
 /**
  * Saves or updates a League snapshot on the server while preserving existing
  * team claims (`isClaimed`, `claimedBy`), active swipes, matches, and Elo ratings.
+ * Prunes any stale swipes or matches whose players are no longer on those teams.
  */
-export function saveServerLeagueSnapshot(freshLeague: League): League {
-  const cleanId = sanitizeLeagueId(freshLeague.espnLeagueId);
+export function saveServerLeagueSnapshot(freshLeague: League, forcedCleanId?: string): League {
+  const cleanId = forcedCleanId ? sanitizeLeagueId(forcedCleanId) : sanitizeLeagueId(freshLeague.espnLeagueId);
+  const safeFreshLeague: League = {
+    ...freshLeague,
+    espnLeagueId: cleanId,
+  };
   const existingState = getServerLeagueState(cleanId);
 
   if (!existingState) {
-    const initial = createInitialServerState(freshLeague);
+    const initial = createInitialServerState(safeFreshLeague, cleanId);
     saveServerLeagueState(initial);
     return initial.league;
   }
 
   // Merge team claims onto freshly fetched ESPN teams
-  const mergedTeams = freshLeague.teams.map((ft) => {
+  const mergedTeams = safeFreshLeague.teams.map((ft) => {
     const prevTeam = existingState.league.teams.find(
       (pt) => pt.id === ft.id || pt.espnTeamId === ft.espnTeamId
     );
@@ -212,14 +219,14 @@ export function saveServerLeagueSnapshot(freshLeague: League): League {
   });
 
   const mergedLeague: League = {
-    ...freshLeague,
+    ...safeFreshLeague,
     espnLeagueId: cleanId,
-    inviteCode: freshLeague.inviteCode || existingState.league.inviteCode || cleanId,
+    inviteCode: safeFreshLeague.inviteCode || existingState.league.inviteCode || cleanId,
     teams: mergedTeams,
     lastSyncedAt: new Date().toISOString(),
   };
 
-  // Build lookup of current valid player IDs per team to prune stale swipes after real-life drops/trades
+  // Build lookup of current valid player IDs per team to prune stale swipes & matches after real-life drops/trades
   const teamRosterPlayerIds = new Map<string, Set<string>>();
   for (const team of mergedTeams) {
     teamRosterPlayerIds.set(team.id, new Set(team.roster.map((p) => p.id)));
@@ -234,10 +241,20 @@ export function saveServerLeagueSnapshot(freshLeague: League): League {
     return hasAllOffered && hasAllTarget;
   });
 
+  const validMatches = existingState.matches.filter((m) => {
+    const rosterA = teamRosterPlayerIds.get(m.teamAId);
+    const rosterB = teamRosterPlayerIds.get(m.teamBId);
+    if (!rosterA || !rosterB) return false;
+    const hasAllA = m.teamAPlayers.every((p) => rosterA.has(p.id));
+    const hasAllB = m.teamBPlayers.every((p) => rosterB.has(p.id));
+    return hasAllA && hasAllB;
+  });
+
   const updatedState: ServerLeagueState = {
     ...existingState,
     league: mergedLeague,
     swipes: validSwipes,
+    matches: validMatches,
     updatedAt: new Date().toISOString(),
   };
 
@@ -254,28 +271,59 @@ export function getServerLeagueSnapshot(espnLeagueId: string): League | null {
 }
 
 /**
- * Atomically claims a team for a manager on the server.
+ * Atomically claims a team for a manager on the server, releasing their previous team claim if switching.
  */
 export function claimServerTeam(
   espnLeagueId: string,
   teamId: string,
   claimantName: string,
-  fallbackLeague?: League
+  fallbackLeague?: League,
+  previousTeamId?: string | null
 ): ServerLeagueState | null {
   const cleanId = sanitizeLeagueId(espnLeagueId);
   let state = getServerLeagueState(cleanId);
 
-  if (!state && fallbackLeague) {
-    state = createInitialServerState(fallbackLeague);
+  if (!state && fallbackLeague && Array.isArray(fallbackLeague.teams)) {
+    state = createInitialServerState({ ...fallbackLeague, espnLeagueId: cleanId }, cleanId);
   }
   if (!state) return null;
 
+  const targetTeam = state.league.teams.find((t) => t.id === teamId);
+  if (!targetTeam) {
+    return null;
+  }
+
+  const normalizedClaimant = claimantName.trim() || targetTeam.ownerName || 'Manager';
+
+  // Prevent overwriting a team already claimed by a different manager
+  if (
+    targetTeam.isClaimed &&
+    targetTeam.claimedBy &&
+    targetTeam.claimedBy.trim().toLowerCase() !== normalizedClaimant.toLowerCase()
+  ) {
+    return state;
+  }
+
   const updatedTeams = state.league.teams.map((t) => {
+    // Release previous team if the manager is switching teams (by previousTeamId or same claimantName)
+    if (
+      t.id !== teamId &&
+      ((previousTeamId && t.id === previousTeamId) ||
+        (t.isClaimed &&
+          t.claimedBy &&
+          t.claimedBy.trim().toLowerCase() === normalizedClaimant.toLowerCase()))
+    ) {
+      return {
+        ...t,
+        isClaimed: false,
+        claimedBy: undefined,
+      };
+    }
     if (t.id === teamId) {
       return {
         ...t,
         isClaimed: true,
-        claimedBy: claimantName.trim() || t.ownerName || 'Manager',
+        claimedBy: normalizedClaimant,
       };
     }
     return t;
@@ -290,7 +338,7 @@ export function claimServerTeam(
 }
 
 /**
- * Updates server-side Elo ratings for a swipe event.
+ * Updates server-side Elo ratings symmetrically using package average ratings.
  */
 function updateServerElo(
   eloMap: Record<string, InternalEloRecord>,
@@ -298,6 +346,8 @@ function updateServerElo(
   targetPlayerIds: string[],
   isInterested: boolean
 ): void {
+  if (offeredPlayerIds.length === 0 || targetPlayerIds.length === 0) return;
+
   const DEFAULT_ELO = 1500;
   const DEFAULT_K = 32;
 
@@ -312,34 +362,41 @@ function updateServerElo(
     );
   };
 
-  for (const offeredId of offeredPlayerIds) {
-    for (const targetId of targetPlayerIds) {
-      const offered = getRecord(offeredId);
-      const target = getRecord(targetId);
+  const offeredRecords = offeredPlayerIds.map(getRecord);
+  const targetRecords = targetPlayerIds.map(getRecord);
 
-      const scoreTarget = isInterested ? 1.0 : 0.0;
-      const scoreOffered = isInterested ? 0.0 : 1.0;
+  // Compare composite package averages so multi-player packages update symmetrically
+  const avgOfferedRating =
+    offeredRecords.reduce((sum, r) => sum + r.rating, 0) / offeredRecords.length;
+  const avgTargetRating =
+    targetRecords.reduce((sum, r) => sum + r.rating, 0) / targetRecords.length;
 
-      const expectedTarget = 1 / (1 + Math.pow(10, (offered.rating - target.rating) / 400));
-      const expectedOffered = 1 / (1 + Math.pow(10, (target.rating - offered.rating) / 400));
+  const scoreTarget = isInterested ? 1.0 : 0.0;
+  const scoreOffered = isInterested ? 0.0 : 1.0;
 
-      const kTarget = target.matchesCount < 10 ? 40 : DEFAULT_K;
-      const kOffered = offered.matchesCount < 10 ? 40 : DEFAULT_K;
+  const expectedTarget = 1 / (1 + Math.pow(10, (avgOfferedRating - avgTargetRating) / 400));
+  const expectedOffered = 1 / (1 + Math.pow(10, (avgTargetRating - avgOfferedRating) / 400));
 
-      eloMap[targetId] = {
-        playerId: targetId,
-        rating: Math.round(target.rating + kTarget * (scoreTarget - expectedTarget)),
-        matchesCount: target.matchesCount + 1,
-        lastUpdated: new Date().toISOString(),
-      };
+  const nowIso = new Date().toISOString();
 
-      eloMap[offeredId] = {
-        playerId: offeredId,
-        rating: Math.round(offered.rating + kOffered * (scoreOffered - expectedOffered)),
-        matchesCount: offered.matchesCount + 1,
-        lastUpdated: new Date().toISOString(),
-      };
-    }
+  for (const rec of targetRecords) {
+    const k = rec.matchesCount < 10 ? 40 : DEFAULT_K;
+    eloMap[rec.playerId] = {
+      playerId: rec.playerId,
+      rating: Math.round(rec.rating + k * (scoreTarget - expectedTarget)),
+      matchesCount: rec.matchesCount + 1,
+      lastUpdated: nowIso,
+    };
+  }
+
+  for (const rec of offeredRecords) {
+    const k = rec.matchesCount < 10 ? 40 : DEFAULT_K;
+    eloMap[rec.playerId] = {
+      playerId: rec.playerId,
+      rating: Math.round(rec.rating + k * (scoreOffered - expectedOffered)),
+      matchesCount: rec.matchesCount + 1,
+      lastUpdated: nowIso,
+    };
   }
 }
 
@@ -349,16 +406,31 @@ function updateServerElo(
  */
 export function recordServerSwipe(
   espnLeagueId: string,
-  newSwipe: Swipe,
+  rawSwipe: Swipe,
   fallbackLeague?: League
 ): { state: ServerLeagueState; matchFound: Match | null } | null {
   const cleanId = sanitizeLeagueId(espnLeagueId);
   let state = getServerLeagueState(cleanId);
 
-  if (!state && fallbackLeague) {
-    state = createInitialServerState(fallbackLeague);
+  if (!state && fallbackLeague && Array.isArray(fallbackLeague.teams)) {
+    state = createInitialServerState({ ...fallbackLeague, espnLeagueId: cleanId }, cleanId);
   }
   if (!state) return null;
+
+  // Reject self-swipes
+  if (rawSwipe.teamId === rawSwipe.targetTeamId) {
+    return null;
+  }
+
+  // Ensure valid non-empty swipe ID
+  const newSwipe: Swipe = {
+    ...rawSwipe,
+    id:
+      typeof rawSwipe.id === 'string' && rawSwipe.id.trim()
+        ? rawSwipe.id.trim()
+        : `swipe_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    createdAt: rawSwipe.createdAt || new Date().toISOString(),
+  };
 
   // Remove any previous identical swipe by this team for the exact same package & target
   state.swipes = state.swipes.filter(
@@ -382,12 +454,10 @@ export function recordServerSwipe(
     newSwipe.isInterested
   );
 
-  // Check for mutual match against all swipes in the league
   let matchFound: Match | null = null;
   if (newSwipe.isInterested) {
     const candidateMatch = checkForMutualMatch(newSwipe, state.swipes, state.league);
     if (candidateMatch) {
-      // Avoid duplicate match entries for the same player packages between these two teams
       const alreadyExists = state.matches.some((m) => {
         const mPlayersA = m.teamAPlayers.map((p) => p.id);
         const mPlayersB = m.teamBPlayers.map((p) => p.id);
@@ -432,6 +502,27 @@ export function recordServerSwipe(
           }) || candidateMatch;
       }
     }
+  } else {
+    // If overwriting a previously interested swipe with a Pass (isInterested: false),
+    // remove any match that depended on this swipe
+    state.matches = state.matches.filter((m) => {
+      const mTeamAPlayerIds = m.teamAPlayers.map((p) => p.id);
+      const mTeamBPlayerIds = m.teamBPlayers.map((p) => p.id);
+
+      const isForwardMatch =
+        m.teamAId === newSwipe.teamId &&
+        m.teamBId === newSwipe.targetTeamId &&
+        arraysEqualIgnoreOrder(mTeamAPlayerIds, newSwipe.offeredPlayerIds) &&
+        arraysEqualIgnoreOrder(mTeamBPlayerIds, newSwipe.targetPlayerIds);
+
+      const isReverseMatch =
+        m.teamBId === newSwipe.teamId &&
+        m.teamAId === newSwipe.targetTeamId &&
+        arraysEqualIgnoreOrder(mTeamBPlayerIds, newSwipe.offeredPlayerIds) &&
+        arraysEqualIgnoreOrder(mTeamAPlayerIds, newSwipe.targetPlayerIds);
+
+      return !(isForwardMatch || isReverseMatch);
+    });
   }
 
   saveServerLeagueState(state);
@@ -452,19 +543,25 @@ export function undoServerSwipe(
   const state = getServerLeagueState(cleanId);
   if (!state) return null;
 
-  const matchingSwipes = state.swipes.filter(
-    (s) =>
+  let lastMatchIndex = -1;
+  for (let i = state.swipes.length - 1; i >= 0; i--) {
+    const s = state.swipes[i];
+    if (
       s.teamId === teamId &&
       s.tradeType === tradeType &&
       arraysEqualIgnoreOrder(s.offeredPlayerIds, offeredPlayerIds)
-  );
+    ) {
+      lastMatchIndex = i;
+      break;
+    }
+  }
 
-  if (matchingSwipes.length === 0) {
+  if (lastMatchIndex === -1) {
     return state;
   }
 
-  const lastSwipe = matchingSwipes[matchingSwipes.length - 1];
-  state.swipes = state.swipes.filter((s) => s.id !== lastSwipe.id);
+  const lastSwipe = state.swipes[lastMatchIndex];
+  state.swipes.splice(lastMatchIndex, 1);
 
   if (lastSwipe.isInterested) {
     state.matches = state.matches.filter((m) => {
@@ -492,7 +589,7 @@ export function undoServerSwipe(
 
 /**
  * Builds a privacy-safe ClientLeagueView for a specific team.
- * Unreciprocated swipes from other teams are NEVER exposed to the client.
+ * Unreciprocated swipes AND matches belonging only to third-party teams are NEVER exposed.
  */
 export function toClientLeagueView(
   state: ServerLeagueState,
@@ -500,10 +597,13 @@ export function toClientLeagueView(
   matchFound?: Match | null
 ): ClientLeagueView {
   const mySwipes = teamId ? state.swipes.filter((s) => s.teamId === teamId) : [];
+  const myMatches = teamId
+    ? state.matches.filter((m) => m.teamAId === teamId || m.teamBId === teamId)
+    : [];
   return {
     league: state.league,
     mySwipes,
-    matches: state.matches,
+    matches: myMatches,
     matchFound: matchFound ?? null,
   };
 }

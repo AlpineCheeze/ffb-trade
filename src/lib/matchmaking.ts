@@ -18,13 +18,18 @@ export function checkForMutualMatch(
   allSwipes: Swipe[],
   league: League
 ): Match | null {
-  if (!newSwipe.isInterested) {
+  if (!newSwipe.isInterested || !newSwipe.teamId || !newSwipe.targetTeamId) {
+    return null;
+  }
+
+  // Prevent a team from matching with itself
+  if (newSwipe.teamId === newSwipe.targetTeamId) {
     return null;
   }
 
   // Find complementary swipe from the target team directed specifically back at this team
   const complementarySwipe = allSwipes.find((s) => {
-    if (!s.isInterested) return false;
+    if (!s.isInterested || s.id === newSwipe.id) return false;
     // Both teams must specifically target each other
     if (s.teamId !== newSwipe.targetTeamId || s.targetTeamId !== newSwipe.teamId) return false;
 
@@ -64,10 +69,13 @@ export function checkForMutualMatch(
     return null;
   }
 
+  const canonicalTradeType =
+    newSwipe.tradeType === '1-for-2' ? '2-for-1' : newSwipe.tradeType;
+
   return {
     id: `match_${teamA.id}_${teamB.id}_${Date.now()}`,
     leagueId: league.id,
-    tradeType: newSwipe.tradeType,
+    tradeType: canonicalTradeType,
     teamAId: teamA.id,
     teamBId: teamB.id,
     teamA,

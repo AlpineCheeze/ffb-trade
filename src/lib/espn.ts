@@ -48,8 +48,8 @@ export const NFL_PRO_TEAMS: Record<number, string> = {
 
 // Client / Server Unified ESPN League Loader
 export function normalizeEspnCookies(espnS2Raw?: string, swidRaw?: string): { espnS2?: string; swid?: string } {
-  let s2 = (espnS2Raw || '').replace(/[\r\n\t]+/g, '').trim();
-  let sw = (swidRaw || '').replace(/[\r\n\t]+/g, '').trim();
+  let s2 = String(espnS2Raw ?? '').replace(/[\r\n\t]+/g, '').trim();
+  let sw = String(swidRaw ?? '').replace(/[\r\n\t]+/g, '').trim();
 
   // 1. Detect if the user pasted a combined cookie string into either field
   const combined = `${s2}; ${sw}`.trim();
@@ -63,13 +63,13 @@ export function normalizeEspnCookies(espnS2Raw?: string, swidRaw?: string): { es
     sw = swidMatch[1].trim();
   }
 
-  // 2. Clean espn_s2
-  s2 = s2.replace(/^["']+|["']+$/g, '').replace(/;+$/, '').trim();
+  // 2. Clean espn_s2 (and strip any trailing `; Path=/; HttpOnly` attributes)
   s2 = s2.replace(/^espn_s2\s*[:=]\s*/i, '').trim();
+  s2 = s2.split(';')[0].replace(/^["']+|["']+$/g, '').trim();
 
-  // 3. Clean SWID
-  sw = sw.replace(/^["']+|["']+$/g, '').replace(/;+$/, '').trim();
+  // 3. Clean SWID (and strip any trailing `; Path=/` attributes)
   sw = sw.replace(/^SWID\s*[:=]\s*/i, '').trim();
+  sw = sw.split(';')[0].replace(/^["']+|["']+$/g, '').trim();
 
   // 4. Auto-detect if user accidentally swapped the two inputs
   // SWID is a ~36 character GUID (e.g. {1234-abcd...}); espn_s2 is a long token (100+ chars)
@@ -328,15 +328,18 @@ export async function fetchEspnLeagueServer(params: {
 
 // Transform raw ESPN JSON into our clean TypeScript schema
 export function normalizeEspnData(
-  raw: any,
+  rawInput: any,
   leagueId: string,
   seasonId: string,
   isPrivate = false
 ): League {
+  const raw = rawInput && typeof rawInput === 'object' ? rawInput : {};
+
   // Map members (managers) to their display names
   const memberMap = new Map<string, string>();
   if (Array.isArray(raw.members)) {
     for (const m of raw.members) {
+      if (!m || typeof m !== 'object') continue;
       const name =
         m.displayName ||
         `${m.firstName || ''} ${m.lastName || ''}`.trim() ||
@@ -345,10 +348,10 @@ export function normalizeEspnData(
     }
   }
 
-  const teams: Team[] = (raw.teams || []).map((t: any) => {
-    const rawRoster = t.roster?.entries || [];
-    const roster: Player[] = rawRoster.map((entry: any) => {
-      const p = entry.playerPoolEntry?.player || {};
+  const teams: Team[] = (Array.isArray(raw.teams) ? raw.teams : []).map((t: any, teamIdx: number) => {
+    const rawRoster = Array.isArray(t?.roster?.entries) ? t.roster.entries : [];
+    const roster: Player[] = rawRoster.map((entry: any, entryIdx: number) => {
+      const p = entry?.playerPoolEntry?.player || {};
       const posId = p.defaultPositionId || 0;
       const position = ESPN_POSITION_MAP[posId] || 'FLEX';
 
@@ -368,19 +371,20 @@ export function normalizeEspnData(
         : 'https://a.espncdn.com/combiner/i?img=/i/headshots/nfl/players/full/default.png';
 
       // Use nullish coalescing to avoid replacing 0.0-point projections with 12.5
-      const appliedStat = entry.playerPoolEntry?.appliedStatTotal;
+      const appliedStat = entry?.playerPoolEntry?.appliedStatTotal;
       const projectedPoints =
-        typeof appliedStat === 'number'
+        typeof appliedStat === 'number' && Number.isFinite(appliedStat)
           ? Number(appliedStat.toFixed(1))
           : 0.0;
 
       // Extract real season stats if present in playerPoolEntry
-      const statEntries = p.stats || [];
+      const statEntries = Array.isArray(p.stats) ? p.stats : [];
       const seasonAvgEntry = statEntries.find(
-        (s: any) => s.statSourceId === 0 && s.statSplitTypeId === 0
+        (s: any) => s && s.statSourceId === 0 && s.statSplitTypeId === 0
       );
       const seasonAvgPoints =
-        typeof seasonAvgEntry?.appliedAverage === 'number'
+        typeof seasonAvgEntry?.appliedAverage === 'number' &&
+        Number.isFinite(seasonAvgEntry.appliedAverage)
           ? Number(seasonAvgEntry.appliedAverage.toFixed(1))
           : projectedPoints;
 
@@ -388,17 +392,23 @@ export function normalizeEspnData(
       const proTeamId = Number(p.proTeamId);
       const nflTeam = NFL_PRO_TEAMS[proTeamId] || (proTeamId ? `NFL-${proTeamId}` : 'FA');
 
-      // Preserve jersey 0 correctly
+      // Preserve jersey 0 correctly while guarding against NaN
+      const parsedJersey = Number(p.jersey);
       const jerseyNumber =
-        p.jersey != null && String(p.jersey).trim() !== ''
-          ? Number(p.jersey)
+        p.jersey != null && String(p.jersey).trim() !== '' && Number.isFinite(parsedJersey)
+          ? parsedJersey
           : undefined;
 
-      const byeWeek = p.byeWeek ? Number(p.byeWeek) : (7 + (posId % 6));
+      const parsedBye = Number(p.byeWeek);
+      const byeWeek = Number.isFinite(parsedBye) && parsedBye > 0 ? parsedBye : (7 + (posId % 6));
+
+      const deterministicId = p.id
+        ? `espn_${p.id}`
+        : `espn_t${t?.id ?? teamIdx}_p${entry?.playerId ?? entryIdx}`;
 
       return {
-        id: `espn_${p.id || Math.random().toString(36).substring(7)}`,
-        espnPlayerId: String(p.id || ''),
+        id: deterministicId,
+        espnPlayerId: String(p.id || entry?.playerId || ''),
         fullName: p.fullName || 'Unknown Player',
         position,
         nflTeam,

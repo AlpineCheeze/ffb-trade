@@ -310,6 +310,10 @@ export function claimServerTeam(
 
   // Prevent overwriting a team already claimed by a different user account or manager
   if (targetTeam.isClaimed) {
+    // Prevent unauthenticated requests from overwriting an authenticated claim
+    if (!cleanUserId && targetTeam.claimedByUserId) {
+      return state;
+    }
     if (cleanUserId && targetTeam.claimedByUserId && targetTeam.claimedByUserId !== cleanUserId) {
       return state;
     }
@@ -323,14 +327,13 @@ export function claimServerTeam(
   }
 
   const updatedTeams = state.league.teams.map((t) => {
-    // Release previous team if the manager is switching teams (by previousTeamId, same userId, or same claimantName)
+    // Release previous team only if the manager is switching teams (by previousTeamId or same userId)
     const isPreviousTeam =
       t.id !== teamId &&
-      ((previousTeamId && t.id === previousTeamId) ||
-        (cleanUserId && t.claimedByUserId === cleanUserId) ||
-        (t.isClaimed &&
-          t.claimedBy &&
-          t.claimedBy.trim().toLowerCase() === normalizedClaimant.toLowerCase()));
+      Boolean(
+        (previousTeamId && t.id === previousTeamId) ||
+          (cleanUserId && t.claimedByUserId === cleanUserId)
+      );
 
     if (isPreviousTeam) {
       return {

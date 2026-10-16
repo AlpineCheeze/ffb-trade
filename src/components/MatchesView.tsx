@@ -174,13 +174,9 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
                   </div>
 
                   {/* Side-by-Side Trade Comparison */}
-                  <div className="grid grid-cols-2 gap-3 items-center relative">
-                    <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-slate-800 border border-slate-700 text-slate-300 flex items-center justify-center">
-                      <ArrowLeftRight className="w-4 h-4 text-blue-400" />
-                    </div>
-
+                  <div className="flex flex-col sm:grid sm:grid-cols-2 gap-3 items-stretch sm:items-center relative">
                     {/* Your Package (You Send) */}
-                    <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-3 flex flex-col gap-2">
+                    <div className="w-full bg-slate-950/60 border border-slate-800 rounded-2xl p-3 flex flex-col gap-2">
                       <div className="text-[10px] uppercase font-bold text-slate-500">
                         You Send ({userPlayers.length})
                       </div>
@@ -213,8 +209,12 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
                       </div>
                     </div>
 
+                    <div className="self-center z-10 w-8 h-8 rounded-full bg-slate-800 border border-slate-700 text-slate-300 flex items-center justify-center -my-1 sm:my-0 sm:absolute sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2">
+                      <ArrowLeftRight className="w-4 h-4 text-blue-400" />
+                    </div>
+
                     {/* Opponent Package (You Receive) */}
-                    <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-3 flex flex-col gap-2">
+                    <div className="w-full bg-slate-950/60 border border-slate-800 rounded-2xl p-3 flex flex-col gap-2">
                       <div className="text-[10px] uppercase font-bold text-emerald-500">
                         You Receive ({partnerPlayers.length})
                       </div>
@@ -349,7 +349,7 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div className="flex flex-col sm:grid sm:grid-cols-2 gap-3 text-xs">
                     <div className="bg-slate-950/40 border border-slate-800/60 rounded-xl p-2.5">
                       <div className="text-[10px] uppercase font-bold text-slate-500 mb-1">
                         You Offered ({userPlayers.length})

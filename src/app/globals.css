@@ -7,6 +7,15 @@
   --foreground: #f3f4f6;
 }
 
+html, body {
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button, a, input, select {
+  touch-action: manipulation;
+}
+
 body {
   color: var(--foreground);
   background: var(--background);
@@ -19,8 +28,14 @@ body {
   position: relative;
   width: 100%;
   max-width: 380px;
-  height: 540px;
+  height: 440px;
   perspective: 1000px;
+}
+
+@media (min-width: 640px) {
+  .card-stack {
+    height: 540px;
+  }
 }
 
 /* Custom scrollbars */

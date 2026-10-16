@@ -7,6 +7,7 @@ import {
   getLeagueById,
   saveLeague,
   getStoredUserClaim,
+  removeStoredUserClaim,
   getLocalSwipes,
   saveLocalSwipes,
   getLocalMatches,
@@ -266,8 +267,8 @@ export default function Home() {
         setSelectedOfferedPlayerIds([]);
         setActiveTab('lobby');
       }
-      setExcludedTeamIds(getLocalExcludedTeamIds(selectedLeague.espnLeagueId, resolvedTeamId));
     }
+    setExcludedTeamIds(getLocalExcludedTeamIds(selectedLeague.espnLeagueId, resolvedTeamId));
 
     // Hydrate latest team claims, user swipes, matches, and deleted matches from backend server
     syncLeagueStateWithServer(selectedLeague, resolvedTeamId).then((serverView) => {
@@ -383,6 +384,12 @@ export default function Home() {
           serverView.matches.length === 0 &&
           serverDeleted.length === 0 &&
           serverView.mySwipes.length === 0;
+
+        if (isServerReset && latestLeague?.espnLeagueId) {
+          saveLocalMatches(latestLeague.espnLeagueId, []);
+          saveLocalDeletedMatches(latestLeague.espnLeagueId, []);
+          saveLocalSwipes(latestLeague.espnLeagueId, []);
+        }
 
         setDeletedMatches((prevDel) =>
           isServerReset
@@ -1052,6 +1059,14 @@ export default function Home() {
 
   const handleLogout = async () => {
     await logoutAccount();
+    if (league) {
+      removeStoredUserClaim(league.espnLeagueId);
+    }
+    setUserTeamId(null);
+    setSelectedOfferedPlayerIds([]);
+    setSwipes([]);
+    setMatches([]);
+    setDeletedMatches([]);
     handleUserChange(null);
   };
 
@@ -1063,7 +1078,7 @@ export default function Home() {
   // If no league is loaded yet, show the Home Hero
   if (!league) {
     return (
-      <div className="min-h-screen flex flex-col">
+      <div className="min-h-[100dvh] flex flex-col">
         <Navbar
           league={null}
           currentTeam={null}
@@ -1111,7 +1126,7 @@ export default function Home() {
   // If the user hasn't claimed a team in this league yet, show the Locker Room
   if (!userTeam) {
     return (
-      <div className="min-h-screen flex flex-col">
+      <div className="min-h-[100dvh] flex flex-col">
         <Navbar
           league={league}
           currentTeam={null}
@@ -1125,22 +1140,25 @@ export default function Home() {
           onLogout={handleLogout}
           onOpenResetSwipes={() => setIsResetModalOpen(true)}
         />
-        <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6">
-          {resetNotification && (
-            <div className="w-full max-w-xl mx-auto mb-4 px-4 py-3 rounded-2xl bg-slate-900 border border-emerald-500/40 text-xs font-semibold flex items-center justify-between shadow-xl shadow-emerald-950/20 animate-in fade-in slide-in-from-top-1 duration-200">
-              <div className="flex items-center gap-2 text-emerald-300">
-                <RotateCcw className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                <span>{resetNotification}</span>
+        <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6 pb-20 sm:pb-6">
+          {/* Floating Notification Toasts */}
+          <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-sm pointer-events-none flex flex-col gap-2">
+            {resetNotification && (
+              <div className="pointer-events-auto w-full px-3.5 py-2.5 rounded-2xl bg-slate-900/95 border border-emerald-500/40 text-xs font-semibold flex items-center justify-between shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="flex items-center gap-2 text-emerald-300">
+                  <RotateCcw className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                  <span>{resetNotification}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setResetNotification(null)}
+                  className="text-xs text-slate-400 hover:text-white ml-2 flex-shrink-0"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => setResetNotification(null)}
-                className="text-xs text-slate-400 hover:text-white ml-2 flex-shrink-0"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
+            )}
+          </div>
           <LeagueLockerRoom
             league={league}
             currentTeamId={userTeamId}
@@ -1180,7 +1198,7 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-[100dvh] flex flex-col">
       {/* Top Navigation */}
       <Navbar
         league={league}
@@ -1196,7 +1214,42 @@ export default function Home() {
         onOpenResetSwipes={() => setIsResetModalOpen(true)}
       />
 
-      <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6 flex flex-col items-center justify-center">
+      <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6 pb-20 sm:pb-6 flex flex-col items-center justify-center">
+        {/* Floating Notification Toasts */}
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-sm pointer-events-none flex flex-col gap-2">
+          {resetNotification && (
+            <div className="pointer-events-auto w-full px-3.5 py-2.5 rounded-2xl bg-slate-900/95 border border-emerald-500/40 text-xs font-semibold flex items-center justify-between shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="flex items-center gap-2 text-emerald-300">
+                <RotateCcw className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                <span>{resetNotification}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setResetNotification(null)}
+                className="text-xs text-slate-400 hover:text-white ml-2 flex-shrink-0"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          {excludeNotification && (
+            <div className="pointer-events-auto w-full px-3.5 py-2.5 rounded-2xl bg-slate-900/95 border border-rose-500/40 text-xs font-semibold flex items-center justify-between shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="flex items-center gap-2 text-rose-300 truncate">
+                <UserX className="w-4 h-4 text-rose-400 flex-shrink-0" />
+                <span className="truncate">{excludeNotification}</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleIncludeAllTeams}
+                className="text-xs font-bold text-blue-400 hover:text-white underline ml-2 flex-shrink-0"
+              >
+                Undo
+              </button>
+            </div>
+          )}
+        </div>
+
         {/* TAB 0: LEAGUE LOCKER ROOM (LOBBY & TEAM CLAIMING) */}
         {activeTab === 'lobby' && (
           <LeagueLockerRoom
@@ -1262,40 +1315,6 @@ export default function Home() {
               </button>
             </div>
 
-            {/* Reset League Swipes Notification Toast */}
-            {resetNotification && (
-              <div className="w-full max-w-sm mb-3 px-3.5 py-2.5 rounded-2xl bg-slate-900 border border-emerald-500/40 text-xs font-semibold flex items-center justify-between shadow-xl shadow-emerald-950/20 animate-in fade-in slide-in-from-top-1 duration-200">
-                <div className="flex items-center gap-2 text-emerald-300">
-                  <RotateCcw className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                  <span>{resetNotification}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setResetNotification(null)}
-                  className="text-xs text-slate-400 hover:text-white ml-2 flex-shrink-0"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
-
-            {/* Excluded Owner Notification Toast */}
-            {excludeNotification && (
-              <div className="w-full max-w-sm mb-3 px-3.5 py-2.5 rounded-2xl bg-slate-900 border border-rose-500/30 text-xs font-semibold flex items-center justify-between shadow-xl shadow-rose-950/20 animate-in fade-in slide-in-from-top-1 duration-200">
-                <div className="flex items-center gap-2 text-rose-300 truncate">
-                  <UserX className="w-4 h-4 text-rose-400 flex-shrink-0" />
-                  <span className="truncate">{excludeNotification}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleIncludeAllTeams}
-                  className="text-xs font-bold text-blue-400 hover:text-white underline ml-2 flex-shrink-0"
-                >
-                  Undo
-                </button>
-              </div>
-            )}
-
             {/* Target Positions & Trade With Filter Bar */}
             <PositionFilterBar
               selectedPositions={selectedPositions}
@@ -1339,7 +1358,7 @@ export default function Home() {
                 </AnimatePresence>
               ) : offeredPlayers.length < requiredOfferedCount ? (
                 /* Empty or Incomplete Selection State */
-                <div className="w-full h-[540px] rounded-3xl bg-slate-900/70 border border-dashed border-amber-500/30 flex flex-col items-center justify-center p-8 text-center">
+                <div className="w-full h-[440px] sm:h-[540px] rounded-3xl bg-slate-900/70 border border-dashed border-amber-500/30 flex flex-col items-center justify-center p-8 text-center">
                   <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mb-4">
                     <Sparkles className="w-8 h-8" />
                   </div>
@@ -1360,7 +1379,7 @@ export default function Home() {
                 </div>
               ) : allOpponentsExcluded ? (
                 /* All Opponents Excluded State */
-                <div className="w-full h-[540px] rounded-3xl bg-slate-900/70 border border-dashed border-rose-500/30 flex flex-col items-center justify-center p-8 text-center">
+                <div className="w-full h-[440px] sm:h-[540px] rounded-3xl bg-slate-900/70 border border-dashed border-rose-500/30 flex flex-col items-center justify-center p-8 text-center">
                   <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-center justify-center mb-4">
                     <UserX className="w-8 h-8" />
                   </div>
@@ -1378,7 +1397,7 @@ export default function Home() {
                 </div>
               ) : (
                 /* Cleared Deck State */
-                <div className="w-full h-[540px] rounded-3xl bg-slate-900/70 border border-dashed border-slate-800 flex flex-col items-center justify-center p-8 text-center">
+                <div className="w-full h-[440px] sm:h-[540px] rounded-3xl bg-slate-900/70 border border-dashed border-slate-800 flex flex-col items-center justify-center p-8 text-center">
                   <div className="w-16 h-16 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center mb-4">
                     <UserCheck className="w-8 h-8" />
                   </div>

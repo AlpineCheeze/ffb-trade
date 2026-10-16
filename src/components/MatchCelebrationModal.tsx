@@ -74,8 +74,9 @@ export const MatchCelebrationModal: React.FC<MatchCelebrationModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto bg-gradient-to-b from-slate-900 to-slate-950 border border-blue-500/40 rounded-3xl p-6 sm:p-8 shadow-[0_0_50px_rgba(59,130,246,0.3)] text-center">
+    <div className="fixed inset-0 z-50 overflow-y-auto p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200">
+      <div className="flex min-h-full items-center justify-center">
+        <div className="relative w-full max-w-lg my-auto max-h-[90vh] overflow-y-auto bg-gradient-to-b from-slate-900 to-slate-950 border border-blue-500/40 rounded-3xl p-6 sm:p-8 shadow-[0_0_50px_rgba(59,130,246,0.3)] text-center">
         {/* Close Button */}
         <button
           onClick={onClose}
@@ -180,5 +181,6 @@ export const MatchCelebrationModal: React.FC<MatchCelebrationModalProps> = ({
         </div>
       </div>
     </div>
-  );
+  </div>
+);
 };

@@ -372,7 +372,7 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
                 value={teamSearchQuery}
                 onChange={(e) => setTeamSearchQuery(e.target.value)}
                 placeholder="Search team or owner..."
-                className="w-full bg-slate-950/80 border border-slate-800 rounded-xl pl-8 pr-7 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition"
+                className="w-full bg-slate-950/80 border border-slate-800 rounded-xl pl-8 pr-7 py-1.5 text-base sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition"
               />
               {teamSearchQuery && (
                 <button

@@ -190,7 +190,7 @@ export const LeagueLockerRoom: React.FC<LeagueLockerRoomProps> = ({
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
             <button
               onClick={handleRefreshRosters}
               disabled={isRefreshing}
@@ -423,71 +423,75 @@ export const LeagueLockerRoom: React.FC<LeagueLockerRoomProps> = ({
 
       {/* Claim Team Modal */}
       {claimingTeam && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl">
-            <h3 className="text-xl font-black text-white">
-              Claim {claimingTeam.name}
-            </h3>
-            <p className="text-xs text-slate-400 mt-1 mb-4">
-              You will manage this roster and shop players from this team to league mates.
-            </p>
+        <div className="fixed inset-0 z-50 overflow-y-auto p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="flex min-h-full items-center justify-center">
+            <div className="relative w-full max-w-md my-auto bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl">
+              <h3 className="text-xl font-black text-white">
+                Claim {claimingTeam.name}
+              </h3>
+              <p className="text-xs text-slate-400 mt-1 mb-4">
+                You will manage this roster and shop players from this team to league mates.
+              </p>
 
-            {currentUser ? (
-              <div className="flex items-center gap-2 p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-medium mb-4">
-                <UserCheck className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                <span>
-                  Linking to account <strong className="text-white">@{currentUser.username}</strong>. This team will automatically sync across all your devices.
-                </span>
-              </div>
-            ) : (
-              <div className="flex items-center justify-between p-3 rounded-2xl bg-blue-500/10 border border-blue-500/30 text-blue-300 text-xs font-medium mb-4">
-                <span>Want to access this team on other devices?</span>
-                {onOpenAuth && (
+              {currentUser ? (
+                <div className="flex items-center gap-2 p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-medium mb-4">
+                  <UserCheck className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                  <span>
+                    Linking to account <strong className="text-white">@{currentUser.username}</strong>. This team will automatically sync across all your devices.
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between p-3 rounded-2xl bg-blue-500/10 border border-blue-500/30 text-blue-300 text-xs font-medium mb-4">
+                  <span>Want to access this team on other devices?</span>
+                  {onOpenAuth && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setClaimingTeam(null);
+                        onOpenAuth();
+                      }}
+                      className="underline font-bold text-white hover:text-blue-200 ml-2 flex-shrink-0"
+                    >
+                      Log In First
+                    </button>
+                  )}
+                </div>
+              )}
+
+              <form onSubmit={handleConfirmClaim} className="space-y-4">
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                    Your Name or Fantasy Handle
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Dave M. or @TouchdownKing"
+                    value={managerName}
+                    onChange={(e) => setManagerName(e.target.value)}
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 focus:border-blue-500 text-base sm:text-sm text-white outline-none"
+                  />
+                </div>
+
+                <div className="flex gap-2 pt-2">
                   <button
                     type="button"
-                    onClick={() => {
-                      setClaimingTeam(null);
-                      onOpenAuth();
-                    }}
-                    className="underline font-bold text-white hover:text-blue-200 ml-2 flex-shrink-0"
+                    onClick={() => setClaimingTeam(null)}
+                    className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs"
                   >
-                    Log In First
+                    Cancel
                   </button>
-                )}
-              </div>
-            )}
-
-            <form onSubmit={handleConfirmClaim} className="space-y-4">
-              <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-                  Your Name or Fantasy Handle
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Dave M. or @TouchdownKing"
-                  value={managerName}
-                  onChange={(e) => setManagerName(e.target.value)}
-                  autoFocus
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 focus:border-blue-500 text-sm text-white outline-none"
-                />
-              </div>
-
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setClaimingTeam(null)}
-                  className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-600/30"
-                >
-                  Confirm & Start Swiping
-                </button>
-              </div>
-            </form>
+                  <button
+                    type="submit"
+                    className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-600/30"
+                  >
+                    Confirm & Start Swiping
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       )}

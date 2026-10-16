@@ -63,7 +63,7 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
       dragElastic={0.7}
       onDragEnd={handleDragEnd}
       whileTap={isFront ? { cursor: 'grabbing' } : {}}
-      className={`absolute inset-0 w-full h-[540px] rounded-3xl bg-slate-900/95 border border-slate-800 shadow-2xl overflow-hidden flex flex-col cursor-grab select-none touch-pan-y transition-shadow ${
+      className={`absolute inset-0 w-full h-[440px] sm:h-[540px] rounded-3xl bg-slate-900/95 border border-slate-800 shadow-2xl overflow-hidden flex flex-col cursor-grab select-none touch-none transition-shadow ${
         isFront ? 'shadow-blue-900/20 shadow-2xl' : 'scale-95 translate-y-3 opacity-60 pointer-events-none'
       }`}
     >
@@ -91,7 +91,7 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
       {/* SINGLE PLAYER CARD */}
       {!isPackage && players[0] && (
         <>
-          <div className="relative h-72 bg-gradient-to-b from-slate-800/80 via-slate-900/40 to-slate-900 p-5 flex flex-col justify-between overflow-hidden">
+          <div className="relative h-52 sm:h-72 bg-gradient-to-b from-slate-800/80 via-slate-900/40 to-slate-900 p-5 flex flex-col justify-between overflow-hidden">
             <div className="absolute -top-10 -right-10 text-9xl font-black text-slate-800/25 select-none pointer-events-none">
               {players[0].position}
             </div>
@@ -118,7 +118,7 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
               </div>
             </div>
 
-            <div className="absolute inset-x-0 bottom-0 h-[250px] flex justify-center items-end pointer-events-none">
+            <div className="absolute inset-x-0 bottom-0 h-[180px] sm:h-[250px] flex justify-center items-end pointer-events-none">
               {!imgErrors[players[0].id] ? (
                 <img
                   src={players[0].headshotUrl}
@@ -143,19 +143,19 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
                   </h2>
                   <div className="flex items-center justify-between gap-1 mt-0.5">
                     <p className="text-xs text-slate-400 font-medium truncate flex-1">
-                      Current Owner: <span className="text-blue-400 font-semibold">{ownerTeam?.ownerName || 'Opponent'}</span> ({ownerTeam?.name})
+                      Current Owner: <span className="text-blue-400 font-semibold">{ownerTeam?.claimedBy || ownerTeam?.ownerName || 'Opponent'}</span> ({ownerTeam?.name})
                     </p>
                     {onExcludeOwner && ownerTeam && (
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          onExcludeOwner(ownerTeam.id, ownerTeam.ownerName || ownerTeam.name);
+                          onExcludeOwner(ownerTeam.id, ownerTeam.claimedBy || ownerTeam.ownerName || ownerTeam.name);
                         }}
-                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-slate-800 hover:border-rose-500/30 transition-all flex-shrink-0"
-                        title={`Exclude ${ownerTeam.ownerName || ownerTeam.name} from trade deck`}
+                        className="inline-flex items-center justify-center gap-1 min-h-[44px] min-w-[44px] px-2 py-1.5 rounded-lg text-[10px] font-bold text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-slate-800 hover:border-rose-500/30 transition-all flex-shrink-0"
+                        title={`Exclude ${ownerTeam.claimedBy || ownerTeam.ownerName || ownerTeam.name} from trade deck`}
                       >
-                        <UserX className="w-3 h-3 text-rose-400" />
+                        <UserX className="w-3.5 h-3.5 text-rose-400" />
                         <span>Exclude Owner</span>
                       </button>
                     )}
@@ -197,44 +197,45 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
                 </div>
               </div>
 
-              {/* Expandable Season Stats Modal / Drawer */}
+              {/* Compact 2-Column Key-Value Season Stats Grid */}
               {showStats && players[0].stats && (
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}
-                  className="mt-1 p-2.5 rounded-xl bg-slate-950/90 border border-slate-800 text-xs text-slate-300 space-y-1 max-h-24 overflow-y-auto"
+                  className="mt-1.5 p-2 rounded-xl bg-slate-950/90 border border-slate-800 text-xs text-slate-300"
                 >
-                  <div className="font-semibold text-slate-400 text-[10px] uppercase tracking-wider mb-0.5">Season Metrics</div>
-                  {players[0].stats.passingYards !== undefined && (
-                    <div className="flex justify-between text-[11px]">
-                      <span>Pass Yards:</span>
-                      <span className="font-bold text-white">{players[0].stats.passingYards} yds</span>
-                    </div>
-                  )}
-                  {players[0].stats.rushingYards !== undefined && (
-                    <div className="flex justify-between text-[11px]">
-                      <span>Rush Yards:</span>
-                      <span className="font-bold text-white">{players[0].stats.rushingYards} yds</span>
-                    </div>
-                  )}
-                  {players[0].stats.receivingYards !== undefined && (
-                    <div className="flex justify-between text-[11px]">
-                      <span>Rec Yards / Rec:</span>
-                      <span className="font-bold text-white">{players[0].stats.receivingYards} yds ({players[0].stats.receptions || 0})</span>
-                    </div>
-                  )}
-                  {players[0].stats.touchdowns !== undefined && (
-                    <div className="flex justify-between text-[11px]">
-                      <span>Total TDs:</span>
-                      <span className="font-bold text-amber-400">{players[0].stats.touchdowns} TDs</span>
-                    </div>
-                  )}
-                  {players[0].stats.snapSharePercent !== undefined && (
-                    <div className="flex justify-between text-[11px]">
-                      <span>Snap Share:</span>
-                      <span className="font-bold text-blue-400">{players[0].stats.snapSharePercent}%</span>
-                    </div>
-                  )}
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+                    {players[0].stats.passingYards !== undefined && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Pass:</span>
+                        <span className="font-bold text-white">{players[0].stats.passingYards} yds</span>
+                      </div>
+                    )}
+                    {players[0].stats.rushingYards !== undefined && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Rush:</span>
+                        <span className="font-bold text-white">{players[0].stats.rushingYards} yds</span>
+                      </div>
+                    )}
+                    {players[0].stats.receivingYards !== undefined && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Rec:</span>
+                        <span className="font-bold text-white">{players[0].stats.receivingYards} yds</span>
+                      </div>
+                    )}
+                    {players[0].stats.touchdowns !== undefined && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">TDs:</span>
+                        <span className="font-bold text-amber-400">{players[0].stats.touchdowns}</span>
+                      </div>
+                    )}
+                    {players[0].stats.snapSharePercent !== undefined && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Snap:</span>
+                        <span className="font-bold text-blue-400">{players[0].stats.snapSharePercent}%</span>
+                      </div>
+                    )}
+                  </div>
                 </motion.div>
               )}
             </div>
@@ -262,19 +263,19 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
               </span>
               <div className="flex items-center gap-2 mt-1">
                 <span className="text-xs text-slate-400 font-semibold truncate">
-                  From: <span className="text-blue-400">{ownerTeam?.ownerName}</span> ({ownerTeam?.name})
+                  From: <span className="text-blue-400">{ownerTeam?.claimedBy || ownerTeam?.ownerName || 'Opponent'}</span> ({ownerTeam?.name})
                 </span>
                 {onExcludeOwner && ownerTeam && (
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onExcludeOwner(ownerTeam.id, ownerTeam.ownerName || ownerTeam.name);
+                      onExcludeOwner(ownerTeam.id, ownerTeam.claimedBy || ownerTeam.ownerName || ownerTeam.name);
                     }}
-                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-slate-800 hover:border-rose-500/30 transition-all flex-shrink-0"
-                    title={`Exclude ${ownerTeam.ownerName || ownerTeam.name} from trade deck`}
+                    className="inline-flex items-center justify-center gap-1 min-h-[44px] min-w-[44px] px-2 py-1.5 rounded-lg text-[10px] font-bold text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-slate-800 hover:border-rose-500/30 transition-all flex-shrink-0"
+                    title={`Exclude ${ownerTeam.claimedBy || ownerTeam.ownerName || ownerTeam.name} from trade deck`}
                   >
-                    <UserX className="w-3 h-3 text-rose-400" />
+                    <UserX className="w-3.5 h-3.5 text-rose-400" />
                     <span>Exclude</span>
                   </button>
                 )}

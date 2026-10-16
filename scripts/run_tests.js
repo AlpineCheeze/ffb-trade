@@ -6,3 +6,4 @@ const jiti = createJiti(__filename, {
   },
 });
 jiti('./test_reset.ts');
+jiti('./test_claims.ts');

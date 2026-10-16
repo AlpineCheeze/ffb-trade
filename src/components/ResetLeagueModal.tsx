@@ -22,14 +22,15 @@ export const ResetLeagueModal: React.FC<ResetLeagueModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 overflow-y-auto p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200"
       onClick={(e) => {
         if (e.target === e.currentTarget && !isResetting) {
           onClose();
         }
       }}
     >
-      <div className="relative w-full max-w-lg rounded-3xl bg-slate-900 border border-slate-800 p-6 sm:p-8 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+      <div className="flex min-h-full items-center justify-center">
+        <div className="relative w-full max-w-lg my-auto rounded-3xl bg-slate-900 border border-slate-800 p-6 sm:p-8 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
         {/* Close Button */}
         <button
           onClick={onClose}
@@ -115,5 +116,6 @@ export const ResetLeagueModal: React.FC<ResetLeagueModalProps> = ({
         </div>
       </div>
     </div>
-  );
+  </div>
+);
 };

@@ -144,6 +144,20 @@ export function getStoredUserClaim(espnLeagueId: string): string | null {
   return null;
 }
 
+export function removeStoredUserClaim(espnLeagueId: string): void {
+  if (typeof window !== 'undefined') {
+    try {
+      const clean = espnLeagueId.trim();
+      localStorage.removeItem(CLAIM_STORAGE_PREFIX + clean);
+      for (const prefix of LEGACY_CLAIM_STORAGE_PREFIXES) {
+        localStorage.removeItem(prefix + clean);
+      }
+    } catch {
+      // Ignore
+    }
+  }
+}
+
 export function getLocalSwipes(espnLeagueId: string): Swipe[] {
   if (typeof window === 'undefined') return [];
   try {

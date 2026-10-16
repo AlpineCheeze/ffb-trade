@@ -299,7 +299,10 @@ export const HomeHero: React.FC<HomeHeroProps> = ({
                   placeholder={authMode === 'register' ? 'Username (e.g. BlitzKing)' : 'Username'}
                   value={usernameInput}
                   onChange={(e) => setUsernameInput(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-xs font-semibold text-white placeholder-slate-600 outline-none transition"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-base sm:text-sm font-semibold text-white placeholder-slate-600 outline-none transition"
                 />
               </div>
 
@@ -310,7 +313,7 @@ export const HomeHero: React.FC<HomeHeroProps> = ({
                   placeholder={authMode === 'register' ? 'Password (min 4 chars)' : 'Password'}
                   value={passwordInput}
                   onChange={(e) => setPasswordInput(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-xs font-semibold text-white placeholder-slate-600 outline-none transition"
+                  className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-base sm:text-sm font-semibold text-white placeholder-slate-600 outline-none transition"
                 />
               </div>
             </div>
@@ -358,10 +361,12 @@ export const HomeHero: React.FC<HomeHeroProps> = ({
               <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
                 placeholder="Enter ESPN League ID (e.g. 397620)"
                 value={leagueIdInput}
                 onChange={(e) => setLeagueIdInput(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 rounded-2xl bg-slate-950 border border-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm font-semibold text-white placeholder-slate-600 outline-none transition"
+                className="w-full pl-10 pr-4 py-3 rounded-2xl bg-slate-950 border border-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-base sm:text-sm font-semibold text-white placeholder-slate-600 outline-none transition"
               />
             </div>
 
@@ -429,7 +434,7 @@ export const HomeHero: React.FC<HomeHeroProps> = ({
                     placeholder="Paste espn_s2 token (AEB...)"
                     value={espnS2}
                     onChange={(e) => handleEspnS2Change(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white placeholder-slate-600 outline-none focus:border-blue-500"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-base sm:text-sm text-white placeholder-slate-600 outline-none focus:border-blue-500"
                   />
                 </div>
 
@@ -442,7 +447,7 @@ export const HomeHero: React.FC<HomeHeroProps> = ({
                     placeholder="{12345678-ABCD-1234-ABCD-1234567890AB}"
                     value={swid}
                     onChange={(e) => handleSwidChange(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white placeholder-slate-600 outline-none focus:border-blue-500 font-mono"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-base sm:text-sm text-white placeholder-slate-600 outline-none focus:border-blue-500 font-mono"
                   />
                 </div>
 

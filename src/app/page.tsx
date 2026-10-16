@@ -1091,7 +1091,7 @@ export default function Home() {
           onOpenAuth={() => handleOpenAuth('login')}
           onLogout={handleLogout}
         />
-        <main className="flex-1 flex flex-col justify-center items-center py-6">
+        <main className="flex-1 flex flex-col justify-start sm:justify-center items-center py-6 px-4">
           <HomeHero
             currentUser={currentUser}
             onUserChange={handleUserChange}
@@ -1140,7 +1140,7 @@ export default function Home() {
           onLogout={handleLogout}
           onOpenResetSwipes={() => setIsResetModalOpen(true)}
         />
-        <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6 pb-20 sm:pb-6">
+        <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6 pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] sm:pb-6">
           {/* Floating Notification Toasts */}
           <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-sm pointer-events-none flex flex-col gap-2">
             {resetNotification && (
@@ -1214,7 +1214,7 @@ export default function Home() {
         onOpenResetSwipes={() => setIsResetModalOpen(true)}
       />
 
-      <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6 pb-20 sm:pb-6 flex flex-col items-center justify-center">
+      <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6 pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] sm:pb-6 flex flex-col items-center justify-start sm:justify-center">
         {/* Floating Notification Toasts */}
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-sm pointer-events-none flex flex-col gap-2">
           {resetNotification && (

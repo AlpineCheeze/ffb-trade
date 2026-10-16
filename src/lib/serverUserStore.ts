@@ -357,3 +357,48 @@ export function logoutUser(token: string): boolean {
 
   return false;
 }
+
+/**
+ * Completely clears all stored user accounts, active sessions, and claimed teams
+ * from memory and persistent disk for a fresh testing clean slate.
+ */
+export function clearAllServerUsers(): { deletedUsers: number } {
+  userMemoryStore.clear();
+  globalThis.__tradeHornyUsersLoaded = false;
+  let count = 0;
+
+  const dir = getWritableUserDir();
+  if (dir && fs.existsSync(dir)) {
+    try {
+      const files = fs.readdirSync(dir);
+      for (const file of files) {
+        if (file.endsWith('.json') && !file.startsWith('.')) {
+          try {
+            fs.unlinkSync(path.join(dir, file));
+            count++;
+          } catch (e) {
+            console.error(`Failed to delete user file ${file}:`, e);
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Failed to read users directory for clearing:', e);
+    }
+  }
+
+  // Also check for any root users.json in candidates
+  const rootCandidates = [
+    ...(process.env.DATA_DIR ? [path.join(process.env.DATA_DIR, 'users.json')] : []),
+    path.join(process.cwd(), '.data', 'users.json'),
+  ];
+  for (const rootFile of rootCandidates) {
+    if (fs.existsSync(rootFile)) {
+      try {
+        fs.unlinkSync(rootFile);
+        count++;
+      } catch {}
+    }
+  }
+
+  return { deletedUsers: count };
+}

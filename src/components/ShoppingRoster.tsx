@@ -184,6 +184,18 @@ export const ShoppingRoster: React.FC<ShoppingRosterProps> = ({
           );
         })}
       </div>
+
+      {/* Bottom Action Bar for Mobile & Easy Access */}
+      <div className="mt-4 pt-3 border-t border-slate-800 flex justify-end">
+        <button
+          onClick={onDoneShopping}
+          disabled={!isSelectionComplete}
+          className="w-full sm:w-auto px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed font-bold text-sm text-white flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30 transition-all hover:scale-105 active:scale-95 touch-manipulation"
+        >
+          <span>Start Swiping</span>
+          <ArrowRight className="w-4 h-4" />
+        </button>
+      </div>
     </div>
   );
 };

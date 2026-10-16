@@ -181,9 +181,9 @@ export const HomeHero: React.FC<HomeHeroProps> = ({
       </div>
 
       {/* Main Headline */}
-      <h1 className="text-5xl sm:text-7xl font-black tracking-tight text-white flex items-center justify-center gap-3 sm:gap-5 leading-[1.1] my-2">
+      <h1 className="text-4xl min-[360px]:text-5xl sm:text-7xl font-black tracking-tight text-white flex items-center justify-center gap-2.5 sm:gap-5 leading-[1.1] my-2">
         <span>Trade</span>
-        <UnicornLogo className="w-12 h-12 sm:w-16 sm:h-16 fill-blue-500 drop-shadow-[0_0_24px_rgba(59,130,246,0.5)] flex-shrink-0" />
+        <UnicornLogo className="w-10 h-10 min-[360px]:w-12 min-[360px]:h-12 sm:w-16 sm:h-16 fill-blue-500 drop-shadow-[0_0_24px_rgba(59,130,246,0.5)] flex-shrink-0" />
         <span>Horny</span>
       </h1>
 

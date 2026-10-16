@@ -37,15 +37,15 @@ export const Navbar: React.FC<NavbarProps> = ({
       <header className="sticky top-0 z-40 w-full bg-slate-950/80 backdrop-blur-lg border-b border-slate-800 pt-[env(safe-area-inset-top,0px)]">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
           {/* Brand / Logo & Home Link */}
-          <div className="flex items-center gap-3 cursor-pointer" onClick={onGoHome}>
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-lg shadow-blue-500/25">
+          <div className="flex items-center gap-2 sm:gap-3 cursor-pointer min-w-0 flex-1 mr-2" onClick={onGoHome}>
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-lg shadow-blue-500/25 flex-shrink-0">
               <UnicornLogo className="w-6 h-6 fill-white" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-black text-xl tracking-tight text-white">Trade Horny</span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="font-black text-lg sm:text-xl tracking-tight text-white truncate">Trade Horny</span>
                 {currentTeam && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30 truncate max-w-[120px]">
+                  <span className="hidden min-[380px]:inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30 truncate max-w-[90px] sm:max-w-[120px] flex-shrink-0">
                     {currentTeam.name}
                   </span>
                 )}
@@ -193,7 +193,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         <nav className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 backdrop-blur-lg border-t border-slate-800 pb-[env(safe-area-inset-bottom,0px)] px-2 py-1.5 flex items-center justify-around">
           <button
             onClick={() => onTabChange('lobby')}
-            className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition ${
+            className={`min-h-[44px] min-w-[56px] flex flex-col items-center justify-center py-1 px-3 rounded-xl transition touch-manipulation active:scale-95 ${
               activeTab === 'lobby' ? 'text-blue-400 font-bold' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
@@ -203,7 +203,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <button
             onClick={() => onTabChange('deck')}
-            className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition ${
+            className={`min-h-[44px] min-w-[56px] flex flex-col items-center justify-center py-1 px-3 rounded-xl transition touch-manipulation active:scale-95 ${
               activeTab === 'deck' ? 'text-blue-400 font-bold' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
@@ -213,7 +213,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <button
             onClick={() => onTabChange('matches')}
-            className={`relative flex flex-col items-center justify-center py-1 px-3 rounded-xl transition ${
+            className={`min-h-[44px] min-w-[56px] relative flex flex-col items-center justify-center py-1 px-3 rounded-xl transition touch-manipulation active:scale-95 ${
               activeTab === 'matches' ? 'text-blue-400 font-bold' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
@@ -230,7 +230,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <button
             onClick={() => onTabChange('roster')}
-            className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition ${
+            className={`min-h-[44px] min-w-[56px] flex flex-col items-center justify-center py-1 px-3 rounded-xl transition touch-manipulation active:scale-95 ${
               activeTab === 'roster' ? 'text-blue-400 font-bold' : 'text-slate-400 hover:text-slate-200'
             }`}
           >

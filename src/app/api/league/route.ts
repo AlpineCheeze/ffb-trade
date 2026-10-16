@@ -8,11 +8,12 @@ import {
   deleteServerMatch,
   deleteAllServerMatches,
   resetServerLeagueSwipes,
+  clearAllServerLeagues,
   toClientLeagueView,
   sanitizeLeagueId,
 } from '@/lib/serverLeagueStore';
 import { fetchEspnLeagueServer } from '@/lib/espn';
-import { linkUserTeamClaim } from '@/lib/serverUserStore';
+import { linkUserTeamClaim, clearAllServerUsers } from '@/lib/serverUserStore';
 import { Swipe, TradeType, Match } from '@/types/fantasy';
 
 export async function GET(req: NextRequest) {
@@ -316,6 +317,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         success: true,
         ...view,
+      });
+    }
+
+    if (action === 'clear_all_data' || action === 'admin_clear') {
+      const leagueResult = clearAllServerLeagues();
+      const userResult = clearAllServerUsers();
+      return NextResponse.json({
+        success: true,
+        message: 'All league and user testing data cleared. Clean slate initialized.',
+        leaguesDeleted: leagueResult.deletedLeagues,
+        demoReseeded: leagueResult.demoReseeded,
+        usersDeletedCount: userResult.deletedUsers,
       });
     }
 

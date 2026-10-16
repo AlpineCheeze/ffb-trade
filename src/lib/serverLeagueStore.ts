@@ -877,6 +877,44 @@ export function deleteServerLeagueState(espnLeagueId: string): boolean {
 }
 
 /**
+ * Completely clears all stored league data from memory and disk.
+ * Wipes all user test leagues, active swipes, and matches.
+ * Re-seeds the demo league (12345678) with a fresh, clean sandbox state.
+ */
+export function clearAllServerLeagues(): { deletedLeagues: string[]; demoReseeded: boolean } {
+  const dir = getWritableDataDir();
+  const deleted: string[] = [];
+  memoryStore.clear();
+
+  if (dir && fs.existsSync(dir)) {
+    try {
+      const files = fs.readdirSync(dir);
+      for (const file of files) {
+        if (file.endsWith('.json') && !file.startsWith('.')) {
+          try {
+            const leagueId = file.replace(/\.json$/, '');
+            fs.unlinkSync(path.join(dir, file));
+            deleted.push(leagueId);
+          } catch (e) {
+            console.error(`Failed to delete league file ${file}:`, e);
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Failed to read leagues directory for clearing:', e);
+    }
+  }
+
+  // Re-seed demo league 12345678 with a clean initial state
+  const demoState = getServerLeagueState('12345678');
+
+  return {
+    deletedLeagues: deleted,
+    demoReseeded: demoState !== null,
+  };
+}
+
+/**
  * Builds a privacy-safe ClientLeagueView for a specific team.
  * Unreciprocated swipes AND matches belonging only to third-party teams are NEVER exposed.
  */

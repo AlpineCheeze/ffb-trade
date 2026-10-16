@@ -14,6 +14,10 @@ async function run() {
   if (claimsModule && claimsModule.testPromise) {
     await claimsModule.testPromise;
   }
+  const clearModule = jiti('./test_clear.ts');
+  if (clearModule && clearModule.testPromise) {
+    await clearModule.testPromise;
+  }
 }
 
 run().catch((err) => {

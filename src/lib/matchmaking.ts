@@ -14,15 +14,16 @@ export function generateSwipeKey(
   offeredIds: string[],
   targetIds: string[]
 ): string {
-  const sortedTargets = [...targetIds].sort().join(',');
-  const sortedOffered = [...offeredIds].sort().join(',');
+  const sortedTargets = Array.isArray(targetIds) ? [...targetIds].sort().join(',') : '';
+  const sortedOffered = Array.isArray(offeredIds) ? [...offeredIds].sort().join(',') : '';
   return `${type}|${sortedOffered}|${sortedTargets}`;
 }
 
 /**
  * Checks if a player's position matches the user's active position filters (including FLEX).
  */
-export function matchesPositionFilter(pos: Position, selectedPositions: Position[]): boolean {
+export function matchesPositionFilter(pos: Position, selectedPositions?: Position[]): boolean {
+  if (!selectedPositions || !Array.isArray(selectedPositions)) return true;
   return (
     selectedPositions.includes(pos) ||
     (selectedPositions.includes('FLEX') && (pos === 'RB' || pos === 'WR' || pos === 'TE'))
@@ -33,9 +34,10 @@ export function matchesPositionFilter(pos: Position, selectedPositions: Position
  * 32-bit MurmurHash3 implementation for high-quality, uniform hash distribution.
  */
 export function hashDeckSeed(key: string, seed: number = 0): number {
-  let h = seed >>> 0;
-  for (let i = 0; i < key.length; i++) {
-    let k = key.charCodeAt(i);
+  const str = String(key);
+  let h = (Number(seed) || 0) >>> 0;
+  for (let i = 0; i < str.length; i++) {
+    let k = str.charCodeAt(i);
     k = Math.imul(k, 0xcc9e2d51);
     k = (k << 15) | (k >>> 17);
     k = Math.imul(k, 0x1b873593);
@@ -43,7 +45,7 @@ export function hashDeckSeed(key: string, seed: number = 0): number {
     h = (h << 13) | (h >>> 19);
     h = Math.imul(h, 5) + 0xe6546b64;
   }
-  h ^= key.length;
+  h ^= str.length;
   h ^= h >>> 16;
   h = Math.imul(h, 0x85ebca6b);
   h ^= h >>> 13;
@@ -60,17 +62,22 @@ export function shuffleDeckItems<T extends { id: string }>(
   items: T[],
   seed: string | number = 'trade_horny_deck_seed'
 ): T[] {
+  if (!Array.isArray(items) || items.length <= 1) {
+    return Array.isArray(items) ? [...items] : [];
+  }
   const seedStr = String(seed);
   const scored = items.map((item, idx) => ({
     item,
-    hash: hashDeckSeed(`${seedStr}::${item.id}`),
+    hash: hashDeckSeed(`${seedStr}::${String(item?.id ?? idx)}`),
     idx,
   }));
 
   scored.sort((a, b) => {
     if (a.hash < b.hash) return -1;
     if (a.hash > b.hash) return 1;
-    const idCmp = a.item.id.localeCompare(b.item.id);
+    const idA = String(a.item?.id ?? a.idx);
+    const idB = String(b.item?.id ?? b.idx);
+    const idCmp = idA.localeCompare(idB);
     if (idCmp !== 0) return idCmp;
     return a.idx - b.idx;
   });
@@ -79,13 +86,13 @@ export function shuffleDeckItems<T extends { id: string }>(
 }
 
 export interface GenerateDeckItemsOptions {
-  league: League;
-  userTeam: Team;
+  league?: League | null;
+  userTeam?: Team | null;
   tradeType: TradeType;
   offeredPlayerIds: string[];
-  swipes: Swipe[];
-  selectedPositions: Position[];
-  includedOpponentTeams: Team[];
+  swipes?: Swipe[];
+  selectedPositions?: Position[];
+  includedOpponentTeams?: Team[];
   seed?: string | number;
 }
 
@@ -99,27 +106,43 @@ export function generateDeckItems({
   userTeam,
   tradeType,
   offeredPlayerIds,
-  swipes,
-  selectedPositions,
+  swipes = [],
+  selectedPositions = ['RB', 'WR', 'TE', 'QB', 'FLEX'],
   includedOpponentTeams,
   seed = 'trade_horny_deck_seed',
 }: GenerateDeckItemsOptions): DeckItem[] {
+  if (!userTeam) return [];
+
   const isTargetTwoPlayers = tradeType === '1-for-2' || tradeType === '2-for-2';
-  const activeOfferedIds = offeredPlayerIds;
+  const activeOfferedIds = Array.isArray(offeredPlayerIds) ? offeredPlayerIds : [];
+  const safeSwipes = Array.isArray(swipes) ? swipes : [];
+
+  // Robust fallback: if includedOpponentTeams is not passed, derive from league
+  // Also strictly exclude userTeam if accidentally included in includedOpponentTeams
+  const candidateTeams = Array.isArray(includedOpponentTeams)
+    ? includedOpponentTeams.filter((t) => t && t.id !== userTeam.id)
+    : league && Array.isArray(league.teams)
+    ? league.teams.filter((t) => t && t.id !== userTeam.id)
+    : [];
 
   const existingSwipeKeys = new Set(
-    swipes
-      .filter((s) => s.teamId === userTeam.id && s.tradeType === tradeType)
-      .map((s) => generateSwipeKey(s.tradeType, s.offeredPlayerIds, s.targetPlayerIds))
+    safeSwipes
+      .filter((s) => s && s.teamId === userTeam.id && s.tradeType === tradeType)
+      .map((s) => generateSwipeKey(s.tradeType, s.offeredPlayerIds || [], s.targetPlayerIds || []))
   );
 
   const rawItems: DeckItem[] = [];
 
   if (!isTargetTwoPlayers) {
     // SINGLE TARGET (1-for-1 or 2-for-1)
-    includedOpponentTeams.forEach((team) => {
-      team.roster.forEach((player) => {
+    candidateTeams.forEach((team) => {
+      const roster = Array.isArray(team.roster) ? team.roster : [];
+      roster.forEach((player) => {
+        if (!player || !player.id) return;
+        // Never include user's offered player in the candidate target deck
+        if (activeOfferedIds.includes(player.id)) return;
         if (!matchesPositionFilter(player.position, selectedPositions)) return;
+
         const key = generateSwipeKey(tradeType, activeOfferedIds, [player.id]);
         if (!existingSwipeKeys.has(key)) {
           rawItems.push({
@@ -133,12 +156,16 @@ export function generateDeckItems({
   } else {
     // TWO TARGETS IN A PACKAGE (1-for-2 or 2-for-2)
     // Generate pairs from the same opponent team
-    includedOpponentTeams.forEach((team) => {
-      const roster = team.roster;
+    candidateTeams.forEach((team) => {
+      const roster = Array.isArray(team.roster) ? team.roster : [];
       for (let i = 0; i < roster.length; i++) {
         for (let j = i + 1; j < roster.length; j++) {
           const p1 = roster[i];
           const p2 = roster[j];
+          if (!p1 || !p1.id || !p2 || !p2.id) continue;
+
+          // Never include user's offered player in the candidate target package
+          if (activeOfferedIds.includes(p1.id) || activeOfferedIds.includes(p2.id)) continue;
 
           if (
             !matchesPositionFilter(p1.position, selectedPositions) ||
@@ -147,12 +174,14 @@ export function generateDeckItems({
             continue;
           }
 
-          const key = generateSwipeKey(tradeType, activeOfferedIds, [p1.id, p2.id]);
+          // Canonical sorting of player pair IDs ensures immutability against roster ordering changes
+          const [firstPlayer, secondPlayer] = p1.id < p2.id ? [p1, p2] : [p2, p1];
+          const key = generateSwipeKey(tradeType, activeOfferedIds, [firstPlayer.id, secondPlayer.id]);
           if (!existingSwipeKeys.has(key)) {
             rawItems.push({
-              id: `pkg_${team.id}_${p1.id}_${p2.id}`,
+              id: `pkg_${team.id}_${firstPlayer.id}_${secondPlayer.id}`,
               ownerTeam: team,
-              players: [p1, p2],
+              players: [firstPlayer, secondPlayer],
             });
           }
         }

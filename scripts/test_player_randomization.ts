@@ -460,6 +460,209 @@ export const testPromise = (async function runTests() {
     console.log('✓ Test 8 Passed: Position filters preserve relative randomized ordering.');
   }
 
+  // Test 9: Canonical package ID immutability under roster permutation
+  console.log('\n[Test 9] Testing package deck immutability under roster array permutation...');
+  {
+    const sessionSeed = 'test_permutation_seed';
+    const deckOriginal = generateDeckItems({
+      league: fullLeague,
+      userTeam,
+      tradeType: '1-for-2',
+      offeredPlayerIds: [offeredPlayer.id],
+      swipes: [],
+      selectedPositions: allPositions,
+      includedOpponentTeams: opponentTeams,
+      seed: sessionSeed,
+    });
+
+    // Create a copy of opponent teams where rosters are reversed/permuted
+    const permutedOpponentTeams: Team[] = opponentTeams.map((team) => ({
+      ...team,
+      roster: [...team.roster].reverse(),
+    }));
+
+    const deckPermuted = generateDeckItems({
+      league: fullLeague,
+      userTeam,
+      tradeType: '1-for-2',
+      offeredPlayerIds: [offeredPlayer.id],
+      swipes: [],
+      selectedPositions: allPositions,
+      includedOpponentTeams: permutedOpponentTeams,
+      seed: sessionSeed,
+    });
+
+    assert.strictEqual(
+      deckPermuted.length,
+      deckOriginal.length,
+      'Permuted roster deck length must match original length'
+    );
+
+    // Verify 100% item ID and rank identity across the entire deck
+    for (let i = 0; i < deckOriginal.length; i++) {
+      assert.strictEqual(
+        deckPermuted[i].id,
+        deckOriginal[i].id,
+        `Index ${i}: Item ID diverged after roster permutation (${deckPermuted[i].id} !== ${deckOriginal[i].id})`
+      );
+      assert.strictEqual(
+        deckPermuted[i].players[0].id,
+        deckOriginal[i].players[0].id,
+        `Index ${i}: Target player 0 ID diverged after roster permutation`
+      );
+      assert.strictEqual(
+        deckPermuted[i].players[1].id,
+        deckOriginal[i].players[1].id,
+        `Index ${i}: Target player 1 ID diverged after roster permutation`
+      );
+    }
+    console.log('✓ Test 9 Passed: Package card IDs and deck ordering are 100% immune to roster permutation.');
+  }
+
+  // Test 10: Fallback to league.teams when includedOpponentTeams is omitted
+  console.log('\n[Test 10] Testing fallback to league.teams when includedOpponentTeams is omitted...');
+  {
+    const deckWithFallback = generateDeckItems({
+      league: fullLeague,
+      userTeam,
+      tradeType: '1-for-1',
+      offeredPlayerIds: [offeredPlayer.id],
+      swipes: [],
+      selectedPositions: allPositions,
+      // omitted includedOpponentTeams
+      seed: 'test_fallback_seed',
+    });
+
+    assert.strictEqual(
+      deckWithFallback.length,
+      135,
+      'Deck generated without includedOpponentTeams must fall back to league.teams (135 opponent players)'
+    );
+    assert(
+      !deckWithFallback.some((card) => card.ownerTeam.id === userTeam.id),
+      'Fallback must exclude user team'
+    );
+    console.log('✓ Test 10 Passed: Safe fallback to league.teams when includedOpponentTeams is omitted.');
+  }
+
+  // Test 11: Safety when userTeam is included in includedOpponentTeams
+  console.log('\n[Test 11] Testing exclusion of own team players when userTeam is in includedOpponentTeams...');
+  {
+    const deckWithUserTeam = generateDeckItems({
+      league: fullLeague,
+      userTeam,
+      tradeType: '1-for-1',
+      offeredPlayerIds: [offeredPlayer.id],
+      swipes: [],
+      selectedPositions: allPositions,
+      includedOpponentTeams: [userTeam, ...opponentTeams], // accidentally passed userTeam
+      seed: 'test_own_team_exclusion',
+    });
+
+    assert.strictEqual(
+      deckWithUserTeam.length,
+      135,
+      'Deck length must strictly exclude user team players'
+    );
+    assert(
+      !deckWithUserTeam.some((card) => card.ownerTeam.id === userTeam.id),
+      'Deck must never include cards belonging to userTeam'
+    );
+    console.log('✓ Test 11 Passed: Own team players are strictly excluded from candidate pool.');
+  }
+
+  // Test 12: Defensive error-handling for null/undefined inputs
+  console.log('\n[Test 12] Testing defensive handling of null/undefined inputs...');
+  {
+    // null userTeam
+    const nullUserDeck = generateDeckItems({
+      league: fullLeague,
+      userTeam: null,
+      tradeType: '1-for-1',
+      offeredPlayerIds: ['p1'],
+      swipes: [
+        {
+          id: 's1',
+          teamId: 't1',
+          tradeType: '1-for-1',
+          offeredPlayerIds: ['p1'],
+          targetPlayerIds: ['p2'],
+          targetTeamId: 't2',
+          isInterested: true,
+          createdAt: '',
+        },
+      ],
+      selectedPositions: ['RB'],
+      includedOpponentTeams: opponentTeams,
+    });
+    assert.deepStrictEqual(nullUserDeck, [], 'null userTeam must return empty array without throwing');
+
+    // Missing/undefined roster on an opponent team
+    const corruptedOpponentTeams: Team[] = [
+      {
+        id: 'team_corrupt',
+        espnTeamId: '999',
+        name: 'Corrupt Team',
+        ownerName: 'Ghost',
+        roster: undefined as any,
+      },
+      ...opponentTeams,
+    ];
+    const safeDeck1 = generateDeckItems({
+      league: fullLeague,
+      userTeam,
+      tradeType: '1-for-1',
+      offeredPlayerIds: [offeredPlayer.id],
+      includedOpponentTeams: corruptedOpponentTeams,
+    });
+    assert.strictEqual(safeDeck1.length, 135, 'Undefined roster must be skipped cleanly without throwing');
+
+    const safeDeck2 = generateDeckItems({
+      league: fullLeague,
+      userTeam,
+      tradeType: '1-for-2',
+      offeredPlayerIds: [offeredPlayer.id],
+      includedOpponentTeams: corruptedOpponentTeams,
+    });
+    assert.strictEqual(safeDeck2.length, 945, 'Package generation must skip undefined roster without throwing');
+
+    // Undefined selectedPositions
+    assert(matchesPositionFilter('RB', undefined), 'matchesPositionFilter with undefined positions must return true');
+
+    // shuffleDeckItems with empty/singleton array
+    assert.deepStrictEqual(shuffleDeckItems([]), []);
+    assert.deepStrictEqual(shuffleDeckItems([{ id: 'x' }]), [{ id: 'x' }]);
+
+    console.log('✓ Test 12 Passed: All edge cases and null/undefined inputs handled cleanly.');
+  }
+
+  // Test 13: Guarantee user offered player is never in candidate target pool
+  console.log('\n[Test 13] Testing that offered players are never included as trade targets...');
+  {
+    // Create an opponent team that has the offered player ID (e.g. cross-league or duplicate test roster)
+    const duplicateRosterTeam: Team = {
+      id: 'team_dup',
+      espnTeamId: '888',
+      name: 'Dup Team',
+      ownerName: 'Dup Owner',
+      roster: [offeredPlayer, ...opponentTeams[0].roster.slice(1)],
+    };
+
+    const targetDeck = generateDeckItems({
+      league: fullLeague,
+      userTeam,
+      tradeType: '1-for-1',
+      offeredPlayerIds: [offeredPlayer.id],
+      includedOpponentTeams: [duplicateRosterTeam],
+    });
+
+    assert(
+      !targetDeck.some((card) => card.players.some((p) => p.id === offeredPlayer.id)),
+      'Target deck must never contain the currently offered player'
+    );
+    console.log('✓ Test 13 Passed: User offered player is excluded from candidate target deck.');
+  }
+
   console.log('\n======================================================');
   console.log('ALL PLAYER POOL RANDOMIZATION TESTS PASSED! 🎉');
   console.log('======================================================\n');

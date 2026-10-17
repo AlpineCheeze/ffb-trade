@@ -30,16 +30,16 @@ export const testPromise = (async function runTests() {
     const flyDistance = 450;
     const targetX = flyDistance;
 
-    // Animate opacity fade
+    // Animate opacity fade matching SwipeCard timing (delay: 0.18, duration: 0.15)
     animate(cardOpacity, 0, {
       duration: 0.15,
-      delay: 0.1,
+      delay: 0.18,
       ease: 'easeOut',
     });
 
     await new Promise<void>((resolve) => {
       animate(x, targetX, {
-        duration: 0.2,
+        duration: 0.35,
         ease: [0.32, 0.72, 0, 1],
         onComplete: () => {
           onSwipe(true);
@@ -51,7 +51,7 @@ export const testPromise = (async function runTests() {
     assert.strictEqual(swipeCommitted, true, 'onSwipe must be called after animation completes');
     assert.strictEqual(committedParam, true, 'Committed param must be true for WANT');
     assert(x.get() >= 400, `Final x value should be at or near targetX (got ${x.get()})`);
-    assert(cardOpacity.get() <= 0.1, `Card opacity should fade to near 0 at exit (got ${cardOpacity.get()})`);
+    assert(cardOpacity.get() <= 0.05, `Card opacity should fade to near 0 at exit (got ${cardOpacity.get()})`);
     console.log('✓ Test 1 Passed: WANT button animation completes and triggers onSwipe(true) smoothly.');
   }
 
@@ -71,9 +71,16 @@ export const testPromise = (async function runTests() {
     const flyDistance = 450;
     const targetX = -flyDistance;
 
+    // Animate opacity fade matching SwipeCard timing
+    animate(cardOpacity, 0, {
+      duration: 0.15,
+      delay: 0.18,
+      ease: 'easeOut',
+    });
+
     await new Promise<void>((resolve) => {
       animate(x, targetX, {
-        duration: 0.2,
+        duration: 0.35,
         ease: [0.32, 0.72, 0, 1],
         onComplete: () => {
           onSwipe(false);
@@ -85,6 +92,7 @@ export const testPromise = (async function runTests() {
     assert.strictEqual(swipeCommitted, true, 'onSwipe must be called after animation completes');
     assert.strictEqual(committedParam, false, 'Committed param must be false for PASS');
     assert(x.get() <= -400, `Final x value should be negative at or near -targetX (got ${x.get()})`);
+    assert(cardOpacity.get() <= 0.05, `Card opacity should fade to near 0 at exit (got ${cardOpacity.get()})`);
     console.log('✓ Test 2 Passed: PASS button animation completes and triggers onSwipe(false) smoothly.');
   }
 
@@ -145,6 +153,8 @@ export const testPromise = (async function runTests() {
     assert(pageSource.includes('handleButtonSwipe(true)'), 'page.tsx must call handleButtonSwipe(true) for Want button');
     assert(pageSource.includes('handleButtonSwipe(false)'), 'page.tsx must call handleButtonSwipe(false) for Pass button');
     assert(pageSource.includes('disabled={isSwipingCard}'), 'page.tsx must disable action buttons while swiping');
+    assert(swipeCardSource.includes('onSwipeStart?: () => void'), 'SwipeCard must support onSwipeStart');
+    assert(pageSource.includes('onSwipeStart='), 'page.tsx must connect onSwipeStart to active card');
 
     console.log('✓ Test 4 Passed: SwipeCard and page.tsx animation and ref contracts verified.');
   }

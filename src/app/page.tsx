@@ -1514,6 +1514,7 @@ export default function Home() {
                     ownerTeam={currentCard.ownerTeam}
                     isFront={true}
                     onSwipe={handleSwipe}
+                    onSwipeStart={() => setIsSwipingCard(true)}
                     onExcludeOwner={handleExcludeOwner}
                   />
                 </AnimatePresence>

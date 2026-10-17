@@ -15,6 +15,7 @@ export interface SwipeCardProps {
   isFront: boolean;
   onSwipe: (isInterested: boolean) => void;
   onExcludeOwner?: (teamId: string, ownerName: string) => void;
+  onSwipeStart?: () => void;
 }
 
 export const SwipeCard = React.forwardRef<SwipeCardRef, SwipeCardProps>(function SwipeCard(
@@ -24,6 +25,7 @@ export const SwipeCard = React.forwardRef<SwipeCardRef, SwipeCardProps>(function
     isFront,
     onSwipe,
     onExcludeOwner,
+    onSwipeStart,
   },
   ref
 ) {
@@ -31,11 +33,17 @@ export const SwipeCard = React.forwardRef<SwipeCardRef, SwipeCardProps>(function
   const [imgErrors, setImgErrors] = useState<Record<string, boolean>>({});
   const [actionStamp, setActionStamp] = useState<'want' | 'pass' | null>(null);
   const isSwipingRef = useRef(false);
+  const isInitialMount = useRef(true);
 
   const onSwipeRef = useRef(onSwipe);
   useEffect(() => {
     onSwipeRef.current = onSwipe;
   }, [onSwipe]);
+
+  const onSwipeStartRef = useRef(onSwipeStart);
+  useEffect(() => {
+    onSwipeStartRef.current = onSwipeStart;
+  }, [onSwipeStart]);
 
   useEffect(() => {
     return () => {
@@ -44,18 +52,39 @@ export const SwipeCard = React.forwardRef<SwipeCardRef, SwipeCardProps>(function
   }, []);
 
   const x = useMotionValue(0);
-  const cardOpacity = useMotionValue(1);
+  const cardOpacity = useMotionValue(isFront ? 1 : 0.6);
   const rotate = useTransform(x, [-250, 250], [-18, 18]);
   const opacityLike = useTransform(x, [20, 100], [0, 1]);
   const opacityPass = useTransform(x, [-20, -100], [0, 1]);
 
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    if (isFront) {
+      cardOpacity.set(0.6);
+      animate(cardOpacity, 1, { duration: 0.25, ease: 'easeOut' });
+      x.set(0);
+      setActionStamp(null);
+      isSwipingRef.current = false;
+    } else {
+      cardOpacity.set(0.6);
+      x.set(0);
+      setActionStamp(null);
+    }
+  }, [isFront, cardOpacity, x]);
+
   const isPackage = players.length > 1;
 
-  const triggerSwipe = useCallback((isInterested: boolean, initialVelocity = 0) => {
+  const triggerSwipe = useCallback((isInterested: boolean, initialVelocity = 0, isButtonTrigger = false) => {
     if (isSwipingRef.current) return;
     isSwipingRef.current = true;
+    onSwipeStartRef.current?.();
 
-    setActionStamp(isInterested ? 'want' : 'pass');
+    if (isButtonTrigger) {
+      setActionStamp(isInterested ? 'want' : 'pass');
+    }
 
     const screenWidth = typeof window !== 'undefined' ? window.innerWidth : 400;
     const flyDistance = Math.max(screenWidth * 0.85, 450);
@@ -83,7 +112,7 @@ export const SwipeCard = React.forwardRef<SwipeCardRef, SwipeCardProps>(function
     ref,
     () => ({
       swipe: (isInterested: boolean) => {
-        triggerSwipe(isInterested);
+        triggerSwipe(isInterested, 0, true);
       },
     }),
     [triggerSwipe]
@@ -100,12 +129,12 @@ export const SwipeCard = React.forwardRef<SwipeCardRef, SwipeCardProps>(function
       (info.offset.x > threshold && info.velocity.x >= -100) ||
       (info.offset.x > 20 && info.velocity.x > velocityThreshold)
     ) {
-      triggerSwipe(true, info.velocity.x);
+      triggerSwipe(true, info.velocity.x, false);
     } else if (
       (info.offset.x < -threshold && info.velocity.x <= 100) ||
       (info.offset.x < -20 && info.velocity.x < -velocityThreshold)
     ) {
-      triggerSwipe(false, info.velocity.x);
+      triggerSwipe(false, info.velocity.x, false);
     } else {
       setActionStamp(null);
       animate(x, 0, { type: 'spring', stiffness: 500, damping: 30 });
@@ -122,12 +151,11 @@ export const SwipeCard = React.forwardRef<SwipeCardRef, SwipeCardProps>(function
       style={{
         x: isFront ? x : 0,
         rotate: isFront ? rotate : 0,
-        opacity: isFront ? cardOpacity : undefined,
+        opacity: isFront ? cardOpacity : 0.6,
       }}
       animate={{
         scale: isFront ? 1 : 0.96,
         y: isFront ? 0 : 8,
-        opacity: isFront ? 1 : 0.6,
       }}
       transition={{
         duration: 0.2,
@@ -151,9 +179,7 @@ export const SwipeCard = React.forwardRef<SwipeCardRef, SwipeCardProps>(function
             }}
             animate={
               actionStamp === 'want'
-                ? { scale: [0.8, 1.15, 1], opacity: 1 }
-                : actionStamp === 'pass'
-                ? { opacity: 0 }
+                ? { scale: [0.75, 1.15, 1] }
                 : { scale: 1 }
             }
             transition={{ duration: 0.22, ease: 'easeOut' }}
@@ -169,9 +195,7 @@ export const SwipeCard = React.forwardRef<SwipeCardRef, SwipeCardProps>(function
             }}
             animate={
               actionStamp === 'pass'
-                ? { scale: [0.8, 1.15, 1], opacity: 1 }
-                : actionStamp === 'want'
-                ? { opacity: 0 }
+                ? { scale: [0.75, 1.15, 1] }
                 : { scale: 1 }
             }
             transition={{ duration: 0.22, ease: 'easeOut' }}

@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Player, Team, TradeType } from '@/types/fantasy';
-import { Sparkles, ArrowRight, CheckCircle2, Layers, AlertCircle } from 'lucide-react';
+import { Sparkles, ArrowRight, CheckCircle2, Layers, AlertCircle, ChevronDown } from 'lucide-react';
 
 interface ShoppingRosterProps {
   userTeam: Team;
@@ -21,32 +21,11 @@ export const ShoppingRoster: React.FC<ShoppingRosterProps> = ({
   onTogglePlayer,
   onDoneShopping,
 }) => {
-  const isTwoPlayerOffer = tradeType === '2-for-1' || tradeType === '2-for-2';
-  const requiredCount = isTwoPlayerOffer ? 2 : 1;
+  const [sendStr, getStr] = tradeType.split('-for-');
+  const sendCount = parseInt(sendStr, 10) || 1;
+  const getCount = parseInt(getStr, 10) || 1;
+  const requiredCount = sendCount;
   const isSelectionComplete = selectedPlayerIds.length === requiredCount;
-
-  const tradeTypeDetails: Record<TradeType, { label: string; desc: string; badge: string }> = {
-    '1-for-1': {
-      label: 'Heads Up',
-      desc: 'Heads Up: Offer 1 of your players for 1 target player',
-      badge: 'Send 1 • Get 1',
-    },
-    '2-for-1': {
-      label: 'Twofer',
-      desc: 'Twofer: Offer 2 of your players for 1 star player',
-      badge: 'Send 2 • Get 1',
-    },
-    '1-for-2': {
-      label: '1-for-2',
-      desc: 'Depth Trade: Offer 1 star player to receive 2 quality starters',
-      badge: 'Send 1 • Get 2',
-    },
-    '2-for-2': {
-      label: '2-for-2',
-      desc: 'Blockbuster: Swap a 2-player package for an opponent 2-player package',
-      badge: 'Send 2 • Get 2',
-    },
-  };
 
   return (
     <div className="max-w-2xl mx-auto p-4 md:p-6 bg-slate-900/90 border border-slate-800 rounded-3xl shadow-2xl">
@@ -60,7 +39,7 @@ export const ShoppingRoster: React.FC<ShoppingRosterProps> = ({
             <h2 className="text-xl font-black text-white">Your Trade Package Block</h2>
           </div>
           <p className="text-xs text-slate-400 mt-1">
-            Configure the structure and select up to 2 players from <span className="text-blue-400 font-semibold">{userTeam.name}</span>.
+            Configure the structure and select {requiredCount === 1 ? '1 player' : `up to ${requiredCount} players`} from <span className="text-blue-400 font-semibold">{userTeam.name}</span>.
           </p>
         </div>
 
@@ -76,34 +55,84 @@ export const ShoppingRoster: React.FC<ShoppingRosterProps> = ({
 
       {/* Trade Structure Selector */}
       <div className="mb-6 p-4 rounded-2xl bg-slate-950/70 border border-slate-800">
-        <div className="flex items-center justify-between mb-2.5">
+        <div className="flex items-center justify-between mb-3">
           <span className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
             <Layers className="w-3.5 h-3.5 text-blue-400" />
-            Trade Structure Format:
+            Trade Package Structure:
           </span>
           <span className="text-[11px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full">
-            {tradeTypeDetails[tradeType].badge}
+            Send {sendCount} • Get {getCount}
           </span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {(['1-for-1', '2-for-1', '1-for-2', '2-for-2'] as TradeType[]).map((t) => (
-            <button
-              key={t}
-              onClick={() => onTradeTypeChange(t)}
-              className={`py-2 px-3 rounded-xl text-xs font-black transition-all border text-center ${
-                tradeType === t
-                  ? 'bg-blue-600 border-blue-500 text-white shadow-md shadow-blue-600/30 ring-1 ring-blue-400/40'
-                  : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
-              }`}
-            >
-              {tradeTypeDetails[t].label}
-            </button>
-          ))}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* Send Dropdown */}
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="send-count-select" className="text-xs font-bold text-slate-300 flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-blue-400">
+                <ArrowRight className="w-3.5 h-3.5 -rotate-45" />
+                Send (Your Roster)
+              </span>
+              <span className="text-[10px] text-slate-500 font-semibold">
+                {sendCount === 1 ? '1 Player' : `${sendCount} Players`}
+              </span>
+            </label>
+            <div className="relative">
+              <select
+                id="send-count-select"
+                aria-label="Send players"
+                value={sendCount}
+                onChange={(e) => {
+                  const newSend = Number(e.target.value);
+                  onTradeTypeChange(`${newSend}-for-${getCount}` as TradeType);
+                }}
+                className="w-full bg-slate-900 hover:bg-slate-850 text-white font-bold text-sm rounded-xl px-3.5 py-2.5 border border-slate-700/80 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none appearance-none cursor-pointer transition shadow-inner"
+              >
+                <option value={1}>1 Player</option>
+                <option value={2}>2 Players</option>
+                <option value={3}>3 Players</option>
+              </select>
+              <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                <ChevronDown className="w-4 h-4" />
+              </div>
+            </div>
+          </div>
+
+          {/* Get Dropdown */}
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="get-count-select" className="text-xs font-bold text-slate-300 flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-emerald-400">
+                <ArrowRight className="w-3.5 h-3.5 rotate-[135deg]" />
+                Get (Opponent Target)
+              </span>
+              <span className="text-[10px] text-slate-500 font-semibold">
+                {getCount === 1 ? '1 Player' : `${getCount} Players`}
+              </span>
+            </label>
+            <div className="relative">
+              <select
+                id="get-count-select"
+                aria-label="Get players"
+                value={getCount}
+                onChange={(e) => {
+                  const newGet = Number(e.target.value);
+                  onTradeTypeChange(`${sendCount}-for-${newGet}` as TradeType);
+                }}
+                className="w-full bg-slate-900 hover:bg-slate-850 text-white font-bold text-sm rounded-xl px-3.5 py-2.5 border border-slate-700/80 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none appearance-none cursor-pointer transition shadow-inner"
+              >
+                <option value={1}>1 Player</option>
+                <option value={2}>2 Players</option>
+                <option value={3}>3 Players</option>
+              </select>
+              <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                <ChevronDown className="w-4 h-4" />
+              </div>
+            </div>
+          </div>
         </div>
 
-        <p className="text-[11px] text-slate-400 mt-2.5">
-          {tradeTypeDetails[tradeType].desc}
+        <p className="text-[11px] text-slate-400 mt-3">
+          Offer {sendCount} player{sendCount > 1 ? 's' : ''} from your roster in exchange for {getCount} opponent player{getCount > 1 ? 's' : ''} in the swiping deck.
         </p>
       </div>
 

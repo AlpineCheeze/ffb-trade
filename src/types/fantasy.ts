@@ -74,7 +74,16 @@ export interface League {
   inviteCode?: string;
 }
 
-export type TradeType = '1-for-1' | '2-for-1' | '1-for-2' | '2-for-2';
+export type TradeType =
+  | '1-for-1'
+  | '1-for-2'
+  | '1-for-3'
+  | '2-for-1'
+  | '2-for-2'
+  | '2-for-3'
+  | '3-for-1'
+  | '3-for-2'
+  | '3-for-3';
 
 export interface Swipe {
   id: string;

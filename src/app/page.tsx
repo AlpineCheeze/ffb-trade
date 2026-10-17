@@ -395,9 +395,9 @@ export default function Home() {
       setExcludedTeamIds(getLocalExcludedTeamIds(currentLeague.espnLeagueId, teamId));
       const team = currentLeague.teams.find((t) => t.id === teamId);
       if (team && team.roster.length > 0) {
-        const isTwoRequired = tradeType === '2-for-1' || tradeType === '2-for-2';
-        if (isTwoRequired && team.roster.length >= 2) {
-          setSelectedOfferedPlayerIds([team.roster[0].id, team.roster[1].id]);
+        const sendCount = parseInt(tradeType.split('-for-')[0], 10) || 1;
+        if (team.roster.length >= sendCount) {
+          setSelectedOfferedPlayerIds(team.roster.slice(0, sendCount).map((p) => p.id));
         } else {
           setTradeType('1-for-1');
           setSelectedOfferedPlayerIds([team.roster[0].id]);
@@ -526,51 +526,43 @@ export default function Home() {
     return userTeam.roster.filter((p) => selectedOfferedPlayerIds.includes(p.id));
   }, [userTeam, selectedOfferedPlayerIds]);
 
-  const requiredOfferedCount = tradeType === '2-for-1' || tradeType === '2-for-2' ? 2 : 1;
+  const requiredOfferedCount = parseInt(tradeType.split('-for-')[0], 10) || 1;
 
   // Handle Trade Type change (adjusting offered player counts)
   const handleTradeTypeChange = (newType: TradeType) => {
     setTradeType(newType);
     if (!userTeam) return;
 
-    const isTwoRequired = newType === '2-for-1' || newType === '2-for-2';
-    if (isTwoRequired) {
-      if (selectedOfferedPlayerIds.length === 0 && userTeam.roster.length >= 2) {
-        setSelectedOfferedPlayerIds([userTeam.roster[0].id, userTeam.roster[1].id]);
-      } else if (selectedOfferedPlayerIds.length === 1 && userTeam.roster.length >= 2) {
-        const nextPlayer = userTeam.roster.find((p) => p.id !== selectedOfferedPlayerIds[0]);
-        if (nextPlayer) {
-          setSelectedOfferedPlayerIds([selectedOfferedPlayerIds[0], nextPlayer.id]);
-        }
-      }
-    } else {
-      // 1-player offer required
-      if (selectedOfferedPlayerIds.length > 1) {
-        setSelectedOfferedPlayerIds([selectedOfferedPlayerIds[0]]);
-      } else if (selectedOfferedPlayerIds.length === 0 && userTeam.roster.length > 0) {
-        setSelectedOfferedPlayerIds([userTeam.roster[0].id]);
-      }
+    const newSendCount = parseInt(newType.split('-for-')[0], 10) || 1;
+    if (selectedOfferedPlayerIds.length > newSendCount) {
+      setSelectedOfferedPlayerIds(selectedOfferedPlayerIds.slice(0, newSendCount));
+    } else if (selectedOfferedPlayerIds.length < newSendCount) {
+      const needed = newSendCount - selectedOfferedPlayerIds.length;
+      const additional = userTeam.roster
+        .filter((p) => !selectedOfferedPlayerIds.includes(p.id))
+        .slice(0, needed)
+        .map((p) => p.id);
+      setSelectedOfferedPlayerIds([...selectedOfferedPlayerIds, ...additional]);
     }
   };
 
   // Toggle player selection in ShoppingRoster
   const handleToggleOfferedPlayer = (player: Player) => {
-    const isTwoRequired = tradeType === '2-for-1' || tradeType === '2-for-2';
+    const sendCount = parseInt(tradeType.split('-for-')[0], 10) || 1;
 
-    if (isTwoRequired) {
+    if (sendCount === 1) {
+      setSelectedOfferedPlayerIds([player.id]);
+    } else {
       if (selectedOfferedPlayerIds.includes(player.id)) {
         setSelectedOfferedPlayerIds((prev) => prev.filter((id) => id !== player.id));
       } else {
-        if (selectedOfferedPlayerIds.length < 2) {
+        if (selectedOfferedPlayerIds.length < sendCount) {
           setSelectedOfferedPlayerIds((prev) => [...prev, player.id]);
         } else {
-          // FIFO replace: drop oldest player to allow rotating both positions freely
-          setSelectedOfferedPlayerIds([selectedOfferedPlayerIds[1], player.id]);
+          // FIFO replace: drop oldest player to allow rotating positions freely
+          setSelectedOfferedPlayerIds((prev) => [...prev.slice(1), player.id]);
         }
       }
-    } else {
-      // Single player select
-      setSelectedOfferedPlayerIds([player.id]);
     }
   };
 
@@ -1419,7 +1411,7 @@ export default function Home() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5 mb-1.5">
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-blue-500/20 text-blue-400 border border-blue-500/30">
-                    {tradeType === '1-for-1' ? 'Heads Up' : tradeType === '2-for-1' ? 'Twofer' : tradeType} Trade
+                    {tradeType} Trade
                   </span>
                   <span className="text-[10px] font-bold text-slate-400">
                     Offering ({offeredPlayers.length})
@@ -1511,12 +1503,14 @@ export default function Home() {
                     <Sparkles className="w-8 h-8" />
                   </div>
                   <h3 className="text-xl font-black text-white">
-                    {offeredPlayers.length === 0 ? 'No Players on Trade Block' : 'Select 1 More Player to Offer'}
+                    {offeredPlayers.length === 0
+                      ? 'No Players on Trade Block'
+                      : `Select ${requiredOfferedCount - offeredPlayers.length} More Player${requiredOfferedCount - offeredPlayers.length > 1 ? 's' : ''} to Offer`}
                   </h3>
                   <p className="text-xs text-slate-400 mt-2 max-w-xs leading-relaxed">
-                    {requiredOfferedCount === 2
-                      ? `A ${tradeType} trade requires 2 players from your roster in your offered package.`
-                      : 'Select 1 or 2 players from your roster that you are willing to shop to league opponents.'}
+                    {requiredOfferedCount > 1
+                      ? `A ${tradeType} trade requires ${requiredOfferedCount} players from your roster in your offered package.`
+                      : 'Select 1 player from your roster that you are willing to shop to league opponents.'}
                   </p>
                   <button
                     onClick={() => setActiveTab('roster')}

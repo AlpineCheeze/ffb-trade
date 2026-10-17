@@ -113,7 +113,7 @@ export function generateDeckItems({
 }: GenerateDeckItemsOptions): DeckItem[] {
   if (!userTeam) return [];
 
-  const isTargetTwoPlayers = tradeType === '1-for-2' || tradeType === '2-for-2';
+  const targetCount = parseInt(tradeType.split('-for-')[1], 10);
   const activeOfferedIds = Array.isArray(offeredPlayerIds) ? offeredPlayerIds : [];
   const safeSwipes = Array.isArray(swipes) ? swipes : [];
 
@@ -133,8 +133,8 @@ export function generateDeckItems({
 
   const rawItems: DeckItem[] = [];
 
-  if (!isTargetTwoPlayers) {
-    // SINGLE TARGET (1-for-1 or 2-for-1)
+  if (targetCount === 1) {
+    // SINGLE TARGET (1-for-1, 2-for-1, 3-for-1)
     candidateTeams.forEach((team) => {
       const roster = Array.isArray(team.roster) ? team.roster : [];
       roster.forEach((player) => {
@@ -153,8 +153,8 @@ export function generateDeckItems({
         }
       });
     });
-  } else {
-    // TWO TARGETS IN A PACKAGE (1-for-2 or 2-for-2)
+  } else if (targetCount === 2) {
+    // TWO TARGETS IN A PACKAGE (1-for-2, 2-for-2, 3-for-2)
     // Generate pairs from the same opponent team
     candidateTeams.forEach((team) => {
       const roster = Array.isArray(team.roster) ? team.roster : [];
@@ -187,6 +187,54 @@ export function generateDeckItems({
         }
       }
     });
+  } else if (targetCount === 3) {
+    // THREE TARGETS IN A PACKAGE (1-for-3, 2-for-3, 3-for-3)
+    // Generate triplets from the same opponent team
+    candidateTeams.forEach((team) => {
+      const roster = Array.isArray(team.roster) ? team.roster : [];
+      for (let i = 0; i < roster.length; i++) {
+        for (let j = i + 1; j < roster.length; j++) {
+          for (let k = j + 1; k < roster.length; k++) {
+            const p1 = roster[i];
+            const p2 = roster[j];
+            const p3 = roster[k];
+            if (!p1 || !p1.id || !p2 || !p2.id || !p3 || !p3.id) continue;
+
+            // Never include user's offered player in the candidate target package
+            if (
+              activeOfferedIds.includes(p1.id) ||
+              activeOfferedIds.includes(p2.id) ||
+              activeOfferedIds.includes(p3.id)
+            ) {
+              continue;
+            }
+
+            if (
+              !matchesPositionFilter(p1.position, selectedPositions) ||
+              !matchesPositionFilter(p2.position, selectedPositions) ||
+              !matchesPositionFilter(p3.position, selectedPositions)
+            ) {
+              continue;
+            }
+
+            // Canonical sorting of player triplet IDs ensures immutability against roster ordering changes
+            const sortedPlayers = [p1, p2, p3].sort((a, b) => a.id.localeCompare(b.id));
+            const key = generateSwipeKey(
+              tradeType,
+              activeOfferedIds,
+              sortedPlayers.map((p) => p.id)
+            );
+            if (!existingSwipeKeys.has(key)) {
+              rawItems.push({
+                id: `pkg_${team.id}_${sortedPlayers[0].id}_${sortedPlayers[1].id}_${sortedPlayers[2].id}`,
+                ownerTeam: team,
+                players: sortedPlayers,
+              });
+            }
+          }
+        }
+      }
+    });
   }
 
   return shuffleDeckItems(rawItems, seed);
@@ -203,7 +251,23 @@ export function arraysEqualIgnoreOrder(a: string[], b: string[]): boolean {
 }
 
 /**
- * Checks if a newly recorded swipe triggers a mutual trade match (1-1, 2-1, 1-2, or 2-2).
+ * Returns the reciprocal trade type for a given trade type.
+ * e.g., '3-for-1' -> '1-for-3', '2-for-3' -> '3-for-2', '3-for-3' -> '3-for-3'.
+ */
+export function getReciprocalTradeType(tradeType: TradeType): TradeType {
+  const [send, get] = tradeType.split('-for-');
+  return `${get}-for-${send}` as TradeType;
+}
+
+/**
+ * Checks if two trade types are reciprocals of each other.
+ */
+export function isReciprocalTradeType(typeA: TradeType, typeB: TradeType): boolean {
+  return getReciprocalTradeType(typeA) === typeB;
+}
+
+/**
+ * Checks if a newly recorded swipe triggers a mutual trade match across all 9 trade combinations.
  */
 export function checkForMutualMatch(
   newSwipe: Swipe,
@@ -225,13 +289,8 @@ export function checkForMutualMatch(
     // Both teams must specifically target each other
     if (s.teamId !== newSwipe.targetTeamId || s.targetTeamId !== newSwipe.teamId) return false;
 
-    // Check trade type reciprocity
-    const isReciprocalType =
-      (newSwipe.tradeType === '1-for-1' && s.tradeType === '1-for-1') ||
-      (newSwipe.tradeType === '2-for-1' && s.tradeType === '1-for-2') ||
-      (newSwipe.tradeType === '1-for-2' && s.tradeType === '2-for-1') ||
-      (newSwipe.tradeType === '2-for-2' && s.tradeType === '2-for-2');
-
+    // Check trade type reciprocity (e.g. 3-for-1 matches 1-for-3, 2-for-3 matches 3-for-2)
+    const isReciprocalType = isReciprocalTradeType(newSwipe.tradeType, s.tradeType);
     if (!isReciprocalType) return false;
 
     // Complementary check: Other team offered what we targeted, and targeted what we offered
@@ -254,20 +313,18 @@ export function checkForMutualMatch(
   const teamBPlayers = teamB.roster.filter((p) => newSwipe.targetPlayerIds.includes(p.id));
 
   // Strict cardinality validation matching the exact expected package sizes
-  const expectedA = (newSwipe.tradeType === '2-for-1' || newSwipe.tradeType === '2-for-2') ? 2 : 1;
-  const expectedB = (newSwipe.tradeType === '1-for-2' || newSwipe.tradeType === '2-for-2') ? 2 : 1;
+  const [expectedAStr, expectedBStr] = newSwipe.tradeType.split('-for-');
+  const expectedA = parseInt(expectedAStr, 10);
+  const expectedB = parseInt(expectedBStr, 10);
 
   if (teamAPlayers.length !== expectedA || teamBPlayers.length !== expectedB) {
     return null;
   }
 
-  const canonicalTradeType =
-    newSwipe.tradeType === '1-for-2' ? '2-for-1' : newSwipe.tradeType;
-
   return {
     id: `match_${teamA.id}_${teamB.id}_${Date.now()}`,
     leagueId: league.id,
-    tradeType: canonicalTradeType,
+    tradeType: newSwipe.tradeType,
     teamAId: teamA.id,
     teamBId: teamB.id,
     teamA,
@@ -277,6 +334,12 @@ export function checkForMutualMatch(
     createdAt: new Date().toISOString(),
   };
 }
+
+/**
+ * Reciprocal match checking aliases
+ */
+export const checkReciprocalMatch = checkForMutualMatch;
+export const findReciprocalMatch = checkForMutualMatch;
 
 /**
  * Seed opponent swipes for the demo sandbox league.

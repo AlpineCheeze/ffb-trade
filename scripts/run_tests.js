@@ -45,6 +45,10 @@ async function run() {
   if (randomizationModule && randomizationModule.testPromise) {
     await randomizationModule.testPromise;
   }
+  const tradePackagesModule = jiti('./test_trade_packages.ts');
+  if (tradePackagesModule && tradePackagesModule.testPromise) {
+    await tradePackagesModule.testPromise;
+  }
 }
 
 run().catch((err) => {

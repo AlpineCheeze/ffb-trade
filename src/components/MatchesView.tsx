@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Match } from '@/types/fantasy';
+import { Match, TradeType } from '@/types/fantasy';
 import { ArrowLeftRight, Check, Copy, Sparkles, Trash2, History, RotateCcw } from 'lucide-react';
 
 interface MatchesViewProps {
@@ -41,11 +41,10 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
     ? deletedMatches.filter((m) => m.teamAId === currentTeamId || m.teamBId === currentTeamId)
     : deletedMatches;
 
-  const getEffectiveTradeType = (m: Match, userCount: number, partnerCount: number) => {
-    if (userCount === 2 && partnerCount === 1) return '2-for-1';
-    if (userCount === 1 && partnerCount === 2) return '1-for-2';
-    if (userCount === 2 && partnerCount === 2) return '2-for-2';
-    if (userCount === 1 && partnerCount === 1) return '1-for-1';
+  const getEffectiveTradeType = (m: Match, userCount: number, partnerCount: number): TradeType => {
+    if (userCount > 0 && partnerCount > 0) {
+      return `${userCount}-for-${partnerCount}` as TradeType;
+    }
     return m.tradeType;
   };
 
@@ -58,8 +57,7 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
 
     const sendNames = userPlayers.map((p) => `${p.fullName} (${p.position})`).join(' & ');
     const receiveNames = partnerPlayers.map((p) => `${p.fullName} (${p.position})`).join(' & ');
-    const tradeLabel =
-      effectiveType === '1-for-1' ? 'Heads Up' : effectiveType === '2-for-1' ? 'Twofer' : effectiveType;
+    const tradeLabel = `${effectiveType}`;
 
     const partnerName = partnerTeam.claimedBy || partnerTeam.ownerName || 'Partner';
     const text = `Hey ${partnerName}! Trade Horny found a mutual ${tradeLabel} trade match: My ${sendNames} for your ${receiveNames}. Sending proposal in ESPN!`;
@@ -170,7 +168,7 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
                       <span className="text-slate-500"> ({partnerTeam.name})</span>
                     </div>
                     <span className="text-[11px] text-emerald-400 font-semibold bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full uppercase">
-                      {effectiveType === '1-for-1' ? 'Heads Up' : effectiveType === '2-for-1' ? 'Twofer' : effectiveType} Aligned
+                      {effectiveType} Aligned
                     </span>
                   </div>
 
@@ -338,11 +336,7 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] text-slate-400 bg-slate-800/80 border border-slate-700/80 px-2 py-0.5 rounded-full uppercase font-semibold">
-                        {effectiveType === '1-for-1'
-                          ? 'Heads Up'
-                          : effectiveType === '2-for-1'
-                          ? 'Twofer'
-                          : effectiveType}
+                        {effectiveType}
                       </span>
                       <span className="text-[10px] text-rose-400 font-semibold bg-rose-500/10 border border-rose-500/20 px-2.5 py-0.5 rounded-full">
                         {deletedByLabel}

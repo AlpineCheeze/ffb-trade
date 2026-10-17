@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import confetti from 'canvas-confetti';
-import { Match } from '@/types/fantasy';
+import { Match, TradeType } from '@/types/fantasy';
 import { ArrowLeftRight, Check, Sparkles, X } from 'lucide-react';
 
 interface MatchCelebrationModalProps {
@@ -51,23 +51,12 @@ export const MatchCelebrationModal: React.FC<MatchCelebrationModalProps> = ({
   const partnerPlayers = isUserTeamA ? match.teamBPlayers : match.teamAPlayers;
   const partnerTeam = isUserTeamA ? match.teamB : match.teamA;
 
-  const effectiveTradeType =
-    userPlayers.length === 2 && partnerPlayers.length === 1
-      ? '2-for-1'
-      : userPlayers.length === 1 && partnerPlayers.length === 2
-      ? '1-for-2'
-      : userPlayers.length === 2 && partnerPlayers.length === 2
-      ? '2-for-2'
-      : userPlayers.length === 1 && partnerPlayers.length === 1
-      ? '1-for-1'
+  const effectiveTradeType: TradeType =
+    userPlayers.length > 0 && partnerPlayers.length > 0
+      ? (`${userPlayers.length}-for-${partnerPlayers.length}` as TradeType)
       : match.tradeType;
 
-  const tradeLabel =
-    effectiveTradeType === '1-for-1'
-      ? 'Heads Up'
-      : effectiveTradeType === '2-for-1'
-      ? 'Twofer'
-      : effectiveTradeType;
+  const tradeLabel = effectiveTradeType;
 
   const handleImgError = (id: string) => {
     setImgErrors((prev) => ({ ...prev, [id]: true }));
@@ -114,7 +103,7 @@ export const MatchCelebrationModal: React.FC<MatchCelebrationModalProps> = ({
               {userPlayers.map((p, idx) => (
                 <div key={p.id} className="flex flex-col items-center text-center">
                   {idx > 0 && <span className="text-blue-400 font-bold text-xs my-0.5">+</span>}
-                  <div className="w-14 h-14 rounded-full bg-slate-900 border-2 border-blue-500/50 overflow-hidden mb-1 flex items-center justify-center">
+                  <div className={`${userPlayers.length >= 3 ? 'w-11 h-11' : 'w-14 h-14'} rounded-full bg-slate-900 border-2 border-blue-500/50 overflow-hidden mb-1 flex items-center justify-center`}>
                     {!imgErrors[p.id] ? (
                       <img
                         src={p.headshotUrl}
@@ -142,7 +131,7 @@ export const MatchCelebrationModal: React.FC<MatchCelebrationModalProps> = ({
               {partnerPlayers.map((p, idx) => (
                 <div key={p.id} className="flex flex-col items-center text-center">
                   {idx > 0 && <span className="text-emerald-400 font-bold text-xs my-0.5">+</span>}
-                  <div className="w-14 h-14 rounded-full bg-slate-900 border-2 border-emerald-500/50 overflow-hidden mb-1 flex items-center justify-center">
+                  <div className={`${partnerPlayers.length >= 3 ? 'w-11 h-11' : 'w-14 h-14'} rounded-full bg-slate-900 border-2 border-emerald-500/50 overflow-hidden mb-1 flex items-center justify-center`}>
                     {!imgErrors[p.id] ? (
                       <img
                         src={p.headshotUrl}

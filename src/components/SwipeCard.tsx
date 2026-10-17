@@ -371,14 +371,14 @@ export const SwipeCard = React.forwardRef<SwipeCardRef, SwipeCardProps>(function
         </>
       )}
 
-      {/* 2-PLAYER PACKAGE CARD */}
+      {/* MULTI-PLAYER PACKAGE CARD (2 or 3 players) */}
       {isPackage && (
-        <div className="flex-1 flex flex-col justify-between p-4 bg-slate-900/95 z-10">
+        <div className="flex-1 flex flex-col justify-between p-4 bg-slate-900/95 z-10 min-h-0">
           {/* Package Header */}
-          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+          <div className="flex items-center justify-between pb-2.5 border-b border-slate-800 flex-shrink-0">
             <div>
               <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-indigo-500/20 border border-indigo-500/40 text-indigo-400">
-                2-Player Package
+                {players.length}-Player Package
               </span>
               <div className="flex items-center gap-2 mt-1">
                 <span className="text-xs text-slate-400 font-semibold truncate">
@@ -400,25 +400,39 @@ export const SwipeCard = React.forwardRef<SwipeCardRef, SwipeCardProps>(function
                 )}
               </div>
             </div>
-            <span className="text-[11px] font-bold text-slate-500">2 Assets</span>
+            <span className="text-[11px] font-bold text-slate-500">{players.length} Assets</span>
           </div>
 
-          {/* Two Player Rows */}
-          <div className="flex-1 flex flex-col justify-around py-2 gap-2">
-            {players.slice(0, 2).map((player, idx) => (
+          {/* Player Rows */}
+          <div className={`flex-1 flex flex-col justify-around min-h-0 py-1.5 ${players.length >= 3 ? 'gap-1.5' : 'gap-2'}`}>
+            {players.map((player, idx) => (
               <div
                 key={player.id}
-                className="bg-slate-950/70 border border-slate-800 rounded-2xl p-3 flex items-center gap-3.5 relative overflow-hidden"
+                className={`bg-slate-950/70 border border-slate-800 rounded-2xl flex items-center relative overflow-hidden ${
+                  players.length >= 3
+                    ? 'p-2 min-[400px]:p-2.5 gap-2.5 sm:gap-3'
+                    : 'p-3 gap-3.5'
+                }`}
               >
                 {/* Plus separator between rows */}
-                {idx === 1 && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full bg-slate-800 border border-slate-700 text-slate-400 flex items-center justify-center z-10">
-                    <Plus className="w-3.5 h-3.5" />
+                {idx > 0 && (
+                  <div
+                    className={`absolute left-1/2 -translate-x-1/2 rounded-full bg-slate-800 border border-slate-700 text-slate-400 flex items-center justify-center z-10 ${
+                      players.length >= 3 ? '-top-2 w-5 h-5' : '-top-3 w-6 h-6'
+                    }`}
+                  >
+                    <Plus className={players.length >= 3 ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
                   </div>
                 )}
 
                 {/* Player Photo */}
-                <div className="w-16 h-16 rounded-xl bg-slate-900 border border-slate-700/80 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                <div
+                  className={`rounded-xl bg-slate-900 border border-slate-700/80 overflow-hidden flex-shrink-0 flex items-center justify-center ${
+                    players.length >= 3
+                      ? 'w-11 h-11 min-[400px]:w-12 min-[400px]:h-12 sm:w-14 sm:h-14'
+                      : 'w-16 h-16'
+                  }`}
+                >
                   {!imgErrors[player.id] ? (
                     <img
                       src={player.headshotUrl}
@@ -436,10 +450,10 @@ export const SwipeCard = React.forwardRef<SwipeCardRef, SwipeCardProps>(function
                 {/* Player Details */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-blue-600 text-white">
+                    <span className="px-1.5 py-0.5 rounded-md text-[9px] min-[400px]:text-[10px] font-black bg-blue-600 text-white">
                       {player.position}
                     </span>
-                    <span className="text-xs text-slate-400 font-semibold truncate">
+                    <span className="text-[11px] min-[400px]:text-xs text-slate-400 font-semibold truncate">
                       {player.nflTeam}
                     </span>
                     {player.injuryStatus !== 'ACTIVE' && (
@@ -449,11 +463,11 @@ export const SwipeCard = React.forwardRef<SwipeCardRef, SwipeCardProps>(function
                     )}
                   </div>
 
-                  <h3 className="text-base font-black text-white truncate mt-1">
+                  <h3 className={`font-black text-white truncate mt-0.5 ${players.length >= 3 ? 'text-xs min-[400px]:text-sm sm:text-base' : 'text-base'}`}>
                     {player.fullName}
                   </h3>
 
-                  <div className="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5 font-medium">
+                  <div className="text-[10px] min-[400px]:text-[11px] text-slate-400 flex items-center gap-2 mt-0.5 font-medium">
                     <span>Bye Week {player.byeWeek}</span>
                     <span>•</span>
                     <span className="text-slate-300 font-bold">{player.projectedPoints.toFixed(1)} pts</span>
@@ -464,7 +478,7 @@ export const SwipeCard = React.forwardRef<SwipeCardRef, SwipeCardProps>(function
           </div>
 
           {/* Swipe Hint Footer */}
-          <div className="pt-2.5 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500 font-semibold">
+          <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500 font-semibold flex-shrink-0">
             <span className="flex items-center gap-1 text-rose-400/80">
               <X className="w-3.5 h-3.5" /> Swipe Left to Pass Package
             </span>

@@ -41,6 +41,10 @@ async function run() {
   if (buttonSwipeModule && buttonSwipeModule.testPromise) {
     await buttonSwipeModule.testPromise;
   }
+  const randomizationModule = jiti('./test_player_randomization.ts');
+  if (randomizationModule && randomizationModule.testPromise) {
+    await randomizationModule.testPromise;
+  }
 }
 
 run().catch((err) => {

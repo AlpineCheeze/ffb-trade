@@ -25,7 +25,13 @@ import {
   resetLeagueSwipesOnServer,
 } from '@/lib/leagueStore';
 import { getStoredUser, fetchCurrentUser, logoutAccount, AUTH_CHANGE_EVENT } from '@/lib/authStore';
-import { checkForMutualMatch, createSeedOpponentSwipes, arraysEqualIgnoreOrder } from '@/lib/matchmaking';
+import {
+  checkForMutualMatch,
+  createSeedOpponentSwipes,
+  arraysEqualIgnoreOrder,
+  generateDeckItems,
+  DeckItem,
+} from '@/lib/matchmaking';
 import { recordPackageSwipeEloUpdate, resetInternalEloStore } from '@/lib/elo';
 import { League, Team, Player, Swipe, Match, Position, TradeType, UserAccount } from '@/types/fantasy';
 import { Navbar } from '@/components/Navbar';
@@ -41,12 +47,6 @@ import { PositionFilterBar, ALL_POSITIONS } from '@/components/PositionFilterBar
 import { HomeHero } from '@/components/HomeHero';
 import { LeagueLockerRoom } from '@/components/LeagueLockerRoom';
 import { X, Check, RotateCcw, UserCheck, Sparkles, UserX, Users } from 'lucide-react';
-
-interface DeckItem {
-  id: string;
-  ownerTeam: Team;
-  players: Player[];
-}
 
 function getMatchSignature(m: Match): string {
   const pairTeams = [m.teamAId, m.teamBId].sort().join('|');
@@ -100,6 +100,22 @@ export default function Home() {
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [isResettingSwipes, setIsResettingSwipes] = useState(false);
   const [resetNotification, setResetNotification] = useState<string | null>(null);
+
+  // Session deck seed for stable randomized candidate player pool
+  const [deckSeed, setDeckSeed] = useState<string>(() => {
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      try {
+        const stored = window.sessionStorage.getItem('trade_horny_deck_seed');
+        if (stored) return stored;
+        const generated = `seed_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+        window.sessionStorage.setItem('trade_horny_deck_seed', generated);
+        return generated;
+      } catch {
+        // Fallback if sessionStorage is blocked
+      }
+    }
+    return 'seed_static_trade_horny';
+  });
 
   // Refs to prevent stale closures and out-of-order network race conditions
   const leagueRef = useRef<League | null>(null);
@@ -443,6 +459,15 @@ export default function Home() {
           saveLocalMatches(latestLeague.espnLeagueId, []);
           saveLocalDeletedMatches(latestLeague.espnLeagueId, []);
           saveLocalSwipes(latestLeague.espnLeagueId, []);
+          const freshSeed = `seed_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+          setDeckSeed(freshSeed);
+          if (typeof window !== 'undefined' && window.sessionStorage) {
+            try {
+              window.sessionStorage.setItem('trade_horny_deck_seed', freshSeed);
+            } catch {
+              // Ignore
+            }
+          }
         }
 
         setDeletedMatches((prevDel) =>
@@ -621,75 +646,24 @@ export default function Home() {
     setTimeout(() => setExcludeNotification(null), 3500);
   };
 
-  // Generate swipe deck based on tradeType (1 target or 2 targets) and active team/position filters
+  // Generate randomized swipe deck based on tradeType (1 target or 2 targets), active team/position filters, and stable session deckSeed
   const deckItems = useMemo<DeckItem[]>(() => {
     if (!league || !userTeam || offeredPlayers.length !== requiredOfferedCount) return [];
 
-    const isTargetTwoPlayers = tradeType === '1-for-2' || tradeType === '2-for-2';
-    const opponentTeams = includedOpponentTeams;
     const activeOfferedIds = offeredPlayers.map((p) => p.id);
+    const sortedOfferedIds = [...activeOfferedIds].sort().join(',');
+    const activeSeed = `${deckSeed}_${league.espnLeagueId || league.id}_${userTeam.id}_${tradeType}_${sortedOfferedIds}`;
 
-    const matchesPositionFilter = (pos: Position) =>
-      selectedPositions.includes(pos) ||
-      (selectedPositions.includes('FLEX') && (pos === 'RB' || pos === 'WR' || pos === 'TE'));
-
-    // Unique composite key generator using actual offered player IDs
-    const generateSwipeKey = (type: TradeType, offeredIds: string[], targetIds: string[]) => {
-      const sortedTargets = [...targetIds].sort().join(',');
-      const sortedOffered = [...offeredIds].sort().join(',');
-      return `${type}|${sortedOffered}|${sortedTargets}`;
-    };
-
-    const existingSwipeKeys = new Set(
-      swipes
-        .filter((s) => s.teamId === userTeam.id && s.tradeType === tradeType)
-        .map((s) => generateSwipeKey(s.tradeType, s.offeredPlayerIds, s.targetPlayerIds))
-    );
-
-    const items: DeckItem[] = [];
-
-    if (!isTargetTwoPlayers) {
-      // SINGLE TARGET (1-for-1 or 2-for-1)
-      opponentTeams.forEach((team) => {
-        team.roster.forEach((player) => {
-          if (!matchesPositionFilter(player.position)) return;
-          const key = generateSwipeKey(tradeType, activeOfferedIds, [player.id]);
-          if (!existingSwipeKeys.has(key)) {
-            items.push({
-              id: `item_${player.id}`,
-              ownerTeam: team,
-              players: [player],
-            });
-          }
-        });
-      });
-    } else {
-      // TWO TARGETS IN A PACKAGE (1-for-2 or 2-for-2)
-      // Generate pairs from the same opponent team
-      opponentTeams.forEach((team) => {
-        const roster = team.roster;
-        for (let i = 0; i < roster.length; i++) {
-          for (let j = i + 1; j < roster.length; j++) {
-            const p1 = roster[i];
-            const p2 = roster[j];
-
-            // Both players in the target package must match the selected position filters
-            if (!matchesPositionFilter(p1.position) || !matchesPositionFilter(p2.position)) continue;
-
-            const key = generateSwipeKey(tradeType, activeOfferedIds, [p1.id, p2.id]);
-            if (!existingSwipeKeys.has(key)) {
-              items.push({
-                id: `pkg_${team.id}_${p1.id}_${p2.id}`,
-                ownerTeam: team,
-                players: [p1, p2],
-              });
-            }
-          }
-        }
-      });
-    }
-
-    return items;
+    return generateDeckItems({
+      league,
+      userTeam,
+      tradeType,
+      offeredPlayerIds: activeOfferedIds,
+      swipes,
+      selectedPositions,
+      includedOpponentTeams,
+      seed: activeSeed,
+    });
   }, [
     league,
     userTeam,
@@ -699,6 +673,7 @@ export default function Home() {
     swipes,
     selectedPositions,
     includedOpponentTeams,
+    deckSeed,
   ]);
 
   // Current top item to swipe on
@@ -1061,6 +1036,17 @@ export default function Home() {
         ]);
         setMatches(serverView.matches || []);
         setDeletedMatches(serverView.deletedMatches || []);
+      }
+
+      // Rotate deck seed on league reset to provide a fresh shuffle
+      const freshSeed = `seed_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      setDeckSeed(freshSeed);
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        try {
+          window.sessionStorage.setItem('trade_horny_deck_seed', freshSeed);
+        } catch {
+          // Ignore
+        }
       }
 
       setIsResetModalOpen(false);

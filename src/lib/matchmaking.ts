@@ -1,4 +1,167 @@
-import { Swipe, Match, League, Player } from '@/types/fantasy';
+import { Swipe, Match, League, Player, Team, TradeType, Position } from '@/types/fantasy';
+
+export interface DeckItem {
+  id: string;
+  ownerTeam: Team;
+  players: Player[];
+}
+
+/**
+ * Unique composite key generator using actual trade type, offered player IDs, and target player IDs.
+ */
+export function generateSwipeKey(
+  type: TradeType,
+  offeredIds: string[],
+  targetIds: string[]
+): string {
+  const sortedTargets = [...targetIds].sort().join(',');
+  const sortedOffered = [...offeredIds].sort().join(',');
+  return `${type}|${sortedOffered}|${sortedTargets}`;
+}
+
+/**
+ * Checks if a player's position matches the user's active position filters (including FLEX).
+ */
+export function matchesPositionFilter(pos: Position, selectedPositions: Position[]): boolean {
+  return (
+    selectedPositions.includes(pos) ||
+    (selectedPositions.includes('FLEX') && (pos === 'RB' || pos === 'WR' || pos === 'TE'))
+  );
+}
+
+/**
+ * 32-bit MurmurHash3 implementation for high-quality, uniform hash distribution.
+ */
+export function hashDeckSeed(key: string, seed: number = 0): number {
+  let h = seed >>> 0;
+  for (let i = 0; i < key.length; i++) {
+    let k = key.charCodeAt(i);
+    k = Math.imul(k, 0xcc9e2d51);
+    k = (k << 15) | (k >>> 17);
+    k = Math.imul(k, 0x1b873593);
+    h ^= k;
+    h = (h << 13) | (h >>> 19);
+    h = Math.imul(h, 5) + 0xe6546b64;
+  }
+  h ^= key.length;
+  h ^= h >>> 16;
+  h = Math.imul(h, 0x85ebca6b);
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35);
+  h ^= h >>> 16;
+  return h >>> 0;
+}
+
+/**
+ * Shuffles items deterministically using item IDs and a seed.
+ * Guarantees stable ordering across swipes and polling ticks within a session.
+ */
+export function shuffleDeckItems<T extends { id: string }>(
+  items: T[],
+  seed: string | number = 'trade_horny_deck_seed'
+): T[] {
+  const seedStr = String(seed);
+  const scored = items.map((item, idx) => ({
+    item,
+    hash: hashDeckSeed(`${seedStr}::${item.id}`),
+    idx,
+  }));
+
+  scored.sort((a, b) => {
+    if (a.hash < b.hash) return -1;
+    if (a.hash > b.hash) return 1;
+    const idCmp = a.item.id.localeCompare(b.item.id);
+    if (idCmp !== 0) return idCmp;
+    return a.idx - b.idx;
+  });
+
+  return scored.map((s) => s.item);
+}
+
+export interface GenerateDeckItemsOptions {
+  league: League;
+  userTeam: Team;
+  tradeType: TradeType;
+  offeredPlayerIds: string[];
+  swipes: Swipe[];
+  selectedPositions: Position[];
+  includedOpponentTeams: Team[];
+  seed?: string | number;
+}
+
+/**
+ * Generates and randomizes the candidate player/package pool for the swiping deck.
+ * Ensures players from different teams are thoroughly shuffled together, while maintaining
+ * rock-solid stability across swipes and background polling cycles.
+ */
+export function generateDeckItems({
+  league,
+  userTeam,
+  tradeType,
+  offeredPlayerIds,
+  swipes,
+  selectedPositions,
+  includedOpponentTeams,
+  seed = 'trade_horny_deck_seed',
+}: GenerateDeckItemsOptions): DeckItem[] {
+  const isTargetTwoPlayers = tradeType === '1-for-2' || tradeType === '2-for-2';
+  const activeOfferedIds = offeredPlayerIds;
+
+  const existingSwipeKeys = new Set(
+    swipes
+      .filter((s) => s.teamId === userTeam.id && s.tradeType === tradeType)
+      .map((s) => generateSwipeKey(s.tradeType, s.offeredPlayerIds, s.targetPlayerIds))
+  );
+
+  const rawItems: DeckItem[] = [];
+
+  if (!isTargetTwoPlayers) {
+    // SINGLE TARGET (1-for-1 or 2-for-1)
+    includedOpponentTeams.forEach((team) => {
+      team.roster.forEach((player) => {
+        if (!matchesPositionFilter(player.position, selectedPositions)) return;
+        const key = generateSwipeKey(tradeType, activeOfferedIds, [player.id]);
+        if (!existingSwipeKeys.has(key)) {
+          rawItems.push({
+            id: `item_${player.id}`,
+            ownerTeam: team,
+            players: [player],
+          });
+        }
+      });
+    });
+  } else {
+    // TWO TARGETS IN A PACKAGE (1-for-2 or 2-for-2)
+    // Generate pairs from the same opponent team
+    includedOpponentTeams.forEach((team) => {
+      const roster = team.roster;
+      for (let i = 0; i < roster.length; i++) {
+        for (let j = i + 1; j < roster.length; j++) {
+          const p1 = roster[i];
+          const p2 = roster[j];
+
+          if (
+            !matchesPositionFilter(p1.position, selectedPositions) ||
+            !matchesPositionFilter(p2.position, selectedPositions)
+          ) {
+            continue;
+          }
+
+          const key = generateSwipeKey(tradeType, activeOfferedIds, [p1.id, p2.id]);
+          if (!existingSwipeKeys.has(key)) {
+            rawItems.push({
+              id: `pkg_${team.id}_${p1.id}_${p2.id}`,
+              ownerTeam: team,
+              players: [p1, p2],
+            });
+          }
+        }
+      }
+    });
+  }
+
+  return shuffleDeckItems(rawItems, seed);
+}
 
 /**
  * True multiset equality comparison that preserves duplicate counts.

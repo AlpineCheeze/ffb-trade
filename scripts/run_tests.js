@@ -1,3 +1,10 @@
+if (typeof global.requestAnimationFrame === 'undefined') {
+  global.requestAnimationFrame = (cb) => setTimeout(() => cb(performance.now()), 16);
+}
+if (typeof global.cancelAnimationFrame === 'undefined') {
+  global.cancelAnimationFrame = (id) => clearTimeout(id);
+}
+
 const path = require('path');
 const createJiti = require('jiti');
 const jiti = createJiti(__filename, {
@@ -29,6 +36,10 @@ async function run() {
   const securityModule = jiti('./test_security_p0_p1.ts');
   if (securityModule && securityModule.testPromise) {
     await securityModule.testPromise;
+  }
+  const buttonSwipeModule = jiti('./test_button_swipe_animation.ts');
+  if (buttonSwipeModule && buttonSwipeModule.testPromise) {
+    await buttonSwipeModule.testPromise;
   }
 }
 

@@ -29,7 +29,7 @@ import { checkForMutualMatch, createSeedOpponentSwipes, arraysEqualIgnoreOrder }
 import { recordPackageSwipeEloUpdate, resetInternalEloStore } from '@/lib/elo';
 import { League, Team, Player, Swipe, Match, Position, TradeType, UserAccount } from '@/types/fantasy';
 import { Navbar } from '@/components/Navbar';
-import { SwipeCard } from '@/components/SwipeCard';
+import { SwipeCard, SwipeCardRef } from '@/components/SwipeCard';
 import { ShoppingRoster } from '@/components/ShoppingRoster';
 import { MatchesView } from '@/components/MatchesView';
 import { MatchCelebrationModal } from '@/components/MatchCelebrationModal';
@@ -705,8 +705,27 @@ export default function Home() {
   const currentCard = deckItems[0] || null;
   const nextCard = deckItems[1] || null;
 
+  const cardRef = useRef<SwipeCardRef | null>(null);
+  const [isSwipingCard, setIsSwipingCard] = useState(false);
+
+  // Handle programmatic button swipe with smooth card & badge animation
+  const handleButtonSwipe = (isInterested: boolean) => {
+    if (isSwipingCard) return;
+    if (cardRef.current) {
+      setIsSwipingCard(true);
+      cardRef.current.swipe(isInterested);
+      // Safety timeout to reset isSwipingCard in case animation is interrupted
+      setTimeout(() => {
+        setIsSwipingCard(false);
+      }, 600);
+    } else {
+      handleSwipe(isInterested);
+    }
+  };
+
   // Handle Swipe (Interested or Pass)
   const handleSwipe = (isInterested: boolean) => {
+    setIsSwipingCard(false);
     if (!currentCard || offeredPlayers.length !== requiredOfferedCount || !userTeam || !league) return;
 
     mutationVersionRef.current += 1;
@@ -1489,6 +1508,7 @@ export default function Home() {
 
                   {/* Active Front Card */}
                   <SwipeCard
+                    ref={cardRef}
                     key={currentCard.id}
                     players={currentCard.players}
                     ownerTeam={currentCard.ownerTeam}
@@ -1588,8 +1608,9 @@ export default function Home() {
               <div className="flex items-center gap-6">
                 {/* PASS BUTTON */}
                 <button
-                  onClick={() => handleSwipe(false)}
-                  className="w-16 h-16 rounded-full bg-slate-900 border-2 border-rose-500/40 hover:border-rose-500 text-rose-400 hover:text-white hover:bg-rose-600 flex items-center justify-center shadow-xl shadow-rose-950/40 transition-all hover:scale-110 active:scale-95"
+                  onClick={() => handleButtonSwipe(false)}
+                  disabled={isSwipingCard}
+                  className="w-16 h-16 rounded-full bg-slate-900 border-2 border-rose-500/40 hover:border-rose-500 text-rose-400 hover:text-white hover:bg-rose-600 disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center shadow-xl shadow-rose-950/40 transition-all hover:scale-110 active:scale-95"
                   title="Pass (Swipe Left)"
                 >
                   <X className="w-8 h-8 stroke-[2.5]" />
@@ -1598,7 +1619,8 @@ export default function Home() {
                 {/* UNDO BUTTON */}
                 <button
                   onClick={handleUndo}
-                  className="w-12 h-12 rounded-full bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-200 flex items-center justify-center shadow-lg transition-all hover:scale-105 active:scale-95"
+                  disabled={isSwipingCard}
+                  className="w-12 h-12 rounded-full bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-200 disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center shadow-lg transition-all hover:scale-105 active:scale-95"
                   title="Undo Last Swipe"
                 >
                   <RotateCcw className="w-5 h-5" />
@@ -1606,8 +1628,9 @@ export default function Home() {
 
                 {/* WANT BUTTON */}
                 <button
-                  onClick={() => handleSwipe(true)}
-                  className="w-16 h-16 rounded-full bg-slate-900 border-2 border-emerald-500/40 hover:border-emerald-500 text-emerald-400 hover:text-white hover:bg-emerald-600 flex items-center justify-center shadow-xl shadow-emerald-950/40 transition-all hover:scale-110 active:scale-95"
+                  onClick={() => handleButtonSwipe(true)}
+                  disabled={isSwipingCard}
+                  className="w-16 h-16 rounded-full bg-slate-900 border-2 border-emerald-500/40 hover:border-emerald-500 text-emerald-400 hover:text-white hover:bg-emerald-600 disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center shadow-xl shadow-emerald-950/40 transition-all hover:scale-110 active:scale-95"
                   title="Want / Interested (Swipe Right)"
                 >
                   <Check className="w-8 h-8 stroke-[3]" />

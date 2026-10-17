@@ -1,11 +1,15 @@
 'use client';
 
-import React, { useState } from 'react';
-import { motion, useMotionValue, useTransform, PanInfo } from 'framer-motion';
+import React, { useState, useRef, useEffect, useImperativeHandle, useCallback } from 'react';
+import { motion, useMotionValue, useTransform, animate, PanInfo } from 'framer-motion';
 import { Player, Team } from '@/types/fantasy';
 import { ShieldAlert, Calendar, Check, X, Info, Plus, Zap, TrendingUp, UserX } from 'lucide-react';
 
-interface SwipeCardProps {
+export interface SwipeCardRef {
+  swipe: (isInterested: boolean) => void;
+}
+
+export interface SwipeCardProps {
   players: Player[];
   ownerTeam?: Team;
   isFront: boolean;
@@ -13,24 +17,81 @@ interface SwipeCardProps {
   onExcludeOwner?: (teamId: string, ownerName: string) => void;
 }
 
-export const SwipeCard: React.FC<SwipeCardProps> = ({
-  players,
-  ownerTeam,
-  isFront,
-  onSwipe,
-  onExcludeOwner,
-}) => {
+export const SwipeCard = React.forwardRef<SwipeCardRef, SwipeCardProps>(function SwipeCard(
+  {
+    players,
+    ownerTeam,
+    isFront,
+    onSwipe,
+    onExcludeOwner,
+  },
+  ref
+) {
   const [showStats, setShowStats] = useState(false);
   const [imgErrors, setImgErrors] = useState<Record<string, boolean>>({});
+  const [actionStamp, setActionStamp] = useState<'want' | 'pass' | null>(null);
+  const isSwipingRef = useRef(false);
+
+  const onSwipeRef = useRef(onSwipe);
+  useEffect(() => {
+    onSwipeRef.current = onSwipe;
+  }, [onSwipe]);
+
+  useEffect(() => {
+    return () => {
+      isSwipingRef.current = false;
+    };
+  }, []);
 
   const x = useMotionValue(0);
+  const cardOpacity = useMotionValue(1);
   const rotate = useTransform(x, [-250, 250], [-18, 18]);
   const opacityLike = useTransform(x, [20, 100], [0, 1]);
   const opacityPass = useTransform(x, [-20, -100], [0, 1]);
 
   const isPackage = players.length > 1;
 
+  const triggerSwipe = useCallback((isInterested: boolean, initialVelocity = 0) => {
+    if (isSwipingRef.current) return;
+    isSwipingRef.current = true;
+
+    setActionStamp(isInterested ? 'want' : 'pass');
+
+    const screenWidth = typeof window !== 'undefined' ? window.innerWidth : 400;
+    const flyDistance = Math.max(screenWidth * 0.85, 450);
+    const targetX = isInterested ? flyDistance : -flyDistance;
+
+    // Fade out card towards the end of the fly-out
+    animate(cardOpacity, 0, {
+      duration: 0.15,
+      delay: 0.18,
+      ease: 'easeOut',
+    });
+
+    animate(x, targetX, {
+      duration: 0.35,
+      ease: [0.32, 0.72, 0, 1],
+      velocity: initialVelocity,
+      onComplete: () => {
+        onSwipeRef.current(isInterested);
+        isSwipingRef.current = false;
+      },
+    });
+  }, [cardOpacity, x]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      swipe: (isInterested: boolean) => {
+        triggerSwipe(isInterested);
+      },
+    }),
+    [triggerSwipe]
+  );
+
   const handleDragEnd = (_: any, info: PanInfo) => {
+    if (isSwipingRef.current) return;
+
     const threshold = 90;
     const velocityThreshold = 400;
 
@@ -39,12 +100,16 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
       (info.offset.x > threshold && info.velocity.x >= -100) ||
       (info.offset.x > 20 && info.velocity.x > velocityThreshold)
     ) {
-      onSwipe(true);
+      triggerSwipe(true, info.velocity.x);
     } else if (
       (info.offset.x < -threshold && info.velocity.x <= 100) ||
       (info.offset.x < -20 && info.velocity.x < -velocityThreshold)
     ) {
-      onSwipe(false);
+      triggerSwipe(false, info.velocity.x);
+    } else {
+      setActionStamp(null);
+      animate(x, 0, { type: 'spring', stiffness: 500, damping: 30 });
+      cardOpacity.set(1);
     }
   };
 
@@ -57,21 +122,41 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
       style={{
         x: isFront ? x : 0,
         rotate: isFront ? rotate : 0,
+        opacity: isFront ? cardOpacity : undefined,
       }}
-      drag={isFront ? 'x' : false}
+      animate={{
+        scale: isFront ? 1 : 0.96,
+        y: isFront ? 0 : 8,
+        opacity: isFront ? 1 : 0.6,
+      }}
+      transition={{
+        duration: 0.2,
+        ease: 'easeOut',
+      }}
+      drag={isFront && !actionStamp ? 'x' : false}
       dragConstraints={{ left: 0, right: 0 }}
       dragElastic={0.7}
       onDragEnd={handleDragEnd}
-      whileTap={isFront ? { cursor: 'grabbing' } : {}}
-      className={`absolute inset-0 w-full h-full rounded-3xl bg-slate-900/95 border border-slate-800 shadow-2xl overflow-hidden flex flex-col cursor-grab select-none touch-none transition-shadow ${
-        isFront ? 'shadow-blue-900/20 shadow-2xl' : 'scale-95 translate-y-3 opacity-60 pointer-events-none'
+      whileTap={isFront && !actionStamp ? { cursor: 'grabbing' } : {}}
+      className={`absolute inset-0 w-full h-full rounded-3xl bg-slate-900/95 border border-slate-800 shadow-2xl overflow-hidden flex flex-col select-none touch-none ${
+        isFront ? 'cursor-grab shadow-blue-900/20 shadow-2xl' : 'pointer-events-none'
       }`}
     >
-      {/* Visual Stamps on Drag */}
+      {/* Visual Stamps on Drag / Button Action */}
       {isFront && (
         <>
           <motion.div
-            style={{ opacity: opacityLike }}
+            style={{
+              opacity: actionStamp === 'want' ? 1 : actionStamp === 'pass' ? 0 : opacityLike,
+            }}
+            animate={
+              actionStamp === 'want'
+                ? { scale: [0.8, 1.15, 1], opacity: 1 }
+                : actionStamp === 'pass'
+                ? { opacity: 0 }
+                : { scale: 1 }
+            }
+            transition={{ duration: 0.22, ease: 'easeOut' }}
             className="absolute top-8 left-8 z-30 pointer-events-none -rotate-12 border-4 border-emerald-500 text-emerald-400 bg-emerald-950/80 px-4 py-1.5 rounded-xl font-black text-2xl tracking-wider uppercase shadow-lg shadow-emerald-500/30 flex items-center gap-2"
           >
             <Check className="w-7 h-7 stroke-[3]" />
@@ -79,7 +164,17 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
           </motion.div>
 
           <motion.div
-            style={{ opacity: opacityPass }}
+            style={{
+              opacity: actionStamp === 'pass' ? 1 : actionStamp === 'want' ? 0 : opacityPass,
+            }}
+            animate={
+              actionStamp === 'pass'
+                ? { scale: [0.8, 1.15, 1], opacity: 1 }
+                : actionStamp === 'want'
+                ? { opacity: 0 }
+                : { scale: 1 }
+            }
+            transition={{ duration: 0.22, ease: 'easeOut' }}
             className="absolute top-8 right-8 z-30 pointer-events-none rotate-12 border-4 border-rose-500 text-rose-400 bg-rose-950/80 px-4 py-1.5 rounded-xl font-black text-2xl tracking-wider uppercase shadow-lg shadow-rose-500/30 flex items-center gap-2"
           >
             <X className="w-7 h-7 stroke-[3]" />
@@ -357,4 +452,7 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
       )}
     </motion.div>
   );
-};
+});
+
+SwipeCard.displayName = 'SwipeCard';
+

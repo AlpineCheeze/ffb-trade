@@ -404,35 +404,36 @@ export const SwipeCard = React.forwardRef<SwipeCardRef, SwipeCardProps>(function
           </div>
 
           {/* Player Rows */}
-          <div className={`flex-1 flex flex-col justify-around min-h-0 py-1.5 ${players.length >= 3 ? 'gap-1.5' : 'gap-2'}`}>
+          <div className={`flex-1 flex flex-col justify-around min-h-0 py-1 ${players.length >= 3 ? 'gap-1' : 'gap-2'}`}>
             {players.map((player, idx) => (
-              <div
-                key={player.id}
-                className={`bg-slate-950/70 border border-slate-800 rounded-2xl flex items-center relative overflow-hidden ${
-                  players.length >= 3
-                    ? 'p-2 min-[400px]:p-2.5 gap-2.5 sm:gap-3'
-                    : 'p-3 gap-3.5'
-                }`}
-              >
+              <React.Fragment key={player.id}>
                 {/* Plus separator between rows */}
                 {idx > 0 && (
-                  <div
-                    className={`absolute left-1/2 -translate-x-1/2 rounded-full bg-slate-800 border border-slate-700 text-slate-400 flex items-center justify-center z-10 ${
-                      players.length >= 3 ? '-top-2 w-5 h-5' : '-top-3 w-6 h-6'
-                    }`}
-                  >
-                    <Plus className={players.length >= 3 ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
+                  <div className="flex items-center justify-center -my-1 sm:-my-0.5 z-10 flex-shrink-0">
+                    <div
+                      className={`rounded-full bg-slate-800 border border-slate-700 text-slate-400 flex items-center justify-center shadow ${
+                        players.length >= 3 ? 'w-5 h-5' : 'w-6 h-6'
+                      }`}
+                    >
+                      <Plus className={players.length >= 3 ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
+                    </div>
                   </div>
                 )}
-
-                {/* Player Photo */}
                 <div
-                  className={`rounded-xl bg-slate-900 border border-slate-700/80 overflow-hidden flex-shrink-0 flex items-center justify-center ${
+                  className={`bg-slate-950/70 border border-slate-800 rounded-2xl flex items-center relative ${
                     players.length >= 3
-                      ? 'w-11 h-11 min-[400px]:w-12 min-[400px]:h-12 sm:w-14 sm:h-14'
-                      : 'w-16 h-16'
+                      ? 'p-2 min-[400px]:p-2.5 gap-2.5 sm:gap-3'
+                      : 'p-3 gap-3.5'
                   }`}
                 >
+                  {/* Player Photo */}
+                  <div
+                    className={`rounded-xl bg-slate-900 border border-slate-700/80 overflow-hidden flex-shrink-0 flex items-center justify-center ${
+                      players.length >= 3
+                        ? 'w-11 h-11 min-[400px]:w-12 min-[400px]:h-12 sm:w-14 sm:h-14'
+                        : 'w-16 h-16'
+                    }`}
+                  >
                   {!imgErrors[player.id] ? (
                     <img
                       src={player.headshotUrl}
@@ -474,6 +475,7 @@ export const SwipeCard = React.forwardRef<SwipeCardRef, SwipeCardProps>(function
                   </div>
                 </div>
               </div>
+            </React.Fragment>
             ))}
           </div>
 

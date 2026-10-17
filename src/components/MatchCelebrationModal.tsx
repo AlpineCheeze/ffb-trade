@@ -99,11 +99,11 @@ export const MatchCelebrationModal: React.FC<MatchCelebrationModalProps> = ({
             <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
               You Send ({userPlayers.length})
             </span>
-            <div className="w-full space-y-2">
+            <div className={`w-full ${userPlayers.length >= 3 ? 'space-y-1.5' : 'space-y-2'}`}>
               {userPlayers.map((p, idx) => (
                 <div key={p.id} className="flex flex-col items-center text-center">
-                  {idx > 0 && <span className="text-blue-400 font-bold text-xs my-0.5">+</span>}
-                  <div className={`${userPlayers.length >= 3 ? 'w-11 h-11' : 'w-14 h-14'} rounded-full bg-slate-900 border-2 border-blue-500/50 overflow-hidden mb-1 flex items-center justify-center`}>
+                  {idx > 0 && <span className="text-blue-400 font-bold text-[10px] my-0.2">+</span>}
+                  <div className={`${userPlayers.length >= 3 ? 'w-10 h-10 min-[400px]:w-11 min-[400px]:h-11' : 'w-14 h-14'} rounded-full bg-slate-900 border-2 border-blue-500/50 overflow-hidden mb-1 flex items-center justify-center`}>
                     {!imgErrors[p.id] ? (
                       <img
                         src={p.headshotUrl}
@@ -115,8 +115,8 @@ export const MatchCelebrationModal: React.FC<MatchCelebrationModalProps> = ({
                       <span className="text-xs font-bold text-slate-500">{p.position}</span>
                     )}
                   </div>
-                  <h4 className="font-bold text-white text-xs truncate w-full">{p.fullName}</h4>
-                  <div className="text-[11px] text-blue-400 font-semibold">{p.position} • {p.nflTeam}</div>
+                  <h4 className={`font-bold text-white truncate w-full ${userPlayers.length >= 3 ? 'text-[11px]' : 'text-xs'}`}>{p.fullName}</h4>
+                  <div className={`${userPlayers.length >= 3 ? 'text-[10px]' : 'text-[11px]'} text-blue-400 font-semibold`}>{p.position} • {p.nflTeam}</div>
                 </div>
               ))}
             </div>
@@ -127,11 +127,11 @@ export const MatchCelebrationModal: React.FC<MatchCelebrationModalProps> = ({
             <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400">
               You Receive ({partnerPlayers.length})
             </span>
-            <div className="w-full space-y-2">
+            <div className={`w-full ${partnerPlayers.length >= 3 ? 'space-y-1.5' : 'space-y-2'}`}>
               {partnerPlayers.map((p, idx) => (
                 <div key={p.id} className="flex flex-col items-center text-center">
-                  {idx > 0 && <span className="text-emerald-400 font-bold text-xs my-0.5">+</span>}
-                  <div className={`${partnerPlayers.length >= 3 ? 'w-11 h-11' : 'w-14 h-14'} rounded-full bg-slate-900 border-2 border-emerald-500/50 overflow-hidden mb-1 flex items-center justify-center`}>
+                  {idx > 0 && <span className="text-emerald-400 font-bold text-[10px] my-0.2">+</span>}
+                  <div className={`${partnerPlayers.length >= 3 ? 'w-10 h-10 min-[400px]:w-11 min-[400px]:h-11' : 'w-14 h-14'} rounded-full bg-slate-900 border-2 border-emerald-500/50 overflow-hidden mb-1 flex items-center justify-center`}>
                     {!imgErrors[p.id] ? (
                       <img
                         src={p.headshotUrl}
@@ -143,8 +143,8 @@ export const MatchCelebrationModal: React.FC<MatchCelebrationModalProps> = ({
                       <span className="text-xs font-bold text-slate-500">{p.position}</span>
                     )}
                   </div>
-                  <h4 className="font-bold text-white text-xs truncate w-full">{p.fullName}</h4>
-                  <div className="text-[11px] text-emerald-400 font-semibold">{p.position} • {p.nflTeam}</div>
+                  <h4 className={`font-bold text-white truncate w-full ${partnerPlayers.length >= 3 ? 'text-[11px]' : 'text-xs'}`}>{p.fullName}</h4>
+                  <div className={`${partnerPlayers.length >= 3 ? 'text-[10px]' : 'text-[11px]'} text-emerald-400 font-semibold`}>{p.position} • {p.nflTeam}</div>
                 </div>
               ))}
             </div>

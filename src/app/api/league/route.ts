@@ -16,6 +16,7 @@ import {
 import { fetchEspnLeagueServer } from '@/lib/espn';
 import { linkUserTeamClaim, getUserByToken, userLock } from '@/lib/serverUserStore';
 import { Swipe, TradeType, Match, UserAccount, ServerLeagueState } from '@/types/fantasy';
+import { isValidTradeType } from '@/lib/matchmaking';
 
 function extractToken(req: NextRequest, body?: any): string | null {
   const authHeader = req.headers.get('Authorization');
@@ -265,6 +266,7 @@ export async function POST(req: NextRequest) {
           !swipe.teamId.trim() ||
           typeof swipe.targetTeamId !== 'string' ||
           !swipe.targetTeamId.trim() ||
+          !isValidTradeType(swipe.tradeType) ||
           !Array.isArray(swipe.offeredPlayerIds) ||
           swipe.offeredPlayerIds.length === 0 ||
           !Array.isArray(swipe.targetPlayerIds) ||
@@ -272,6 +274,19 @@ export async function POST(req: NextRequest) {
         ) {
           return NextResponse.json(
             { error: 'Invalid swipe payload' },
+            { status: 400 }
+          );
+        }
+
+        const [expectedSendStr, expectedGetStr] = swipe.tradeType.split('-for-');
+        const expectedSend = parseInt(expectedSendStr, 10);
+        const expectedGet = parseInt(expectedGetStr, 10);
+        if (
+          swipe.offeredPlayerIds.length !== expectedSend ||
+          swipe.targetPlayerIds.length !== expectedGet
+        ) {
+          return NextResponse.json(
+            { error: `Swipe package cardinality does not match tradeType ${swipe.tradeType}` },
             { status: 400 }
           );
         }
@@ -356,7 +371,7 @@ export async function POST(req: NextRequest) {
           offeredPlayerIds: string[];
         };
 
-        if (!rawTeamId || !tradeType || !Array.isArray(offeredPlayerIds)) {
+        if (!rawTeamId || !isValidTradeType(tradeType) || !Array.isArray(offeredPlayerIds)) {
           return NextResponse.json(
             { error: 'Invalid undo payload' },
             { status: 400 }

@@ -6,6 +6,22 @@ export interface DeckItem {
   players: Player[];
 }
 
+export const VALID_TRADE_TYPES: TradeType[] = [
+  '1-for-1',
+  '1-for-2',
+  '1-for-3',
+  '2-for-1',
+  '2-for-2',
+  '2-for-3',
+  '3-for-1',
+  '3-for-2',
+  '3-for-3',
+];
+
+export function isValidTradeType(val: any): val is TradeType {
+  return typeof val === 'string' && VALID_TRADE_TYPES.includes(val as TradeType);
+}
+
 /**
  * Unique composite key generator using actual trade type, offered player IDs, and target player IDs.
  */
@@ -113,7 +129,10 @@ export function generateDeckItems({
 }: GenerateDeckItemsOptions): DeckItem[] {
   if (!userTeam) return [];
 
-  const targetCount = parseInt(tradeType.split('-for-')[1], 10);
+  const targetCount =
+    typeof tradeType === 'string' && tradeType.includes('-for-')
+      ? parseInt(tradeType.split('-for-')[1], 10)
+      : 1;
   const activeOfferedIds = Array.isArray(offeredPlayerIds) ? offeredPlayerIds : [];
   const safeSwipes = Array.isArray(swipes) ? swipes : [];
 
@@ -218,7 +237,7 @@ export function generateDeckItems({
             }
 
             // Canonical sorting of player triplet IDs ensures immutability against roster ordering changes
-            const sortedPlayers = [p1, p2, p3].sort((a, b) => a.id.localeCompare(b.id));
+            const sortedPlayers = [p1, p2, p3].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
             const key = generateSwipeKey(
               tradeType,
               activeOfferedIds,
@@ -255,6 +274,9 @@ export function arraysEqualIgnoreOrder(a: string[], b: string[]): boolean {
  * e.g., '3-for-1' -> '1-for-3', '2-for-3' -> '3-for-2', '3-for-3' -> '3-for-3'.
  */
 export function getReciprocalTradeType(tradeType: TradeType): TradeType {
+  if (!tradeType || typeof tradeType !== 'string' || !tradeType.includes('-for-')) {
+    return '1-for-1';
+  }
   const [send, get] = tradeType.split('-for-');
   return `${get}-for-${send}` as TradeType;
 }
@@ -263,6 +285,7 @@ export function getReciprocalTradeType(tradeType: TradeType): TradeType {
  * Checks if two trade types are reciprocals of each other.
  */
 export function isReciprocalTradeType(typeA: TradeType, typeB: TradeType): boolean {
+  if (!typeA || !typeB) return false;
   return getReciprocalTradeType(typeA) === typeB;
 }
 
@@ -274,7 +297,19 @@ export function checkForMutualMatch(
   allSwipes: Swipe[],
   league: League
 ): Match | null {
-  if (!newSwipe.isInterested || !newSwipe.teamId || !newSwipe.targetTeamId) {
+  if (
+    !newSwipe ||
+    !newSwipe.isInterested ||
+    !newSwipe.teamId ||
+    !newSwipe.targetTeamId ||
+    !newSwipe.tradeType ||
+    typeof newSwipe.tradeType !== 'string' ||
+    !newSwipe.tradeType.includes('-for-') ||
+    !Array.isArray(newSwipe.offeredPlayerIds) ||
+    !Array.isArray(newSwipe.targetPlayerIds) ||
+    !league ||
+    !Array.isArray(league.teams)
+  ) {
     return null;
   }
 
@@ -284,8 +319,8 @@ export function checkForMutualMatch(
   }
 
   // Find complementary swipe from the target team directed specifically back at this team
-  const complementarySwipe = allSwipes.find((s) => {
-    if (!s.isInterested || s.id === newSwipe.id) return false;
+  const complementarySwipe = (Array.isArray(allSwipes) ? allSwipes : []).find((s) => {
+    if (!s || !s.isInterested || s.id === newSwipe.id) return false;
     // Both teams must specifically target each other
     if (s.teamId !== newSwipe.targetTeamId || s.targetTeamId !== newSwipe.teamId) return false;
 
@@ -305,19 +340,26 @@ export function checkForMutualMatch(
   }
 
   // Find teams in league data
-  const teamA = league.teams.find((t) => t.id === newSwipe.teamId);
-  const teamB = league.teams.find((t) => t.id === newSwipe.targetTeamId);
-  if (!teamA || !teamB) return null;
+  const teamA = league.teams.find((t) => t && t.id === newSwipe.teamId);
+  const teamB = league.teams.find((t) => t && t.id === newSwipe.targetTeamId);
+  if (!teamA || !teamB || !Array.isArray(teamA.roster) || !Array.isArray(teamB.roster)) {
+    return null;
+  }
 
-  const teamAPlayers = teamA.roster.filter((p) => newSwipe.offeredPlayerIds.includes(p.id));
-  const teamBPlayers = teamB.roster.filter((p) => newSwipe.targetPlayerIds.includes(p.id));
+  const teamAPlayers = teamA.roster.filter((p) => p && newSwipe.offeredPlayerIds.includes(p.id));
+  const teamBPlayers = teamB.roster.filter((p) => p && newSwipe.targetPlayerIds.includes(p.id));
 
   // Strict cardinality validation matching the exact expected package sizes
   const [expectedAStr, expectedBStr] = newSwipe.tradeType.split('-for-');
   const expectedA = parseInt(expectedAStr, 10);
   const expectedB = parseInt(expectedBStr, 10);
 
-  if (teamAPlayers.length !== expectedA || teamBPlayers.length !== expectedB) {
+  if (
+    newSwipe.offeredPlayerIds.length !== expectedA ||
+    newSwipe.targetPlayerIds.length !== expectedB ||
+    teamAPlayers.length !== expectedA ||
+    teamBPlayers.length !== expectedB
+  ) {
     return null;
   }
 
@@ -391,6 +433,19 @@ export function createSeedOpponentSwipes(league: League): Swipe[] {
     targetTeamId: 'team_1',
     isInterested: true,
     createdAt: new Date(Date.now() - 1800000).toISOString(),
+  });
+
+  // Sarah Jenkins (Team 3): 3-for-2 Blockbuster Package
+  // Offers Ja'Marr Chase, Bijan Robinson & Amon-Ra St. Brown for Justin Jefferson & Saquon Barkley
+  seeds.push({
+    id: 'seed_swipe_4',
+    teamId: 'team_3',
+    tradeType: '3-for-2',
+    offeredPlayerIds: ['p_chase', 'p_bijan', 'p_amonra'],
+    targetPlayerIds: ['p_jj', 'p_saquon'],
+    targetTeamId: 'team_1',
+    isInterested: true,
+    createdAt: new Date(Date.now() - 900000).toISOString(),
   });
 
   return seeds;

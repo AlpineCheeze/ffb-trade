@@ -6,6 +6,9 @@ import {
   getReciprocalTradeType,
   isReciprocalTradeType,
   arraysEqualIgnoreOrder,
+  VALID_TRADE_TYPES,
+  isValidTradeType,
+  createSeedOpponentSwipes,
 } from '../src/lib/matchmaking';
 import {
   recordServerSwipe,
@@ -13,6 +16,7 @@ import {
   getServerLeagueState,
   clearAllServerLeagues,
 } from '../src/lib/serverLeagueStore';
+import { createMockLeague as createDemoMockLeague } from '../src/lib/espn';
 import { League, Team, Player, TradeType, Swipe } from '../src/types/fantasy';
 
 function createMockTeam(teamId: string, name: string, playerCount = 15): Team {
@@ -374,6 +378,7 @@ export const testPromise = (async function runTradePackageTests() {
     assert.strictEqual(matchWrongType, null, 'Incompatible trade type must NOT match');
 
     // Cardinality mismatch: offered array has 2 players but tradeType says 3-for-1
+    // Team 2 reciprocates with 1-for-3 targeting those 2 players
     const swipeBadCardinality: Swipe = {
       id: 'swipe_t1_cardinality_mismatch',
       teamId: team1.id,
@@ -385,8 +390,37 @@ export const testPromise = (async function runTradePackageTests() {
       createdAt: new Date().toISOString(),
     };
 
-    const matchBadCard = checkForMutualMatch(swipeBadCardinality, [swipeT2WrongType], league);
-    assert.strictEqual(matchBadCard, null, 'Cardinality mismatch must be rejected');
+    const swipeT2MatchingIDs: Swipe = {
+      id: 'swipe_t2_reciprocal_cardinality_mismatch',
+      teamId: team2.id,
+      tradeType: '1-for-3',
+      offeredPlayerIds: t1Target,
+      targetPlayerIds: [team1.roster[0].id, team1.roster[1].id],
+      targetTeamId: team1.id,
+      isInterested: true,
+      createdAt: new Date().toISOString(),
+    };
+
+    const matchBadCard = checkForMutualMatch(swipeBadCardinality, [swipeT2MatchingIDs], league);
+    assert.strictEqual(matchBadCard, null, 'Cardinality mismatch must be rejected even with matching reciprocal types');
+
+    // Invalid tradeType defensive handling
+    const swipeInvalidType: any = {
+      id: 'swipe_invalid_type',
+      teamId: team1.id,
+      tradeType: 'invalid-type',
+      offeredPlayerIds: t1Offer,
+      targetPlayerIds: t1Target,
+      targetTeamId: team2.id,
+      isInterested: true,
+    };
+    assert.strictEqual(checkForMutualMatch(swipeInvalidType, [swipeT2WrongType], league), null);
+    assert.strictEqual(isValidTradeType('invalid-type'), false);
+    assert.strictEqual(isValidTradeType(null), false);
+    assert.strictEqual(isValidTradeType(undefined), false);
+    for (const validT of VALID_TRADE_TYPES) {
+      assert.strictEqual(isValidTradeType(validT), true);
+    }
     console.log('✓ Test 7 Passed: Incompatible trade types and cardinality mismatches rejected.');
   }
 
@@ -472,6 +506,39 @@ export const testPromise = (async function runTradePackageTests() {
       }
     }
     console.log('✓ Test 9 Passed: Offered players strictly excluded from all target packages.');
+  }
+
+  // --------------------------------------------------------------------------
+  // Test 10: Demo League Sandbox Interactive 3-Player Reciprocal Seed Swipe
+  // --------------------------------------------------------------------------
+  console.log('\n[Test 10] Testing demo sandbox 3-player seed swipe reciprocal match...');
+  {
+    const demoLeague = createDemoMockLeague();
+    const demoSeeds = createSeedOpponentSwipes(demoLeague);
+
+    const seed3for2 = demoSeeds.find((s) => s.id === 'seed_swipe_4');
+    assert(seed3for2, 'Demo league must include seed_swipe_4 for 3-for-2 testing');
+    assert.strictEqual(seed3for2.tradeType, '3-for-2');
+    assert.strictEqual(seed3for2.offeredPlayerIds.length, 3);
+    assert.strictEqual(seed3for2.targetPlayerIds.length, 2);
+
+    // User swipes 2-for-3 on Team 3 offering JJ & Saquon for Chase, Bijan, Amon-Ra
+    const userReciprocalSwipe: Swipe = {
+      id: 'swipe_user_2for3',
+      teamId: 'team_1',
+      tradeType: '2-for-3',
+      offeredPlayerIds: ['p_jj', 'p_saquon'],
+      targetPlayerIds: ['p_chase', 'p_bijan', 'p_amonra'],
+      targetTeamId: 'team_3',
+      isInterested: true,
+      createdAt: new Date().toISOString(),
+    };
+
+    const mutualMatch = checkForMutualMatch(userReciprocalSwipe, demoSeeds, demoLeague);
+    assert(mutualMatch !== null, 'Mutual match MUST trigger immediately with seed_swipe_4');
+    assert.strictEqual(mutualMatch.teamAPlayers.length, 2);
+    assert.strictEqual(mutualMatch.teamBPlayers.length, 3);
+    console.log('✓ Test 10 Passed: Demo sandbox 3-player reciprocal trade triggers immediate match celebration.');
   }
 
   console.log('\n========================================================');

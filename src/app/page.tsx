@@ -638,7 +638,7 @@ export default function Home() {
     setTimeout(() => setExcludeNotification(null), 3500);
   };
 
-  // Generate randomized swipe deck based on tradeType (1 target or 2 targets), active team/position filters, and stable session deckSeed
+  // Generate randomized swipe deck based on tradeType (1, 2, or 3 targets), active team/position filters, and stable session deckSeed
   const deckItems = useMemo<DeckItem[]>(() => {
     if (!league || !userTeam || offeredPlayers.length !== requiredOfferedCount) return [];
 
@@ -1419,7 +1419,7 @@ export default function Home() {
                 </div>
 
                 {/* Offered Players Preview */}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
                   {offeredPlayers.length > 0 ? (
                     offeredPlayers.map((player, idx) => {
                       const surname = player.fullName
@@ -1428,12 +1428,12 @@ export default function Home() {
                         .pop();
 
                       return (
-                        <div key={player.id} className="flex items-center gap-1.5">
-                          {idx > 0 && <span className="text-xs text-blue-400 font-black">+</span>}
-                          <div className="w-8 h-8 rounded-full bg-slate-800 border border-blue-500/40 overflow-hidden flex-shrink-0">
+                        <div key={player.id} className="flex items-center gap-1 flex-shrink-0">
+                          {idx > 0 && <span className="text-[10px] text-blue-400 font-black">+</span>}
+                          <div className={`${offeredPlayers.length >= 3 ? 'w-6 h-6 min-[400px]:w-7 min-[400px]:h-7' : 'w-8 h-8'} rounded-full bg-slate-800 border border-blue-500/40 overflow-hidden flex-shrink-0`}>
                             <img src={player.headshotUrl} alt={player.fullName} className="w-full h-full object-cover" />
                           </div>
-                          <span className="text-xs font-bold text-white truncate max-w-[90px]">
+                          <span className={`font-bold text-white truncate ${offeredPlayers.length >= 3 ? 'text-[11px] max-w-[55px] min-[400px]:max-w-[70px]' : 'text-xs max-w-[90px]'}`}>
                             {surname}
                           </span>
                         </div>

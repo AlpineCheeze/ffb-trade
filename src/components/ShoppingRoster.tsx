@@ -39,7 +39,7 @@ export const ShoppingRoster: React.FC<ShoppingRosterProps> = ({
             <h2 className="text-xl font-black text-white">Your Trade Package Block</h2>
           </div>
           <p className="text-xs text-slate-400 mt-1">
-            Configure the structure and select {requiredCount === 1 ? '1 player' : `up to ${requiredCount} players`} from <span className="text-blue-400 font-semibold">{userTeam.name}</span>.
+            Configure the structure and select {requiredCount === 1 ? '1 player' : `${requiredCount} players`} from <span className="text-blue-400 font-semibold">{userTeam.name}</span>.
           </p>
         </div>
 
@@ -86,11 +86,11 @@ export const ShoppingRoster: React.FC<ShoppingRosterProps> = ({
                   const newSend = Number(e.target.value);
                   onTradeTypeChange(`${newSend}-for-${getCount}` as TradeType);
                 }}
-                className="w-full bg-slate-900 hover:bg-slate-850 text-white font-bold text-sm rounded-xl px-3.5 py-2.5 border border-slate-700/80 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none appearance-none cursor-pointer transition shadow-inner"
+                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm rounded-xl px-3.5 py-2.5 border border-slate-700/80 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none appearance-none cursor-pointer transition shadow-inner"
               >
-                <option value={1}>1 Player</option>
-                <option value={2}>2 Players</option>
-                <option value={3}>3 Players</option>
+                <option value={1} className="bg-slate-900 text-white">1 Player</option>
+                <option value={2} className="bg-slate-900 text-white">2 Players</option>
+                <option value={3} className="bg-slate-900 text-white">3 Players</option>
               </select>
               <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
                 <ChevronDown className="w-4 h-4" />
@@ -118,11 +118,11 @@ export const ShoppingRoster: React.FC<ShoppingRosterProps> = ({
                   const newGet = Number(e.target.value);
                   onTradeTypeChange(`${sendCount}-for-${newGet}` as TradeType);
                 }}
-                className="w-full bg-slate-900 hover:bg-slate-850 text-white font-bold text-sm rounded-xl px-3.5 py-2.5 border border-slate-700/80 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none appearance-none cursor-pointer transition shadow-inner"
+                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm rounded-xl px-3.5 py-2.5 border border-slate-700/80 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none appearance-none cursor-pointer transition shadow-inner"
               >
-                <option value={1}>1 Player</option>
-                <option value={2}>2 Players</option>
-                <option value={3}>3 Players</option>
+                <option value={1} className="bg-slate-900 text-white">1 Player</option>
+                <option value={2} className="bg-slate-900 text-white">2 Players</option>
+                <option value={3} className="bg-slate-900 text-white">3 Players</option>
               </select>
               <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
                 <ChevronDown className="w-4 h-4" />

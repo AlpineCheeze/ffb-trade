@@ -181,29 +181,37 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
                       </div>
                       <div className="space-y-2">
                         {userPlayers.map((p, idx) => (
-                          <div key={p.id} className="flex items-center gap-2.5">
-                            {idx > 0 && <span className="text-[10px] text-blue-400 font-bold -my-1">+</span>}
-                            {!imgErrors[p.id] ? (
-                              <img
-                                src={p.headshotUrl}
-                                alt={p.fullName}
-                                onError={() => handleImgError(p.id)}
-                                className="w-10 h-10 rounded-xl object-cover bg-slate-800 flex-shrink-0"
-                              />
-                            ) : (
-                              <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-bold text-slate-500 flex-shrink-0">
-                                {p.position}
+                          <React.Fragment key={p.id}>
+                            {idx > 0 && (
+                              <div className="flex items-center justify-center -my-1">
+                                <span className="text-[10px] text-blue-400 font-bold bg-slate-900 border border-blue-500/30 w-4 h-4 rounded-full flex items-center justify-center">
+                                  +
+                                </span>
                               </div>
                             )}
-                            <div className="min-w-0 flex-1">
-                              <div className="text-xs font-bold text-white truncate">{p.fullName}</div>
-                              <div className="text-[11px] text-blue-400 font-semibold flex items-center gap-1">
-                                <span>{p.position}</span>
-                                <span>•</span>
-                                <span className="text-slate-400">{p.nflTeam}</span>
+                            <div className="flex items-center gap-2.5">
+                              {!imgErrors[p.id] ? (
+                                <img
+                                  src={p.headshotUrl}
+                                  alt={p.fullName}
+                                  onError={() => handleImgError(p.id)}
+                                  className="w-10 h-10 rounded-xl object-cover bg-slate-800 flex-shrink-0"
+                                />
+                              ) : (
+                                <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-bold text-slate-500 flex-shrink-0">
+                                  {p.position}
+                                </div>
+                              )}
+                              <div className="min-w-0 flex-1">
+                                <div className="text-xs font-bold text-white truncate">{p.fullName}</div>
+                                <div className="text-[11px] text-blue-400 font-semibold flex items-center gap-1">
+                                  <span>{p.position}</span>
+                                  <span>•</span>
+                                  <span className="text-slate-400">{p.nflTeam}</span>
+                                </div>
                               </div>
                             </div>
-                          </div>
+                          </React.Fragment>
                         ))}
                       </div>
                     </div>
@@ -219,29 +227,37 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
                       </div>
                       <div className="space-y-2">
                         {partnerPlayers.map((p, idx) => (
-                          <div key={p.id} className="flex items-center gap-2.5">
-                            {idx > 0 && <span className="text-[10px] text-emerald-400 font-bold -my-1">+</span>}
-                            {!imgErrors[p.id] ? (
-                              <img
-                                src={p.headshotUrl}
-                                alt={p.fullName}
-                                onError={() => handleImgError(p.id)}
-                                className="w-10 h-10 rounded-xl object-cover bg-slate-800 flex-shrink-0"
-                              />
-                            ) : (
-                              <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-bold text-slate-500 flex-shrink-0">
-                                {p.position}
+                          <React.Fragment key={p.id}>
+                            {idx > 0 && (
+                              <div className="flex items-center justify-center -my-1">
+                                <span className="text-[10px] text-emerald-400 font-bold bg-slate-900 border border-emerald-500/30 w-4 h-4 rounded-full flex items-center justify-center">
+                                  +
+                                </span>
                               </div>
                             )}
-                            <div className="min-w-0 flex-1">
-                              <div className="text-xs font-bold text-white truncate">{p.fullName}</div>
-                              <div className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
-                                <span>{p.position}</span>
-                                <span>•</span>
-                                <span className="text-slate-400">{p.nflTeam}</span>
+                            <div className="flex items-center gap-2.5">
+                              {!imgErrors[p.id] ? (
+                                <img
+                                  src={p.headshotUrl}
+                                  alt={p.fullName}
+                                  onError={() => handleImgError(p.id)}
+                                  className="w-10 h-10 rounded-xl object-cover bg-slate-800 flex-shrink-0"
+                                />
+                              ) : (
+                                <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-bold text-slate-500 flex-shrink-0">
+                                  {p.position}
+                                </div>
+                              )}
+                              <div className="min-w-0 flex-1">
+                                <div className="text-xs font-bold text-white truncate">{p.fullName}</div>
+                                <div className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
+                                  <span>{p.position}</span>
+                                  <span>•</span>
+                                  <span className="text-slate-400">{p.nflTeam}</span>
+                                </div>
                               </div>
                             </div>
-                          </div>
+                          </React.Fragment>
                         ))}
                       </div>
                     </div>

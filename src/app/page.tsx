@@ -259,6 +259,10 @@ export default function Home() {
     const localMatches = getLocalMatches(selectedLeague.espnLeagueId);
     setDeletedMatches(localDeleted);
     setMatches(mergeMatchesUnique(localMatches, [], localDeleted));
+    setServerIncomingHints(null);
+    setServerPriorityKeys([]);
+    setServerWarmLeads([]);
+    lastResetAtRef.current = undefined;
 
     // Check if the current user has a claimed team on their account or on this device
     let resolvedTeamId: string | null = null;
@@ -875,6 +879,15 @@ export default function Home() {
     // Record swipe on backend server and check against all leaguemates' secret swipes
     recordSwipeOnServer(league.espnLeagueId, newSwipe, league).then((serverView) => {
       if (!serverView || mutationVersionRef.current !== swipeVersion) return;
+      if (serverView.incomingActivityHints !== undefined) {
+        setServerIncomingHints(serverView.incomingActivityHints || null);
+      }
+      if (serverView.priorityTargetKeys !== undefined) {
+        setServerPriorityKeys(serverView.priorityTargetKeys || []);
+      }
+      if (serverView.warmLeads !== undefined) {
+        setServerWarmLeads(serverView.warmLeads || []);
+      }
       const isMock = league.id === 'league_mock_123' || league.espnLeagueId === '12345678';
       const serverDeleted = serverView.deletedMatches || [];
       setDeletedMatches((prevDel) =>
@@ -945,6 +958,15 @@ export default function Home() {
     undoSwipeOnServer(league.espnLeagueId, userTeam.id, tradeType, activeOfferedIds).then(
       (serverView) => {
         if (!serverView || mutationVersionRef.current !== undoVersion) return;
+        if (serverView.incomingActivityHints !== undefined) {
+          setServerIncomingHints(serverView.incomingActivityHints || null);
+        }
+        if (serverView.priorityTargetKeys !== undefined) {
+          setServerPriorityKeys(serverView.priorityTargetKeys || []);
+        }
+        if (serverView.warmLeads !== undefined) {
+          setServerWarmLeads(serverView.warmLeads || []);
+        }
         const isMock = league.id === 'league_mock_123' || league.espnLeagueId === '12345678';
         const serverDeleted = serverView.deletedMatches || [];
         setDeletedMatches((prevDel) =>
@@ -1030,6 +1052,15 @@ export default function Home() {
       matchToDelete
     ).then((serverView) => {
       if (!serverView || mutationVersionRef.current !== deleteVersion) return;
+      if (serverView.incomingActivityHints !== undefined) {
+        setServerIncomingHints(serverView.incomingActivityHints || null);
+      }
+      if (serverView.priorityTargetKeys !== undefined) {
+        setServerPriorityKeys(serverView.priorityTargetKeys || []);
+      }
+      if (serverView.warmLeads !== undefined) {
+        setServerWarmLeads(serverView.warmLeads || []);
+      }
       const isMock = league.id === 'league_mock_123' || league.espnLeagueId === '12345678';
       const serverDeleted = serverView.deletedMatches || [];
       setDeletedMatches((prevDel) => {
@@ -1109,6 +1140,15 @@ export default function Home() {
       myActiveMatches
     ).then((serverView) => {
       if (!serverView || mutationVersionRef.current !== deleteAllVersion) return;
+      if (serverView.incomingActivityHints !== undefined) {
+        setServerIncomingHints(serverView.incomingActivityHints || null);
+      }
+      if (serverView.priorityTargetKeys !== undefined) {
+        setServerPriorityKeys(serverView.priorityTargetKeys || []);
+      }
+      if (serverView.warmLeads !== undefined) {
+        setServerWarmLeads(serverView.warmLeads || []);
+      }
       const isMock = league.id === 'league_mock_123' || league.espnLeagueId === '12345678';
       const serverDeleted = serverView.deletedMatches || [];
       setDeletedMatches((prevDel) => {
@@ -1358,11 +1398,13 @@ export default function Home() {
       if (e.key === 'ArrowLeft') {
         if (activeCard && !swiping) {
           e.preventDefault();
+          if (target && target.tagName === 'BUTTON') target.blur();
           triggerSwipe(false);
         }
       } else if (e.key === 'ArrowRight') {
         if (activeCard && !swiping) {
           e.preventDefault();
+          if (target && target.tagName === 'BUTTON') target.blur();
           triggerSwipe(true);
         }
       } else if (e.key === 'z' || e.key === 'Z' || e.key === 'Backspace') {
@@ -1371,6 +1413,9 @@ export default function Home() {
           triggerUndo();
         }
       } else if (e.key === ' ' || e.key === 'i' || e.key === 'I') {
+        if (e.key === ' ' && target && target.tagName === 'BUTTON') {
+          return;
+        }
         if (activeCard && cardRef.current) {
           e.preventDefault();
           cardRef.current.toggleStats();
@@ -1659,6 +1704,7 @@ export default function Home() {
             isOpen={isResetModalOpen}
             leagueName={league.name}
             teamName={null}
+            hasTeam={false}
             onClose={() => setIsResetModalOpen(false)}
             onConfirm={handleResetLeagueSwipes}
             isResetting={isResettingSwipes}

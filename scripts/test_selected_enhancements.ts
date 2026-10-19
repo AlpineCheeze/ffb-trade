@@ -451,8 +451,16 @@ export const testPromise = (async () => {
       filterBarSrc.includes("toggleMobilePill('positions')") &&
       filterBarSrc.includes("toggleMobilePill('teams')") &&
       filterBarSrc.includes('onTradeTypeChange') &&
-      filterBarSrc.includes('onToggleOfferedPlayer'),
-    'PositionFilterBar.tsx must include the compact mobile pills and inline package switcher controls'
+      filterBarSrc.includes('onToggleOfferedPlayer') &&
+      filterBarSrc.includes('player.projectedPoints.toFixed(1)') &&
+      filterBarSrc.includes('player.seasonAvgPoints.toFixed(1)'),
+    'PositionFilterBar.tsx must include the compact mobile pills, inline package switcher controls, and Proj/Avg stat badges'
+  );
+
+  assert.ok(
+    pageSrc.includes("target.tagName === 'BUTTON'") &&
+      pageSrc.includes('target.blur()'),
+    'page.tsx keyboard shortcuts must guard against BUTTON focus conflicts when Space/Arrow keys are pressed'
   );
 
   console.log('✓ Enhancements 1.2, 1.5, 3.1 Passed: All UI and keyboard shortcut contracts verified.');

@@ -43,8 +43,9 @@ function canViewPrivateTeamSwipes(
 ): boolean {
   if (user?.isSuperUser) return true;
   const team = state.league.teams.find((t) => t.id === teamId);
+  if (!team) return false;
   // Allow viewing private team swipes/matches if team is unclaimed (demo sandbox / open demo)
-  if (!team?.claimedByUserId) {
+  if (!team.claimedByUserId) {
     return true;
   }
   // When claimedByUserId is present, it is authoritative

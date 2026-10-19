@@ -140,21 +140,23 @@ export async function POST(req: NextRequest) {
       }
 
       return await userLock.acquire(targetUserId, async () => {
-        // Unclaim all teams held by this user across all leagues
-        unclaimAllTeamsForUser(targetUserId);
+        return await leagueLock.acquire(targetUserId, async () => {
+          // Unclaim all teams held by this user across all leagues
+          unclaimAllTeamsForUser(targetUserId);
 
-        // Delete the user from store
-        const deleted = deleteUser(targetUserId);
-        if (!deleted) {
-          return NextResponse.json(
-            { success: false, error: 'User not found or could not be deleted.' },
-            { status: 404 }
-          );
-        }
+          // Delete the user from store
+          const deleted = deleteUser(targetUserId);
+          if (!deleted) {
+            return NextResponse.json(
+              { success: false, error: 'User not found or could not be deleted.' },
+              { status: 404 }
+            );
+          }
 
-        return NextResponse.json({
-          success: true,
-          message: `User ${targetUserId} successfully deleted and unassigned from all teams.`,
+          return NextResponse.json({
+            success: true,
+            message: `User ${targetUserId} successfully deleted and unassigned from all teams.`,
+          });
         });
       });
     }
@@ -170,21 +172,23 @@ export async function POST(req: NextRequest) {
       }
 
       return await leagueLock.acquire(targetLeagueId, async () => {
-        // Unlink team claims for this league from all users
-        unlinkAllUserClaimsForLeague(targetLeagueId);
+        return await userLock.acquire(targetLeagueId, async () => {
+          // Unlink team claims for this league from all users
+          unlinkAllUserClaimsForLeague(targetLeagueId);
 
-        // Delete the league
-        const deleted = superDeleteLeague(targetLeagueId);
-        if (!deleted) {
-          return NextResponse.json(
-            { success: false, error: 'League could not be deleted.' },
-            { status: 400 }
-          );
-        }
+          // Delete the league
+          const deleted = superDeleteLeague(targetLeagueId);
+          if (!deleted) {
+            return NextResponse.json(
+              { success: false, error: 'League could not be deleted.' },
+              { status: 400 }
+            );
+          }
 
-        return NextResponse.json({
-          success: true,
-          message: `League #${targetLeagueId} successfully deleted.`,
+          return NextResponse.json({
+            success: true,
+            message: `League #${targetLeagueId} successfully deleted.`,
+          });
         });
       });
     }

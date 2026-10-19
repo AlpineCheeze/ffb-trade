@@ -72,6 +72,7 @@ export interface League {
   teams: Team[];
   lastSyncedAt: string;
   inviteCode?: string;
+  isMock?: boolean;
 }
 
 export type TradeType =

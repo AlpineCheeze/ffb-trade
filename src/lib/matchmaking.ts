@@ -723,6 +723,7 @@ export function computeWarmTradeLeads(
       const partnerPlayerIdsSorted = partnerPlayers.map((p) => p.id).sort();
 
       const suggestedTradeType = `${myPlayers.length}-for-${partnerPlayers.length}` as TradeType;
+      if (!isValidTradeType(suggestedTradeType)) continue;
 
       // Exclude any candidate combinations that the user has already swiped on (excluding this trigger swipe)
       const alreadySwiped = allSwipes.some(
@@ -742,6 +743,7 @@ export function computeWarmTradeLeads(
           s &&
           s.teamId === userTeamId &&
           s.targetTeamId === partnerTeamId &&
+          s.tradeType === suggestedTradeType &&
           !s.isInterested &&
           arraysEqualIgnoreOrder(s.offeredPlayerIds || [], myPlayerIdsSorted) &&
           arraysEqualIgnoreOrder(s.targetPlayerIds || [], partnerPlayerIdsSorted)

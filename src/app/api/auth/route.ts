@@ -12,6 +12,8 @@ import {
 import {
   ensureCleanSlateMigration,
   getServerLeagueState,
+  claimServerTeam,
+  leagueLock,
   sanitizeLeagueId,
   sanitizeTeamId,
 } from '@/lib/serverLeagueStore';
@@ -228,6 +230,16 @@ export async function POST(req: NextRequest) {
             { status: 409 }
           );
         }
+        await leagueLock.acquire(cleanLeagueId, async () => {
+          claimServerTeam(
+            cleanLeagueId,
+            cleanTeamId,
+            authUser.username || team?.ownerName || 'Manager',
+            undefined,
+            undefined,
+            targetUserId
+          );
+        });
       }
 
       const updatedUser = await userLock.acquire(targetUserId, async () => {

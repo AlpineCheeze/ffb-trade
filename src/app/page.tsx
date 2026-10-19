@@ -317,6 +317,8 @@ export default function Home() {
       }
     }
 
+    const isMock = Boolean(selectedLeague.isMock || selectedLeague.id === 'league_mock_123' || selectedLeague.espnLeagueId === '12345678');
+
     if (resolvedTeamId) {
       setUserTeamId(resolvedTeamId);
       saveStoredUserClaim(cleanLeagueId, resolvedTeamId);
@@ -329,9 +331,20 @@ export default function Home() {
       if (forcedTeamId) {
         setActiveTab('deck');
       }
+      if (isMock && activeUser) {
+        saveStoredUserClaim(cleanLeagueId, resolvedTeamId);
+        linkTeamToAccount(cleanLeagueId, resolvedTeamId, activeUser.id);
+        claimTeamOnServer(
+          cleanLeagueId,
+          resolvedTeamId,
+          activeUser.username || team?.ownerName || 'Manager',
+          selectedLeague,
+          undefined,
+          activeUser.id
+        );
+      }
     } else {
       // In demo league, default user to Team 1 ("You (Manager)")
-      const isMock = selectedLeague.id === 'league_mock_123' || selectedLeague.espnLeagueId === '12345678';
       if (isMock && selectedLeague.teams.length > 0) {
         const firstTeam = selectedLeague.teams[0];
         resolvedTeamId = firstTeam.id;
@@ -516,7 +529,17 @@ export default function Home() {
       const pollVersion = mutationVersionRef.current;
 
       syncLeagueStateWithServer(latestLeague, userTeamId).then((serverView) => {
-        if (!isMounted || !serverView || !serverView.league || mutationVersionRef.current !== pollVersion) return;
+        if (!isMounted || !serverView) return;
+        if (serverView.status === 401 && currentUserRef.current) {
+          setErrorNotification('Your session has expired. Please log in again.');
+          handleOpenAuth('login');
+          return;
+        }
+        if (serverView.status === 403) {
+          setErrorNotification(serverView.error || 'Team ownership has changed or access was denied (403).');
+          return;
+        }
+        if (!serverView.league || mutationVersionRef.current !== pollVersion) return;
         setLeague(serverView.league);
         leagueRef.current = serverView.league;
         if (serverView.incomingActivityHints !== undefined) {
@@ -924,7 +947,12 @@ export default function Home() {
           return;
         }
         if (serverView.status === 403 || serverView.status === 409) {
-          setErrorNotification(serverView.error || `Swipe failed (${serverView.status})`);
+          setErrorNotification(
+            serverView.error ||
+              (serverView.status === 403
+                ? 'Team ownership has changed or access was denied (403)'
+                : 'Team claim conflict (409)')
+          );
           setTimeout(() => setErrorNotification(null), 5000);
           return;
         }
@@ -1041,7 +1069,12 @@ export default function Home() {
           return;
         }
         if (serverView.status === 403 || serverView.status === 409) {
-          setErrorNotification(serverView.error || `Undo failed (${serverView.status})`);
+          setErrorNotification(
+            serverView.error ||
+              (serverView.status === 403
+                ? 'Team ownership has changed or access was denied (403)'
+                : 'Undo conflict (409)')
+          );
           setTimeout(() => setErrorNotification(null), 5000);
           return;
         }

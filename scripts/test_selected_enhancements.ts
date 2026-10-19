@@ -519,7 +519,28 @@ export const testPromise = (async () => {
     pageSrc.includes('useState<Position[]>(ALL_POSITIONS)'),
     'page.tsx must default selectedPositions to ALL_POSITIONS'
   );
-  console.log('✓ Enhancement Sprint 1-3: Rapid swipe queue, 401 handling, and default positions verified.');
+
+  const authRouteSrc = fs.readFileSync(
+    path.resolve(__dirname, '../src/app/api/auth/route.ts'),
+    'utf8'
+  );
+  assert.ok(
+    authRouteSrc.includes('claimServerTeam') &&
+      authRouteSrc.includes('leagueLock.acquire(cleanLeagueId'),
+    'auth/route.ts must sync team claim to server league store inside leagueLock'
+  );
+
+  const adminRouteSrc = fs.readFileSync(
+    path.resolve(__dirname, '../src/app/api/admin/route.ts'),
+    'utf8'
+  );
+  assert.ok(
+    adminRouteSrc.includes('leagueLock.acquire(targetUserId') &&
+      adminRouteSrc.includes('userLock.acquire(targetLeagueId'),
+    'admin/route.ts must wrap both delete_user and delete_league in leagueLock and userLock'
+  );
+
+  console.log('✓ Enhancement Sprint 1-3: Rapid swipe queue, 401 handling, default positions, auth claim sync, and admin dual locking verified.');
 
   console.log('\n========================================================');
   console.log('ALL 6 SELECTED ENHANCEMENTS VERIFICATION TESTS PASSED! 🎉');

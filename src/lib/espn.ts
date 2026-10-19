@@ -329,6 +329,12 @@ export async function fetchEspnLeagueServer(params: {
   }
 
   if (!resultData) {
+    if (Date.now() - waterfallStartTime >= TOTAL_TIMEOUT_MS && !sawAuthError && !sawNotFound) {
+      throw new Error(
+        `ESPN request timed out after 15 seconds for League #${params.leagueId}. Please try again later.`
+      );
+    }
+
     const hadCookies = Boolean(cookies.espnS2 && cookies.swid);
     if (!sawAuthError && sawNotFound) {
       const err = new Error(

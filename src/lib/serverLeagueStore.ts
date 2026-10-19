@@ -11,7 +11,14 @@ import {
   ServerLeagueState,
   ClientLeagueView,
 } from '@/types/fantasy';
-import { checkForMutualMatch, arraysEqualIgnoreOrder, createSeedOpponentSwipes } from './matchmaking';
+import {
+  checkForMutualMatch,
+  arraysEqualIgnoreOrder,
+  createSeedOpponentSwipes,
+  computeIncomingActivityHints,
+  computePriorityTargetKeys,
+  computeWarmTradeLeads,
+} from './matchmaking';
 import { createMockLeague } from './espn';
 import { clearAllServerUsers } from './serverUserStore';
 
@@ -962,11 +969,72 @@ export function resetServerLeagueSwipes(
   if (!state) return null;
 
   const isMock = state.league.id === 'league_mock_123' || cleanId === '12345678';
+  const nowIso = new Date().toISOString();
 
   state.swipes = isMock ? createSeedOpponentSwipes(state.league) : [];
   state.matches = [];
   state.deletedMatches = [];
   state.elo = {};
+  state.updatedAt = nowIso;
+  state.lastResetAt = nowIso;
+
+  return saveServerLeagueState(state);
+}
+
+/**
+ * Recycles only `teamId`'s passed swipes (`!isInterested`) on the server so the manager
+ * can re-evaluate cards they previously passed on, while keeping all their `Want` swipes,
+ * opponent swipes, and confirmed matches completely intact.
+ */
+export function recycleServerTeamPasses(
+  espnLeagueId: string,
+  teamId: string,
+  fallbackLeague?: League
+): ServerLeagueState | null {
+  const cleanId = sanitizeLeagueId(espnLeagueId);
+  const cleanTeamId = sanitizeTeamId(teamId);
+  let state = getServerLeagueState(cleanId);
+
+  if (!state && fallbackLeague && Array.isArray(fallbackLeague.teams)) {
+    state = createInitialServerState({ ...fallbackLeague, espnLeagueId: cleanId }, cleanId);
+  }
+  if (!state) return null;
+
+  state.swipes = state.swipes.filter(
+    (s) => !(s.teamId === cleanTeamId && !s.isInterested)
+  );
+  state.updatedAt = new Date().toISOString();
+
+  return saveServerLeagueState(state);
+}
+
+/**
+ * Resets all swipes (`Want` and `Pass`) and active/deleted matches involving `teamId` on the server,
+ * without wiping other managers' swipes or matches across the rest of the league.
+ */
+export function resetServerTeamSwipes(
+  espnLeagueId: string,
+  teamId: string,
+  fallbackLeague?: League
+): ServerLeagueState | null {
+  const cleanId = sanitizeLeagueId(espnLeagueId);
+  const cleanTeamId = sanitizeTeamId(teamId);
+  let state = getServerLeagueState(cleanId);
+
+  if (!state && fallbackLeague && Array.isArray(fallbackLeague.teams)) {
+    state = createInitialServerState({ ...fallbackLeague, espnLeagueId: cleanId }, cleanId);
+  }
+  if (!state) return null;
+
+  state.swipes = state.swipes.filter((s) => s.teamId !== cleanTeamId);
+  state.matches = state.matches.filter(
+    (m) => m.teamAId !== cleanTeamId && m.teamBId !== cleanTeamId
+  );
+  if (Array.isArray(state.deletedMatches)) {
+    state.deletedMatches = state.deletedMatches.filter(
+      (m) => m.teamAId !== cleanTeamId && m.teamBId !== cleanTeamId
+    );
+  }
   state.updatedAt = new Date().toISOString();
 
   return saveServerLeagueState(state);
@@ -1118,12 +1186,20 @@ export function toClientLeagueView(
   const myDeletedMatches = teamId
     ? (state.deletedMatches || []).filter((m) => m.teamAId === teamId || m.teamBId === teamId)
     : [];
+  const incomingActivityHints = computeIncomingActivityHints(state.swipes, teamId);
+  const priorityTargetKeys = computePriorityTargetKeys(state.swipes, teamId);
+  const warmLeads = computeWarmTradeLeads(state.swipes, state.matches, state.league, teamId);
+
   return {
     league: state.league,
     mySwipes,
     matches: myMatches,
     deletedMatches: myDeletedMatches,
     matchFound: matchFound ?? null,
+    lastResetAt: state.lastResetAt,
+    incomingActivityHints,
+    priorityTargetKeys,
+    warmLeads,
   };
 }
 

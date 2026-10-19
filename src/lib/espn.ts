@@ -423,6 +423,14 @@ export function normalizeEspnData(
       };
     });
 
+    // Sort roster descending by star value: Math.max(projectedPoints, seasonAvgPoints)
+    roster.sort((a, b) => {
+      const valA = Math.max(Number(a.projectedPoints) || 0, Number(a.seasonAvgPoints) || 0);
+      const valB = Math.max(Number(b.projectedPoints) || 0, Number(b.seasonAvgPoints) || 0);
+      if (valB !== valA) return valB - valA;
+      return (Number(b.projectedPoints) || 0) - (Number(a.projectedPoints) || 0);
+    });
+
     // Resolve owner name
     const primaryOwnerId = String(
       t.primaryOwner || (Array.isArray(t.owners) && t.owners.length > 0 ? t.owners[0] : '')

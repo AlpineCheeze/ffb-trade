@@ -23,6 +23,8 @@ import {
   deleteMatchOnServer,
   deleteAllMatchesOnServer,
   resetLeagueSwipesOnServer,
+  recyclePassesOnServer,
+  resetTeamSwipesOnServer,
 } from '@/lib/leagueStore';
 import { getStoredUser, fetchCurrentUser, logoutAccount, AUTH_CHANGE_EVENT } from '@/lib/authStore';
 import {
@@ -30,10 +32,25 @@ import {
   createSeedOpponentSwipes,
   arraysEqualIgnoreOrder,
   generateDeckItems,
+  computeIncomingActivityHints,
+  computePriorityTargetKeys,
+  computeWarmTradeLeads,
   DeckItem,
 } from '@/lib/matchmaking';
 import { recordPackageSwipeEloUpdate, resetInternalEloStore } from '@/lib/elo';
-import { League, Team, Player, Swipe, Match, Position, TradeType, UserAccount } from '@/types/fantasy';
+import {
+  League,
+  Team,
+  Player,
+  Swipe,
+  Match,
+  Position,
+  TradeType,
+  UserAccount,
+  IncomingActivityHints,
+  WarmTradeLead,
+  ResetScope,
+} from '@/types/fantasy';
 import { Navbar } from '@/components/Navbar';
 import { SwipeCard, SwipeCardRef } from '@/components/SwipeCard';
 import { ShoppingRoster } from '@/components/ShoppingRoster';
@@ -92,6 +109,11 @@ export default function Home() {
   const [deletedMatches, setDeletedMatches] = useState<Match[]>([]);
   const [activeMatchCelebration, setActiveMatchCelebration] = useState<Match | null>(null);
 
+  // Server-computed matchmaking hints, priority keys, and warm leads
+  const [serverIncomingHints, setServerIncomingHints] = useState<IncomingActivityHints | null>(null);
+  const [serverPriorityKeys, setServerPriorityKeys] = useState<string[]>([]);
+  const [serverWarmLeads, setServerWarmLeads] = useState<WarmTradeLead[]>([]);
+
   // Excluded opponent teams in trade deck filter
   const [excludedTeamIds, setExcludedTeamIds] = useState<string[]>([]);
   const [excludeNotification, setExcludeNotification] = useState<string | null>(null);
@@ -120,6 +142,7 @@ export default function Home() {
   // Refs to prevent stale closures and out-of-order network race conditions
   const leagueRef = useRef<League | null>(null);
   const mutationVersionRef = useRef(0);
+  const lastResetAtRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     currentUserRef.current = currentUser;
@@ -313,6 +336,16 @@ export default function Home() {
       if (!serverView || mutationVersionRef.current !== reqVersion) return;
       setLeague(serverView.league);
       leagueRef.current = serverView.league;
+      lastResetAtRef.current = serverView.lastResetAt;
+      if (serverView.incomingActivityHints !== undefined) {
+        setServerIncomingHints(serverView.incomingActivityHints || null);
+      }
+      if (serverView.priorityTargetKeys !== undefined) {
+        setServerPriorityKeys(serverView.priorityTargetKeys || []);
+      }
+      if (serverView.warmLeads !== undefined) {
+        setServerWarmLeads(serverView.warmLeads || []);
+      }
 
       // If user had not resolved a team yet, check if server league links to their account
       const currentAuthedUser = currentUserRef.current;
@@ -409,6 +442,16 @@ export default function Home() {
         if (!serverView || mutationVersionRef.current !== reqVersion) return;
         setLeague(serverView.league);
         leagueRef.current = serverView.league;
+        lastResetAtRef.current = serverView.lastResetAt;
+        if (serverView.incomingActivityHints !== undefined) {
+          setServerIncomingHints(serverView.incomingActivityHints || null);
+        }
+        if (serverView.priorityTargetKeys !== undefined) {
+          setServerPriorityKeys(serverView.priorityTargetKeys || []);
+        }
+        if (serverView.warmLeads !== undefined) {
+          setServerWarmLeads(serverView.warmLeads || []);
+        }
         const isMock =
           serverView.league.id === 'league_mock_123' || serverView.league.espnLeagueId === '12345678';
         const serverDeleted = serverView.deletedMatches || [];
@@ -447,10 +490,29 @@ export default function Home() {
         if (!isMounted || !serverView || mutationVersionRef.current !== pollVersion) return;
         setLeague(serverView.league);
         leagueRef.current = serverView.league;
+        if (serverView.incomingActivityHints !== undefined) {
+          setServerIncomingHints(serverView.incomingActivityHints || null);
+        }
+        if (serverView.priorityTargetKeys !== undefined) {
+          setServerPriorityKeys(serverView.priorityTargetKeys || []);
+        }
+        if (serverView.warmLeads !== undefined) {
+          setServerWarmLeads(serverView.warmLeads || []);
+        }
         const isMock =
           serverView.league.id === 'league_mock_123' || serverView.league.espnLeagueId === '12345678';
         const serverDeleted = serverView.deletedMatches || [];
+
+        // Only trigger a client reset if the server explicitly stamped a new lastResetAt timestamp
+        // (avoids false-positive deckSeed reshuffling every 8s when a user simply has 0 swipes/0 matches)
+        const hasNewServerResetTimestamp =
+          Boolean(serverView.lastResetAt) &&
+          serverView.lastResetAt !== lastResetAtRef.current;
+        if (serverView.lastResetAt) {
+          lastResetAtRef.current = serverView.lastResetAt;
+        }
         const isServerReset =
+          hasNewServerResetTimestamp &&
           serverView.matches.length === 0 &&
           serverDeleted.length === 0 &&
           serverView.mySwipes.length === 0;
@@ -638,7 +700,78 @@ export default function Home() {
     setTimeout(() => setExcludeNotification(null), 3500);
   };
 
-  // Generate randomized swipe deck based on tradeType (1, 2, or 3 targets), active team/position filters, and stable session deckSeed
+  // Combine server-computed incoming activity hints, priority target keys, and warm leads with local seed swipes
+  const effectiveIncomingHints = useMemo<IncomingActivityHints | undefined>(() => {
+    if (!userTeam) return undefined;
+    const localHints = computeIncomingActivityHints(swipes, userTeam.id);
+    if (!serverIncomingHints) return localHints;
+
+    const mergedTradeTypes = Array.from(
+      new Set([
+        ...(localHints.interestedTradeTypes || []),
+        ...(serverIncomingHints.interestedTradeTypes || []),
+      ])
+    );
+    const mergedTargetedIds = Array.from(
+      new Set([
+        ...(localHints.targetedPlayerIds || []),
+        ...(serverIncomingHints.targetedPlayerIds || []),
+      ])
+    );
+    return {
+      interestedTradeTypes: mergedTradeTypes,
+      targetedPlayerIds: mergedTargetedIds,
+      totalIncomingCount: Math.max(
+        localHints.totalIncomingCount || 0,
+        serverIncomingHints.totalIncomingCount || 0
+      ),
+    };
+  }, [userTeam, swipes, serverIncomingHints]);
+
+  const effectivePriorityTargetKeys = useMemo<string[]>(() => {
+    if (!userTeam) return [];
+    const localKeys = computePriorityTargetKeys(swipes, userTeam.id);
+    return Array.from(new Set([...localKeys, ...serverPriorityKeys]));
+  }, [userTeam, swipes, serverPriorityKeys]);
+
+  const effectiveWarmLeads = useMemo<WarmTradeLead[]>(() => {
+    if (!league || !userTeam) return [];
+    const localLeads = computeWarmTradeLeads(swipes, matches, league, userTeam.id);
+    const seen = new Set<string>();
+    const combined: WarmTradeLead[] = [];
+    for (const lead of [...serverWarmLeads, ...localLeads]) {
+      if (!seen.has(lead.id)) {
+        seen.add(lead.id);
+        combined.push(lead);
+      }
+    }
+    return combined;
+  }, [league, userTeam, swipes, matches, serverWarmLeads]);
+
+  // Explore a Warm Trade Lead in 1 click (sets reciprocal tradeType, pre-selects overlapping offered players, isolates partner team, opens deck)
+  const handleExploreWarmLead = (lead: WarmTradeLead) => {
+    if (!userTeam || !league) return;
+    const suggestedType = lead.suggestedTradeType;
+    const sendCount = parseInt(suggestedType.split('-for-')[0], 10) || 1;
+    setTradeType(suggestedType);
+
+    const overlapIds = (lead.myOfferedPlayers || [])
+      .map((p) => p.id)
+      .filter((id) => userTeam.roster.some((rp) => rp.id === id));
+    let nextSelected = overlapIds.slice(0, sendCount);
+    if (nextSelected.length < sendCount) {
+      const additional = userTeam.roster
+        .filter((p) => !nextSelected.includes(p.id))
+        .slice(0, sendCount - nextSelected.length)
+        .map((p) => p.id);
+      nextSelected = [...nextSelected, ...additional];
+    }
+    setSelectedOfferedPlayerIds(nextSelected);
+    handleOnlyTradeWithTeam(lead.partnerTeamId);
+    setActiveTab('deck');
+  };
+
+  // Generate randomized swipe deck based on tradeType (1, 2, or 3 targets), active team/position filters, priorityTargetKeys, and stable session deckSeed
   const deckItems = useMemo<DeckItem[]>(() => {
     if (!league || !userTeam || offeredPlayers.length !== requiredOfferedCount) return [];
 
@@ -655,6 +788,7 @@ export default function Home() {
       selectedPositions,
       includedOpponentTeams,
       seed: activeSeed,
+      priorityTargetKeys: effectivePriorityTargetKeys,
     });
   }, [
     league,
@@ -666,6 +800,7 @@ export default function Home() {
     selectedPositions,
     includedOpponentTeams,
     deckSeed,
+    effectivePriorityTargetKeys,
   ]);
 
   // Current top item to swipe on
@@ -986,8 +1121,8 @@ export default function Home() {
     });
   };
 
-  // Handle Reset League Swipes (resets all swipes & matches across the league to start fresh)
-  const handleResetLeagueSwipes = async () => {
+  // Handle Scoped Reset Swipes ('recycle_passes' | 'reset_team' | 'reset_league')
+  const handleResetLeagueSwipes = async (scope: ResetScope = 'reset_league') => {
     if (!league) return;
 
     mutationVersionRef.current += 1;
@@ -999,7 +1134,110 @@ export default function Home() {
       const isMock = league.id === 'league_mock_123' || league.espnLeagueId === '12345678';
       const seedSwipes = isMock ? createSeedOpponentSwipes(league) : [];
 
-      // Optimistically reset client state
+      if (scope === 'recycle_passes' && userTeamId) {
+        // Optimistically remove only pass swipes (isInterested === false) for this team
+        setSwipes((prev) => {
+          const next = prev.filter((s) => !(s.teamId === userTeamId && !s.isInterested));
+          saveLocalSwipes(
+            league.espnLeagueId,
+            next.filter((s) => s.teamId === userTeamId)
+          );
+          return next;
+        });
+
+        const serverView = await recyclePassesOnServer(
+          league.espnLeagueId,
+          userTeamId,
+          league
+        );
+
+        if (serverView && mutationVersionRef.current === resetVersion) {
+          setLeague(serverView.league);
+          leagueRef.current = serverView.league;
+          if (serverView.incomingActivityHints !== undefined) {
+            setServerIncomingHints(serverView.incomingActivityHints || null);
+          }
+          if (serverView.priorityTargetKeys !== undefined) {
+            setServerPriorityKeys(serverView.priorityTargetKeys || []);
+          }
+          if (serverView.warmLeads !== undefined) {
+            setServerWarmLeads(serverView.warmLeads || []);
+          }
+          const freshSeeds = isMock ? createSeedOpponentSwipes(serverView.league) : [];
+          setSwipes([
+            ...freshSeeds,
+            ...(serverView.mySwipes || []).filter((ms) => !freshSeeds.some((s) => s.id === ms.id)),
+          ]);
+        }
+
+        setIsResetModalOpen(false);
+        setResetNotification(
+          `Passed cards for ${userTeam?.name || 'your team'} have been recycled back into the deck!`
+        );
+        setTimeout(() => setResetNotification(null), 5000);
+        return;
+      }
+
+      if (scope === 'reset_team' && userTeamId) {
+        // Optimistically clear this team's swipes and matches
+        setSwipes((prev) => {
+          const next = prev.filter((s) => s.teamId !== userTeamId);
+          saveLocalSwipes(league.espnLeagueId, []);
+          return next;
+        });
+        setMatches((prev) => {
+          const next = prev.filter((m) => m.teamAId !== userTeamId && m.teamBId !== userTeamId);
+          saveLocalMatches(league.espnLeagueId, next);
+          return next;
+        });
+        setActiveMatchCelebration(null);
+
+        const serverView = await resetTeamSwipesOnServer(
+          league.espnLeagueId,
+          userTeamId,
+          league
+        );
+
+        if (serverView && mutationVersionRef.current === resetVersion) {
+          setLeague(serverView.league);
+          leagueRef.current = serverView.league;
+          if (serverView.incomingActivityHints !== undefined) {
+            setServerIncomingHints(serverView.incomingActivityHints || null);
+          }
+          if (serverView.priorityTargetKeys !== undefined) {
+            setServerPriorityKeys(serverView.priorityTargetKeys || []);
+          }
+          if (serverView.warmLeads !== undefined) {
+            setServerWarmLeads(serverView.warmLeads || []);
+          }
+          const freshSeeds = isMock ? createSeedOpponentSwipes(serverView.league) : [];
+          setSwipes([
+            ...freshSeeds,
+            ...(serverView.mySwipes || []).filter((ms) => !freshSeeds.some((s) => s.id === ms.id)),
+          ]);
+          setMatches(serverView.matches || []);
+          setDeletedMatches(serverView.deletedMatches || []);
+        }
+
+        const freshSeed = `seed_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+        setDeckSeed(freshSeed);
+        if (typeof window !== 'undefined' && window.sessionStorage) {
+          try {
+            window.sessionStorage.setItem('trade_horny_deck_seed', freshSeed);
+          } catch {
+            // Ignore
+          }
+        }
+
+        setIsResetModalOpen(false);
+        setResetNotification(
+          `Swipes and matches for ${userTeam?.name || 'your team'} have been reset!`
+        );
+        setTimeout(() => setResetNotification(null), 5000);
+        return;
+      }
+
+      // Default: 'reset_league' — resets all swipes & matches across the league
       setSwipes(seedSwipes);
       setMatches([]);
       setDeletedMatches([]);
@@ -1021,6 +1259,18 @@ export default function Home() {
       if (serverView && mutationVersionRef.current === resetVersion) {
         setLeague(serverView.league);
         leagueRef.current = serverView.league;
+        if (serverView.lastResetAt) {
+          lastResetAtRef.current = serverView.lastResetAt;
+        }
+        if (serverView.incomingActivityHints !== undefined) {
+          setServerIncomingHints(serverView.incomingActivityHints || null);
+        }
+        if (serverView.priorityTargetKeys !== undefined) {
+          setServerPriorityKeys(serverView.priorityTargetKeys || []);
+        }
+        if (serverView.warmLeads !== undefined) {
+          setServerWarmLeads(serverView.warmLeads || []);
+        }
         const freshSeeds = isMock ? createSeedOpponentSwipes(serverView.league) : [];
         setSwipes([
           ...freshSeeds,
@@ -1052,6 +1302,94 @@ export default function Home() {
       setIsResettingSwipes(false);
     }
   };
+
+  // Desktop Keyboard Shortcuts on the Swipe Deck (ArrowLeft = Pass, ArrowRight = Want, Z/Backspace = Undo, Space/I = Toggle Stats)
+  const keyboardHandlersRef = useRef({
+    handleButtonSwipe,
+    handleUndo,
+    currentCard,
+    isSwipingCard,
+  });
+  useEffect(() => {
+    keyboardHandlersRef.current = {
+      handleButtonSwipe,
+      handleUndo,
+      currentCard,
+      isSwipingCard,
+    };
+  });
+
+  useEffect(() => {
+    if (
+      activeTab !== 'deck' ||
+      !league ||
+      !userTeam ||
+      isSyncModalOpen ||
+      isAuthModalOpen ||
+      isResetModalOpen ||
+      isSuperUserModalOpen ||
+      Boolean(activeMatchCelebration)
+    ) {
+      return;
+    }
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      if (target) {
+        const tag = target.tagName;
+        if (
+          tag === 'INPUT' ||
+          tag === 'TEXTAREA' ||
+          tag === 'SELECT' ||
+          target.isContentEditable
+        ) {
+          return;
+        }
+      }
+
+      const {
+        handleButtonSwipe: triggerSwipe,
+        handleUndo: triggerUndo,
+        currentCard: activeCard,
+        isSwipingCard: swiping,
+      } = keyboardHandlersRef.current;
+
+      if (e.key === 'ArrowLeft') {
+        if (activeCard && !swiping) {
+          e.preventDefault();
+          triggerSwipe(false);
+        }
+      } else if (e.key === 'ArrowRight') {
+        if (activeCard && !swiping) {
+          e.preventDefault();
+          triggerSwipe(true);
+        }
+      } else if (e.key === 'z' || e.key === 'Z' || e.key === 'Backspace') {
+        if (!swiping) {
+          e.preventDefault();
+          triggerUndo();
+        }
+      } else if (e.key === ' ' || e.key === 'i' || e.key === 'I') {
+        if (activeCard && cardRef.current) {
+          e.preventDefault();
+          cardRef.current.toggleStats();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    activeTab,
+    league,
+    userTeam,
+    isSyncModalOpen,
+    isAuthModalOpen,
+    isResetModalOpen,
+    isSuperUserModalOpen,
+    activeMatchCelebration,
+  ]);
 
   const handleSelectAllPositions = () => {
     setSelectedPositions(ALL_POSITIONS);
@@ -1320,6 +1658,7 @@ export default function Home() {
           <ResetLeagueModal
             isOpen={isResetModalOpen}
             leagueName={league.name}
+            teamName={null}
             onClose={() => setIsResetModalOpen(false)}
             onConfirm={handleResetLeagueSwipes}
             isResetting={isResettingSwipes}
@@ -1406,54 +1745,7 @@ export default function Home() {
         {/* TAB 1: SWIPE DECK */}
         {activeTab === 'deck' && (
           <div className="w-full flex flex-col items-center">
-            {/* Active Shopping Package Banner */}
-            <div className="w-full max-w-sm mb-3 px-4 py-3 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl flex items-center justify-between">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5 mb-1.5">
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-blue-500/20 text-blue-400 border border-blue-500/30">
-                    {tradeType} Trade
-                  </span>
-                  <span className="text-[10px] font-bold text-slate-400">
-                    Offering ({offeredPlayers.length})
-                  </span>
-                </div>
-
-                {/* Offered Players Preview */}
-                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-                  {offeredPlayers.length > 0 ? (
-                    offeredPlayers.map((player, idx) => {
-                      const surname = player.fullName
-                        .replace(/\s+(Jr\.|Sr\.|III|II|IV)$/i, '')
-                        .split(' ')
-                        .pop();
-
-                      return (
-                        <div key={player.id} className="flex items-center gap-1 flex-shrink-0">
-                          {idx > 0 && <span className="text-[10px] text-blue-400 font-black">+</span>}
-                          <div className={`${offeredPlayers.length >= 3 ? 'w-6 h-6 min-[400px]:w-7 min-[400px]:h-7' : 'w-8 h-8'} rounded-full bg-slate-800 border border-blue-500/40 overflow-hidden flex-shrink-0`}>
-                            <img src={player.headshotUrl} alt={player.fullName} className="w-full h-full object-cover" />
-                          </div>
-                          <span className={`font-bold text-white truncate ${offeredPlayers.length >= 3 ? 'text-[11px] max-w-[55px] min-[400px]:max-w-[70px]' : 'text-xs max-w-[90px]'}`}>
-                            {surname}
-                          </span>
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <span className="text-xs text-amber-400 font-medium">No players on trade block</span>
-                  )}
-                </div>
-              </div>
-
-              <button
-                onClick={() => setActiveTab('roster')}
-                className="ml-3 px-3 py-1.5 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-xs font-bold text-blue-300 transition flex-shrink-0"
-              >
-                Change Package
-              </button>
-            </div>
-
-            {/* Target Positions & Trade With Filter Bar */}
+            {/* Unified Deck Control Bar (Inline Package Switcher + Target Positions + Trade With Filter) */}
             <PositionFilterBar
               selectedPositions={selectedPositions}
               onTogglePosition={handleTogglePosition}
@@ -1467,6 +1759,14 @@ export default function Home() {
               onIncludeAllTeams={handleIncludeAllTeams}
               onExcludeAllTeams={handleExcludeAllTeams}
               onOnlyTradeWithTeam={handleOnlyTradeWithTeam}
+              userTeam={userTeam}
+              tradeType={tradeType}
+              offeredPlayers={offeredPlayers}
+              selectedOfferedPlayerIds={selectedOfferedPlayerIds}
+              onTradeTypeChange={handleTradeTypeChange}
+              onToggleOfferedPlayer={handleToggleOfferedPlayer}
+              onOpenFullRoster={() => setActiveTab('roster')}
+              incomingActivityHints={effectiveIncomingHints}
             />
 
             {/* The Interactive Card Stack */}
@@ -1586,36 +1886,66 @@ export default function Home() {
 
             {/* Bottom Floating Control Buttons */}
             {currentCard && (
-              <div className="flex items-center gap-6">
-                {/* PASS BUTTON */}
-                <button
-                  onClick={() => handleButtonSwipe(false)}
-                  disabled={isSwipingCard}
-                  className="w-16 h-16 rounded-full bg-slate-900 border-2 border-rose-500/40 hover:border-rose-500 text-rose-400 hover:text-white hover:bg-rose-600 disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center shadow-xl shadow-rose-950/40 transition-all hover:scale-110 active:scale-95"
-                  title="Pass (Swipe Left)"
-                >
-                  <X className="w-8 h-8 stroke-[2.5]" />
-                </button>
+              <div className="flex flex-col items-center gap-2">
+                <div className="flex items-center gap-6">
+                  {/* PASS BUTTON */}
+                  <button
+                    onClick={() => handleButtonSwipe(false)}
+                    disabled={isSwipingCard}
+                    className="w-16 h-16 rounded-full bg-slate-900 border-2 border-rose-500/40 hover:border-rose-500 text-rose-400 hover:text-white hover:bg-rose-600 disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center shadow-xl shadow-rose-950/40 transition-all hover:scale-110 active:scale-95"
+                    title="Pass (Swipe Left or ←)"
+                  >
+                    <X className="w-8 h-8 stroke-[2.5]" />
+                  </button>
 
-                {/* UNDO BUTTON */}
-                <button
-                  onClick={handleUndo}
-                  disabled={isSwipingCard}
-                  className="w-12 h-12 rounded-full bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-200 disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center shadow-lg transition-all hover:scale-105 active:scale-95"
-                  title="Undo Last Swipe"
-                >
-                  <RotateCcw className="w-5 h-5" />
-                </button>
+                  {/* UNDO BUTTON */}
+                  <button
+                    onClick={handleUndo}
+                    disabled={isSwipingCard}
+                    className="w-12 h-12 rounded-full bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-200 disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center shadow-lg transition-all hover:scale-105 active:scale-95"
+                    title="Undo Last Swipe (Z or Backspace)"
+                  >
+                    <RotateCcw className="w-5 h-5" />
+                  </button>
 
-                {/* WANT BUTTON */}
-                <button
-                  onClick={() => handleButtonSwipe(true)}
-                  disabled={isSwipingCard}
-                  className="w-16 h-16 rounded-full bg-slate-900 border-2 border-emerald-500/40 hover:border-emerald-500 text-emerald-400 hover:text-white hover:bg-emerald-600 disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center shadow-xl shadow-emerald-950/40 transition-all hover:scale-110 active:scale-95"
-                  title="Want / Interested (Swipe Right)"
-                >
-                  <Check className="w-8 h-8 stroke-[3]" />
-                </button>
+                  {/* WANT BUTTON */}
+                  <button
+                    onClick={() => handleButtonSwipe(true)}
+                    disabled={isSwipingCard}
+                    className="w-16 h-16 rounded-full bg-slate-900 border-2 border-emerald-500/40 hover:border-emerald-500 text-emerald-400 hover:text-white hover:bg-emerald-600 disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center shadow-xl shadow-emerald-950/40 transition-all hover:scale-110 active:scale-95"
+                    title="Want / Interested (Swipe Right or →)"
+                  >
+                    <Check className="w-8 h-8 stroke-[3]" />
+                  </button>
+                </div>
+
+                {/* Subtle Desktop Keyboard Shortcut Legend */}
+                <div className="hidden sm:flex items-center gap-3 text-[10px] text-slate-500 font-medium">
+                  <span>
+                    <kbd className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 font-bold">
+                      ←
+                    </kbd>{' '}
+                    Pass
+                  </span>
+                  <span>
+                    <kbd className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 font-bold">
+                      Z
+                    </kbd>{' '}
+                    Undo
+                  </span>
+                  <span>
+                    <kbd className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 font-bold">
+                      Space
+                    </kbd>{' '}
+                    Stats
+                  </span>
+                  <span>
+                    <kbd className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 font-bold">
+                      →
+                    </kbd>{' '}
+                    Want
+                  </span>
+                </div>
               </div>
             )}
           </div>
@@ -1627,8 +1957,10 @@ export default function Home() {
             <MatchesView
               matches={matches}
               deletedMatches={deletedMatches}
+              warmLeads={effectiveWarmLeads}
               currentTeamId={userTeamId}
               onStartSwiping={() => setActiveTab('deck')}
+              onExploreWarmLead={handleExploreWarmLead}
               onDeleteMatch={handleDeleteMatch}
               onDeleteAllMatches={handleDeleteAllMatches}
               onResetSwipes={() => setIsResetModalOpen(true)}
@@ -1646,6 +1978,7 @@ export default function Home() {
               onTradeTypeChange={handleTradeTypeChange}
               onTogglePlayer={handleToggleOfferedPlayer}
               onDoneShopping={() => setActiveTab('deck')}
+              incomingActivityHints={effectiveIncomingHints}
             />
           </div>
         )}
@@ -1682,6 +2015,7 @@ export default function Home() {
         <ResetLeagueModal
           isOpen={isResetModalOpen}
           leagueName={league.name}
+          teamName={userTeam?.name || null}
           onClose={() => setIsResetModalOpen(false)}
           onConfirm={handleResetLeagueSwipes}
           isResetting={isResettingSwipes}

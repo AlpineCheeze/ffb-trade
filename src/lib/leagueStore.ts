@@ -370,6 +370,20 @@ function getAuthHeaders(): Record<string, string> {
   return headers;
 }
 
+function mapResponseToClientLeagueView(data: any): ClientLeagueView {
+  return {
+    league: data.league,
+    mySwipes: data.mySwipes || [],
+    matches: data.matches || [],
+    deletedMatches: data.deletedMatches || [],
+    matchFound: data.matchFound || null,
+    lastResetAt: data.lastResetAt,
+    incomingActivityHints: data.incomingActivityHints,
+    priorityTargetKeys: data.priorityTargetKeys || [],
+    warmLeads: data.warmLeads || [],
+  };
+}
+
 /**
  * Synchronizes league state (team claims, user's swipes, confirmed matches, and deleted matches) with the backend server.
  */
@@ -402,12 +416,7 @@ export async function syncLeagueStateWithServer(
       if (Array.isArray(data.deletedMatches)) {
         saveLocalDeletedMatches(league.espnLeagueId, data.deletedMatches);
       }
-      return {
-        league: data.league,
-        mySwipes: data.mySwipes || [],
-        matches: data.matches || [],
-        deletedMatches: data.deletedMatches || [],
-      };
+      return mapResponseToClientLeagueView(data);
     }
   } catch {
     // Fallback to local state if offline
@@ -450,12 +459,7 @@ export async function claimTeamOnServer(
       if (Array.isArray(data.deletedMatches)) {
         saveLocalDeletedMatches(espnLeagueId, data.deletedMatches);
       }
-      return {
-        league: data.league,
-        mySwipes: data.mySwipes || [],
-        matches: data.matches || [],
-        deletedMatches: data.deletedMatches || [],
-      };
+      return mapResponseToClientLeagueView(data);
     }
   } catch {
     // Fallback to local state if offline
@@ -492,13 +496,7 @@ export async function recordSwipeOnServer(
       if (Array.isArray(data.deletedMatches)) {
         saveLocalDeletedMatches(espnLeagueId, data.deletedMatches);
       }
-      return {
-        league: data.league,
-        mySwipes: data.mySwipes || [],
-        matches: data.matches || [],
-        deletedMatches: data.deletedMatches || [],
-        matchFound: data.matchFound || null,
-      };
+      return mapResponseToClientLeagueView(data);
     }
   } catch {
     // Fallback to local state if offline
@@ -537,12 +535,7 @@ export async function undoSwipeOnServer(
       if (Array.isArray(data.deletedMatches)) {
         saveLocalDeletedMatches(espnLeagueId, data.deletedMatches);
       }
-      return {
-        league: data.league,
-        mySwipes: data.mySwipes || [],
-        matches: data.matches || [],
-        deletedMatches: data.deletedMatches || [],
-      };
+      return mapResponseToClientLeagueView(data);
     }
   } catch {
     // Fallback to local state if offline
@@ -583,12 +576,7 @@ export async function deleteMatchOnServer(
       if (Array.isArray(data.deletedMatches)) {
         saveLocalDeletedMatches(espnLeagueId, data.deletedMatches);
       }
-      return {
-        league: data.league,
-        mySwipes: data.mySwipes || [],
-        matches: data.matches || [],
-        deletedMatches: data.deletedMatches || [],
-      };
+      return mapResponseToClientLeagueView(data);
     }
   } catch {
     // Fallback to local state if offline
@@ -628,15 +616,102 @@ export async function deleteAllMatchesOnServer(
       if (Array.isArray(data.deletedMatches)) {
         saveLocalDeletedMatches(espnLeagueId, data.deletedMatches);
       }
-      return {
-        league: data.league,
-        mySwipes: data.mySwipes || [],
-        matches: data.matches || [],
-        deletedMatches: data.deletedMatches || [],
-      };
+      return mapResponseToClientLeagueView(data);
     }
   } catch {
     // Fallback to local state if offline
+  }
+  return null;
+}
+
+/**
+ * Recycles only `teamId`'s passed swipes (`!isInterested`) on the backend server,
+ * keeping all `Want` swipes and confirmed matches intact.
+ */
+export async function recyclePassesOnServer(
+  espnLeagueId: string,
+  teamId: string,
+  fallbackLeague?: League
+): Promise<ClientLeagueView | null> {
+  const cleanId = espnLeagueId.trim();
+  if (typeof window === 'undefined') return null;
+  try {
+    const res = await fetch('/api/league', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        action: 'recycle_passes',
+        leagueId: cleanId,
+        teamId,
+        fallbackLeague,
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data && data.league) {
+      saveLeague(data.league);
+      if (Array.isArray(data.mySwipes)) saveLocalSwipes(cleanId, data.mySwipes);
+      if (Array.isArray(data.matches)) saveLocalMatches(cleanId, data.matches);
+      if (Array.isArray(data.deletedMatches)) {
+        saveLocalDeletedMatches(cleanId, data.deletedMatches);
+      }
+      return mapResponseToClientLeagueView(data);
+    }
+  } catch {
+    // Fallback to local state if offline
+  }
+  return null;
+}
+
+/**
+ * Resets only `teamId`'s swipes and matches on the backend server without wiping other teams' matches.
+ */
+export async function resetTeamSwipesOnServer(
+  espnLeagueId: string,
+  teamId: string,
+  fallbackLeague?: League
+): Promise<ClientLeagueView | null> {
+  const cleanId = espnLeagueId.trim();
+  if (typeof window !== 'undefined') {
+    try {
+      saveLocalSwipes(cleanId, []);
+      saveLocalMatches(cleanId, []);
+      saveLocalDeletedMatches(cleanId, []);
+    } catch {}
+  }
+  if (typeof window === 'undefined') return null;
+  try {
+    const res = await fetch('/api/league', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        action: 'reset_team_swipes',
+        leagueId: cleanId,
+        teamId,
+        fallbackLeague,
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data && data.league) {
+      saveLeague(data.league);
+      if (Array.isArray(data.mySwipes)) saveLocalSwipes(cleanId, data.mySwipes);
+      if (Array.isArray(data.matches)) saveLocalMatches(cleanId, data.matches);
+      if (Array.isArray(data.deletedMatches)) {
+        saveLocalDeletedMatches(cleanId, data.deletedMatches);
+      }
+      return mapResponseToClientLeagueView(data);
+    }
+  } catch {
+    const localLeague = getLeagueById(cleanId) || fallbackLeague;
+    if (localLeague) {
+      return {
+        league: localLeague,
+        mySwipes: [],
+        matches: [],
+        deletedMatches: [],
+      };
+    }
   }
   return null;
 }
@@ -651,7 +726,6 @@ export async function resetLeagueSwipesOnServer(
   fallbackLeague?: League
 ): Promise<ClientLeagueView | null> {
   const cleanId = espnLeagueId.trim();
-  const isMock = cleanId === '12345678' || fallbackLeague?.id === 'league_mock_123';
 
   if (typeof window !== 'undefined') {
     try {
@@ -684,12 +758,7 @@ export async function resetLeagueSwipesOnServer(
       if (Array.isArray(data.deletedMatches)) {
         saveLocalDeletedMatches(cleanId, data.deletedMatches);
       }
-      return {
-        league: data.league,
-        mySwipes: data.mySwipes || [],
-        matches: data.matches || [],
-        deletedMatches: data.deletedMatches || [],
-      };
+      return mapResponseToClientLeagueView(data);
     }
   } catch {
     // Fallback to local state if offline

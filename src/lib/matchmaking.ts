@@ -1,4 +1,14 @@
-import { Swipe, Match, League, Player, Team, TradeType, Position } from '@/types/fantasy';
+import {
+  Swipe,
+  Match,
+  League,
+  Player,
+  Team,
+  TradeType,
+  Position,
+  IncomingActivityHints,
+  WarmTradeLead,
+} from '@/types/fantasy';
 
 export interface DeckItem {
   id: string;
@@ -110,12 +120,16 @@ export interface GenerateDeckItemsOptions {
   selectedPositions?: Position[];
   includedOpponentTeams?: Team[];
   seed?: string | number;
+  priorityTargetKeys?: string[];
 }
 
 /**
  * Generates and randomizes the candidate player/package pool for the swiping deck.
  * Ensures players from different teams are thoroughly shuffled together, while maintaining
  * rock-solid stability across swipes and background polling cycles.
+ * If priorityTargetKeys are provided (or derived from opponent interested swipes),
+ * candidate cards that would complete an opponent's existing interested swipe are
+ * deterministically interleaved near the top of the deck so they remain blind.
  */
 export function generateDeckItems({
   league,
@@ -126,6 +140,7 @@ export function generateDeckItems({
   selectedPositions = ['RB', 'WR', 'TE', 'QB', 'FLEX'],
   includedOpponentTeams,
   seed = 'trade_horny_deck_seed',
+  priorityTargetKeys,
 }: GenerateDeckItemsOptions): DeckItem[] {
   if (!userTeam) return [];
 
@@ -149,6 +164,23 @@ export function generateDeckItems({
       .filter((s) => s && s.teamId === userTeam.id && s.tradeType === tradeType)
       .map((s) => generateSwipeKey(s.tradeType, s.offeredPlayerIds || [], s.targetPlayerIds || []))
   );
+
+  // Build priority target keys set from explicit priorityTargetKeys AND any opponent swipes in safeSwipes
+  const priorityKeysSet = new Set<string>(Array.isArray(priorityTargetKeys) ? priorityTargetKeys : []);
+  for (const s of safeSwipes) {
+    if (
+      s &&
+      s.isInterested &&
+      s.targetTeamId === userTeam.id &&
+      s.teamId !== userTeam.id &&
+      isReciprocalTradeType(tradeType, s.tradeType) &&
+      arraysEqualIgnoreOrder(s.targetPlayerIds || [], activeOfferedIds)
+    ) {
+      priorityKeysSet.add(
+        generateSwipeKey(tradeType, activeOfferedIds, s.offeredPlayerIds || [])
+      );
+    }
+  }
 
   const rawItems: DeckItem[] = [];
 
@@ -256,7 +288,42 @@ export function generateDeckItems({
     });
   }
 
-  return shuffleDeckItems(rawItems, seed);
+  const shuffled = shuffleDeckItems(rawItems, seed);
+
+  if (priorityKeysSet.size === 0 || shuffled.length <= 1) {
+    return shuffled;
+  }
+
+  const priorityItems: DeckItem[] = [];
+  const regularItems: DeckItem[] = [];
+
+  for (const item of shuffled) {
+    const itemKey = generateSwipeKey(
+      tradeType,
+      activeOfferedIds,
+      item.players.map((p) => p.id)
+    );
+    if (priorityKeysSet.has(itemKey)) {
+      priorityItems.push(item);
+    } else {
+      regularItems.push(item);
+    }
+  }
+
+  if (priorityItems.length === 0) {
+    return shuffled;
+  }
+
+  // Deterministically interleave priority items near the top of the deck (within first few cards)
+  // so they appear early without always being strictly index 0 (preserving blind secrecy)
+  const result = [...regularItems];
+  priorityItems.forEach((pItem, idx) => {
+    const slotOffset = hashDeckSeed(`${String(seed)}::prio_slot::${pItem.id}`) % 2; // 0 or 1
+    const targetIdx = Math.min(idx * 2 + slotOffset, result.length);
+    result.splice(targetIdx, 0, pItem);
+  });
+
+  return result;
 }
 
 /**
@@ -449,4 +516,209 @@ export function createSeedOpponentSwipes(league: League): Swipe[] {
   });
 
   return seeds;
+}
+
+/**
+ * Computes blind-safe incoming activity hints for `userTeamId`.
+ * Reveals which user-perspective trade types (e.g. '1-for-2' if an opponent swiped '2-for-1' on user)
+ * and which of the user's own roster player IDs have incoming `isInterested: true` swipes from opponents,
+ * without leaking which opponent swiped or which opponent players were offered.
+ */
+export function computeIncomingActivityHints(
+  allSwipes: Swipe[],
+  userTeamId?: string | null
+): IncomingActivityHints {
+  if (!userTeamId || !Array.isArray(allSwipes)) {
+    return {
+      interestedTradeTypes: [],
+      targetedPlayerIds: [],
+      totalIncomingCount: 0,
+    };
+  }
+
+  const incomingSwipes = allSwipes.filter(
+    (s) =>
+      s &&
+      s.isInterested &&
+      s.targetTeamId === userTeamId &&
+      s.teamId !== userTeamId
+  );
+
+  const tradeTypeSet = new Set<TradeType>();
+  const targetedPlayerIdSet = new Set<string>();
+
+  for (const s of incomingSwipes) {
+    if (s.tradeType) {
+      tradeTypeSet.add(getReciprocalTradeType(s.tradeType));
+    }
+    if (Array.isArray(s.targetPlayerIds)) {
+      for (const pid of s.targetPlayerIds) {
+        if (pid) targetedPlayerIdSet.add(pid);
+      }
+    }
+  }
+
+  return {
+    interestedTradeTypes: Array.from(tradeTypeSet),
+    targetedPlayerIds: Array.from(targetedPlayerIdSet),
+    totalIncomingCount: incomingSwipes.length,
+  };
+}
+
+/**
+ * Computes composite swipe keys (`tradeType|sortedUserOfferedIds|sortedOpponentOfferedIds`)
+ * for all opponent `isInterested: true` swipes targeting `userTeamId`.
+ * Used for blind priority deck injection so candidate cards that complete an existing opponent
+ * swipe appear near the top of the deck.
+ */
+export function computePriorityTargetKeys(
+  allSwipes: Swipe[],
+  userTeamId?: string | null
+): string[] {
+  if (!userTeamId || !Array.isArray(allSwipes)) return [];
+
+  const keys = new Set<string>();
+  for (const s of allSwipes) {
+    if (
+      s &&
+      s.isInterested &&
+      s.targetTeamId === userTeamId &&
+      s.teamId !== userTeamId &&
+      s.tradeType
+    ) {
+      const userTradeType = getReciprocalTradeType(s.tradeType);
+      const key = generateSwipeKey(
+        userTradeType,
+        s.targetPlayerIds || [],
+        s.offeredPlayerIds || []
+      );
+      keys.add(key);
+    }
+  }
+
+  return Array.from(keys);
+}
+
+/**
+ * Computes "Warm Trade Leads" (Mutual Player Interest) when Manager A (`userTeamId`) has swiped
+ * `Want` (`isInterested: true`) on a package containing Player Y from Team B, AND Team B has also
+ * swiped `Want` (`isInterested: true`) on a package containing Player X from Manager A,
+ * even if their trade types or secondary throw-in players differed so an exact match didn't trigger.
+ */
+export function computeWarmTradeLeads(
+  allSwipes: Swipe[],
+  matches: Match[],
+  league: League,
+  userTeamId?: string | null
+): WarmTradeLead[] {
+  if (
+    !userTeamId ||
+    !Array.isArray(allSwipes) ||
+    !league ||
+    !Array.isArray(league.teams)
+  ) {
+    return [];
+  }
+
+  const userTeam = league.teams.find((t) => t && t.id === userTeamId);
+  if (!userTeam) return [];
+
+  const safeMatches = Array.isArray(matches) ? matches : [];
+
+  const myWantSwipes = allSwipes.filter(
+    (s) => s && s.isInterested && s.teamId === userTeamId && s.targetTeamId !== userTeamId
+  );
+  const incomingWantSwipes = allSwipes.filter(
+    (s) => s && s.isInterested && s.targetTeamId === userTeamId && s.teamId !== userTeamId
+  );
+
+  if (myWantSwipes.length === 0 || incomingWantSwipes.length === 0) {
+    return [];
+  }
+
+  const leads: WarmTradeLead[] = [];
+  const seenLeadKeys = new Set<string>();
+
+  for (const mySwipe of myWantSwipes) {
+    const partnerTeamId = mySwipe.targetTeamId;
+    const partnerTeam = league.teams.find((t) => t && t.id === partnerTeamId);
+    if (!partnerTeam) continue;
+
+    const partnerSwipesForMe = incomingWantSwipes.filter(
+      (s) => s.teamId === partnerTeamId
+    );
+    if (partnerSwipesForMe.length === 0) continue;
+
+    for (const partnerSwipe of partnerSwipesForMe) {
+      // Skip if this exact swipe pair already forms an exact reciprocal match
+      const isExactReciprocal =
+        isReciprocalTradeType(mySwipe.tradeType, partnerSwipe.tradeType) &&
+        arraysEqualIgnoreOrder(mySwipe.offeredPlayerIds || [], partnerSwipe.targetPlayerIds || []) &&
+        arraysEqualIgnoreOrder(mySwipe.targetPlayerIds || [], partnerSwipe.offeredPlayerIds || []);
+
+      if (isExactReciprocal) continue;
+
+      // Players from my roster that the partner wanted (or fallback to what I offered)
+      const myCandidateIds =
+        Array.isArray(partnerSwipe.targetPlayerIds) && partnerSwipe.targetPlayerIds.length > 0
+          ? partnerSwipe.targetPlayerIds
+          : mySwipe.offeredPlayerIds || [];
+
+      // Players from partner's roster that I wanted (or fallback to what partner offered)
+      const partnerCandidateIds =
+        Array.isArray(mySwipe.targetPlayerIds) && mySwipe.targetPlayerIds.length > 0
+          ? mySwipe.targetPlayerIds
+          : partnerSwipe.offeredPlayerIds || [];
+
+      const myPlayers = (userTeam.roster || [])
+        .filter((p) => p && myCandidateIds.includes(p.id))
+        .slice(0, 3);
+      const partnerPlayers = (partnerTeam.roster || [])
+        .filter((p) => p && partnerCandidateIds.includes(p.id))
+        .slice(0, 3);
+
+      if (myPlayers.length === 0 || partnerPlayers.length === 0) continue;
+
+      const myPlayerIdsSorted = myPlayers.map((p) => p.id).sort();
+      const partnerPlayerIdsSorted = partnerPlayers.map((p) => p.id).sort();
+
+      // Skip if an active confirmed match already exists with these exact players
+      const alreadyMatched = safeMatches.some((m) => {
+        const mPlayersA = m.teamAPlayers.map((p) => p.id);
+        const mPlayersB = m.teamBPlayers.map((p) => p.id);
+        const sameDir =
+          m.teamAId === userTeamId &&
+          m.teamBId === partnerTeamId &&
+          arraysEqualIgnoreOrder(mPlayersA, myPlayerIdsSorted) &&
+          arraysEqualIgnoreOrder(mPlayersB, partnerPlayerIdsSorted);
+        const revDir =
+          m.teamBId === userTeamId &&
+          m.teamAId === partnerTeamId &&
+          arraysEqualIgnoreOrder(mPlayersB, myPlayerIdsSorted) &&
+          arraysEqualIgnoreOrder(mPlayersA, partnerPlayerIdsSorted);
+        return sameDir || revDir;
+      });
+      if (alreadyMatched) continue;
+
+      const leadKey = `${partnerTeamId}|${myPlayerIdsSorted.join(',')}|${partnerPlayerIdsSorted.join(',')}`;
+      if (seenLeadKeys.has(leadKey)) continue;
+      seenLeadKeys.add(leadKey);
+
+      const suggestedTradeType = `${myPlayers.length}-for-${partnerPlayers.length}` as TradeType;
+
+      leads.push({
+        id: `lead_${userTeamId}_${partnerTeamId}_${myPlayerIdsSorted.join('_')}_${partnerPlayerIdsSorted.join('_')}`,
+        partnerTeamId: partnerTeam.id,
+        partnerTeamName: partnerTeam.name,
+        partnerOwnerName: partnerTeam.claimedBy || partnerTeam.ownerName || 'Opponent',
+        myOfferedPlayers: myPlayers,
+        partnerOfferedPlayers: partnerPlayers,
+        suggestedTradeType,
+        myOriginalTradeType: mySwipe.tradeType,
+        partnerOriginalTradeType: partnerSwipe.tradeType,
+      });
+    }
+  }
+
+  return leads;
 }

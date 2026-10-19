@@ -80,6 +80,7 @@ export const LeagueLockerRoom: React.FC<LeagueLockerRoomProps> = ({
             ...ft,
             isClaimed: true,
             claimedBy: existing.claimedBy,
+            claimedByUserId: existing.claimedByUserId,
           };
         }
         return ft;

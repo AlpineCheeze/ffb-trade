@@ -119,6 +119,26 @@ export interface InternalEloRecord {
   lastUpdated: string;
 }
 
+export interface IncomingActivityHints {
+  interestedTradeTypes: TradeType[]; // user-perspective trade types (e.g. '1-for-2' if opponent swiped '2-for-1' on user)
+  targetedPlayerIds: string[]; // user's own roster player IDs that opponents swiped Want on
+  totalIncomingCount: number;
+}
+
+export interface WarmTradeLead {
+  id: string;
+  partnerTeamId: string;
+  partnerTeamName: string;
+  partnerOwnerName: string;
+  myOfferedPlayers: Player[]; // Players from user's roster that Partner wanted
+  partnerOfferedPlayers: Player[]; // Players from Partner's roster that User wanted
+  suggestedTradeType: TradeType; // e.g. `${myOfferedPlayers.length}-for-${partnerOfferedPlayers.length}`
+  myOriginalTradeType: TradeType;
+  partnerOriginalTradeType: TradeType;
+}
+
+export type ResetScope = 'recycle_passes' | 'reset_team' | 'reset_league';
+
 export interface ServerLeagueState {
   league: League;
   swipes: Swipe[];
@@ -126,6 +146,7 @@ export interface ServerLeagueState {
   deletedMatches?: Match[];
   elo: Record<string, InternalEloRecord>;
   updatedAt: string;
+  lastResetAt?: string;
 }
 
 export interface ClientLeagueView {
@@ -134,6 +155,10 @@ export interface ClientLeagueView {
   matches: Match[];
   deletedMatches?: Match[];
   matchFound?: Match | null;
+  lastResetAt?: string;
+  incomingActivityHints?: IncomingActivityHints;
+  priorityTargetKeys?: string[];
+  warmLeads?: WarmTradeLead[];
 }
 
 

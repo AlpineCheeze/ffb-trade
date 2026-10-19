@@ -8,6 +8,8 @@ import {
   deleteServerMatch,
   deleteAllServerMatches,
   resetServerLeagueSwipes,
+  recycleServerTeamPasses,
+  resetServerTeamSwipes,
   toClientLeagueView,
   sanitizeLeagueId,
   sanitizeTeamId,
@@ -588,10 +590,197 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    if (action === 'recycle_passes') {
+      return await leagueLock.acquire(cleanId, async () => {
+        const { teamId: rawTeamId, fallbackLeague } = body as {
+          teamId: string;
+          fallbackLeague?: any;
+        };
+
+        if (!rawTeamId || typeof rawTeamId !== 'string') {
+          return NextResponse.json(
+            { error: 'Valid teamId is required to recycle passes' },
+            { status: 400 }
+          );
+        }
+
+        const teamId = sanitizeTeamId(rawTeamId);
+        const currentState = getServerLeagueState(cleanId);
+        const teamObj = currentState?.league.teams.find((t) => t.id === teamId);
+
+        if (teamObj?.claimedByUserId) {
+          if (!token) {
+            return NextResponse.json(
+              { error: 'Authentication required' },
+              { status: 401 }
+            );
+          }
+          if (!authUser) {
+            return NextResponse.json(
+              { error: 'Invalid or expired session' },
+              { status: 401 }
+            );
+          }
+          if (
+            !authUser.isSuperUser &&
+            authUser.id !== teamObj.claimedByUserId &&
+            authUser.claimedTeams?.[cleanId] !== teamId
+          ) {
+            return NextResponse.json(
+              { error: 'Forbidden: You do not own this team' },
+              { status: 403 }
+            );
+          }
+        } else if (authUser) {
+          if (
+            !authUser.isSuperUser &&
+            authUser.claimedTeams?.[cleanId] &&
+            authUser.claimedTeams[cleanId] !== teamId
+          ) {
+            return NextResponse.json(
+              { error: 'Forbidden: You do not own this team' },
+              { status: 403 }
+            );
+          }
+        }
+
+        const updatedState = recycleServerTeamPasses(cleanId, teamId, fallbackLeague);
+        if (!updatedState) {
+          return NextResponse.json(
+            { error: 'League not found on server' },
+            { status: 404 }
+          );
+        }
+
+        const view = toClientLeagueView(updatedState, teamId);
+        return NextResponse.json({
+          success: true,
+          ...view,
+        });
+      });
+    }
+
+    if (action === 'reset_team_swipes') {
+      return await leagueLock.acquire(cleanId, async () => {
+        const { teamId: rawTeamId, fallbackLeague } = body as {
+          teamId: string;
+          fallbackLeague?: any;
+        };
+
+        if (!rawTeamId || typeof rawTeamId !== 'string') {
+          return NextResponse.json(
+            { error: 'Valid teamId is required to reset team swipes' },
+            { status: 400 }
+          );
+        }
+
+        const teamId = sanitizeTeamId(rawTeamId);
+        const currentState = getServerLeagueState(cleanId);
+        const teamObj = currentState?.league.teams.find((t) => t.id === teamId);
+
+        if (teamObj?.claimedByUserId) {
+          if (!token) {
+            return NextResponse.json(
+              { error: 'Authentication required' },
+              { status: 401 }
+            );
+          }
+          if (!authUser) {
+            return NextResponse.json(
+              { error: 'Invalid or expired session' },
+              { status: 401 }
+            );
+          }
+          if (
+            !authUser.isSuperUser &&
+            authUser.id !== teamObj.claimedByUserId &&
+            authUser.claimedTeams?.[cleanId] !== teamId
+          ) {
+            return NextResponse.json(
+              { error: 'Forbidden: You do not own this team' },
+              { status: 403 }
+            );
+          }
+        } else if (authUser) {
+          if (
+            !authUser.isSuperUser &&
+            authUser.claimedTeams?.[cleanId] &&
+            authUser.claimedTeams[cleanId] !== teamId
+          ) {
+            return NextResponse.json(
+              { error: 'Forbidden: You do not own this team' },
+              { status: 403 }
+            );
+          }
+        }
+
+        const updatedState = resetServerTeamSwipes(cleanId, teamId, fallbackLeague);
+        if (!updatedState) {
+          return NextResponse.json(
+            { error: 'League not found on server' },
+            { status: 404 }
+          );
+        }
+
+        const view = toClientLeagueView(updatedState, teamId);
+        return NextResponse.json({
+          success: true,
+          ...view,
+        });
+      });
+    }
+
     if (action === 'reset_swipes' || action === 'reset_league_swipes') {
       return await leagueLock.acquire(cleanId, async () => {
         const { teamId: rawTeamId, fallbackLeague } = body;
         const cleanTeamId = rawTeamId ? sanitizeTeamId(rawTeamId) : undefined;
+
+        const currentState = getServerLeagueState(cleanId);
+        const hasAuthProtectedTeams = Boolean(
+          currentState?.league.teams.some((t) => Boolean(t.claimedByUserId))
+        );
+
+        // Enforce authentication and league membership when teams are claimed by authenticated users
+        if (hasAuthProtectedTeams) {
+          if (!token) {
+            return NextResponse.json(
+              { error: 'Authentication required to reset a league with claimed teams' },
+              { status: 401 }
+            );
+          }
+          if (!authUser) {
+            return NextResponse.json(
+              { error: 'Invalid or expired session token' },
+              { status: 401 }
+            );
+          }
+          const isClaimedManagerInLeague =
+            authUser.isSuperUser ||
+            Boolean(authUser.claimedTeams?.[cleanId]) ||
+            Boolean(currentState?.league.teams.some((t) => t.claimedByUserId === authUser.id));
+          if (!isClaimedManagerInLeague) {
+            return NextResponse.json(
+              { error: 'Forbidden: Only a claimed manager in this league or superuser can reset all league swipes' },
+              { status: 403 }
+            );
+          }
+          if (
+            cleanTeamId &&
+            !authUser.isSuperUser &&
+            authUser.claimedTeams?.[cleanId] &&
+            authUser.claimedTeams[cleanId] !== cleanTeamId
+          ) {
+            return NextResponse.json(
+              { error: 'Forbidden: You do not own the specified teamId' },
+              { status: 403 }
+            );
+          }
+        } else if (token && !authUser) {
+          return NextResponse.json(
+            { error: 'Invalid or expired session token' },
+            { status: 401 }
+          );
+        }
 
         const updatedState = resetServerLeagueSwipes(cleanId, fallbackLeague);
         if (!updatedState) {

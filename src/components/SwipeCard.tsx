@@ -7,6 +7,7 @@ import { ShieldAlert, Calendar, Check, X, Info, Plus, Zap, TrendingUp, UserX } f
 
 export interface SwipeCardRef {
   swipe: (isInterested: boolean) => void;
+  toggleStats: () => void;
 }
 
 export interface SwipeCardProps {
@@ -113,6 +114,9 @@ export const SwipeCard = React.forwardRef<SwipeCardRef, SwipeCardProps>(function
     () => ({
       swipe: (isInterested: boolean) => {
         triggerSwipe(isInterested, 0, true);
+      },
+      toggleStats: () => {
+        setShowStats((prev) => !prev);
       },
     }),
     [triggerSwipe]

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { Position, Team } from '@/types/fantasy';
+import { Position, Team, TradeType, Player, IncomingActivityHints } from '@/types/fantasy';
 import {
   Check,
   X,
@@ -13,6 +13,8 @@ import {
   UserX,
   Search,
   RotateCcw,
+  ArrowLeftRight,
+  Flame,
 } from 'lucide-react';
 
 export const ALL_POSITIONS: Position[] = ['RB', 'WR', 'TE', 'QB', 'FLEX', 'K', 'DEF'];
@@ -35,6 +37,16 @@ export interface PositionFilterBarProps {
   onIncludeAllTeams?: () => void;
   onExcludeAllTeams?: () => void;
   onOnlyTradeWithTeam?: (teamId: string) => void;
+
+  // Inline Package Switcher & Unified Mobile Deck Control Bar props
+  userTeam?: Team | null;
+  tradeType?: TradeType;
+  offeredPlayers?: Player[];
+  selectedOfferedPlayerIds?: string[];
+  onTradeTypeChange?: (type: TradeType) => void;
+  onToggleOfferedPlayer?: (player: Player) => void;
+  onOpenFullRoster?: () => void;
+  incomingActivityHints?: IncomingActivityHints | null;
 }
 
 export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
@@ -52,10 +64,20 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
   onIncludeAllTeams,
   onExcludeAllTeams,
   onOnlyTradeWithTeam,
+  userTeam,
+  tradeType = '1-for-1',
+  offeredPlayers = [],
+  selectedOfferedPlayerIds = [],
+  onTradeTypeChange,
+  onToggleOfferedPlayer,
+  onOpenFullRoster,
+  incomingActivityHints,
 }) => {
-  const [activeTab, setActiveTab] = useState<'positions' | 'teams'>('positions');
+  const [activeTab, setActiveTab] = useState<'package' | 'positions' | 'teams'>('positions');
+  const [mobileOpenPanel, setMobileOpenPanel] = useState<'package' | 'positions' | 'teams' | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const [teamSearchQuery, setTeamSearchQuery] = useState('');
+  const [rosterPosFilter, setRosterPosFilter] = useState<'All' | 'QB' | 'RB' | 'WR' | 'TE'>('All');
 
   const handleSelectAll = onSelectAllPositions || onSelectAll || (() => {});
   const handleSelectPreset = onSelectPresetPositions || onSelectPreset || (() => {});
@@ -64,6 +86,51 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
   const hasTeams = teams && teams.length > 0;
   const excludedCount = excludedTeamIds.length;
   const includedCount = Math.max(0, teams.length - excludedCount);
+
+  const sendCount = parseInt(tradeType.split('-for-')[0], 10) || 1;
+  const receiveCount = parseInt(tradeType.split('-for-')[1], 10) || 1;
+
+  const interestedTradeTypes = useMemo(
+    () => incomingActivityHints?.interestedTradeTypes || [],
+    [incomingActivityHints]
+  );
+  const targetedPlayerIdSet = useMemo(
+    () => new Set(incomingActivityHints?.targetedPlayerIds || []),
+    [incomingActivityHints]
+  );
+  const totalIncomingCount = incomingActivityHints?.totalIncomingCount || 0;
+
+  const offeredSummaryNames = useMemo(() => {
+    if (!offeredPlayers || offeredPlayers.length === 0) return 'Select Package';
+    return offeredPlayers
+      .map((p) =>
+        p.fullName
+          .replace(/\s+(Jr\.|Sr\.|III|II|IV)$/i, '')
+          .split(' ')
+          .pop()
+      )
+      .join(' + ');
+  }, [offeredPlayers]);
+
+  const filteredInlineRoster = useMemo(() => {
+    if (!userTeam?.roster) return [];
+    if (rosterPosFilter === 'All') return userTeam.roster;
+    return userTeam.roster.filter((p) => p.position === rosterPosFilter);
+  }, [userTeam, rosterPosFilter]);
+
+  const toggleMobilePill = (panel: 'package' | 'positions' | 'teams') => {
+    if (mobileOpenPanel === panel) {
+      setMobileOpenPanel(null);
+    } else {
+      setMobileOpenPanel(panel);
+      setActiveTab(panel);
+    }
+  };
+
+  const toggleDesktopPackage = () => {
+    setActiveTab((prev) => (prev === 'package' ? 'positions' : 'package'));
+    setMobileOpenPanel((prev) => (prev === 'package' ? null : 'package'));
+  };
 
   const positionLabels: Record<Position, { label: string; full: string; color: string }> = {
     RB: { label: 'RB', full: 'Running Back', color: 'from-emerald-500 to-green-600' },
@@ -95,10 +162,181 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
   }, [teams, excludedTeamIds]);
 
   return (
-    <div className="w-full max-w-sm mb-5 bg-slate-900/90 border border-slate-800 rounded-2xl p-3 shadow-xl backdrop-blur-md">
-      {/* Sub-Tabs: Positions vs Trade With */}
+    <div className="w-full max-w-sm mb-3 sm:mb-4 bg-slate-900/90 border border-slate-800 rounded-2xl p-2.5 sm:p-3 shadow-xl backdrop-blur-md">
+      {/* ========================================================= */}
+      {/* MOBILE COMPACT UNIFIED DECK CONTROL BAR (< 640px)         */}
+      {/* ========================================================= */}
+      <div className="flex sm:hidden items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => toggleMobilePill('package')}
+          className={`flex-1 min-w-0 py-1.5 px-2.5 rounded-xl text-[11px] font-bold border transition flex items-center justify-between gap-1 ${
+            mobileOpenPanel === 'package'
+              ? 'bg-blue-600 border-blue-500 text-white shadow-sm'
+              : 'bg-slate-950/80 border-slate-800 text-slate-200 hover:border-slate-700'
+          }`}
+        >
+          <span className="truncate flex items-center gap-1">
+            {totalIncomingCount > 0 && (
+              <Flame className="w-3 h-3 text-amber-400 fill-amber-400/30 flex-shrink-0" />
+            )}
+            <span className="text-blue-400 font-black">{tradeType}:</span>
+            <span className="truncate">{offeredSummaryNames}</span>
+          </span>
+          {mobileOpenPanel === 'package' ? (
+            <ChevronUp className="w-3.5 h-3.5 flex-shrink-0" />
+          ) : (
+            <ChevronDown className="w-3.5 h-3.5 flex-shrink-0 text-slate-400" />
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => toggleMobilePill('positions')}
+          className={`py-1.5 px-2.5 rounded-xl text-[11px] font-bold border transition flex items-center gap-1 flex-shrink-0 ${
+            mobileOpenPanel === 'positions'
+              ? 'bg-blue-600 border-blue-500 text-white shadow-sm'
+              : !isAllSelected
+              ? 'bg-blue-500/15 border-blue-500/40 text-blue-300'
+              : 'bg-slate-950/80 border-slate-800 text-slate-300'
+          }`}
+        >
+          <span>Pos: {isAllSelected ? 'All' : selectedPositions.length}</span>
+          {mobileOpenPanel === 'positions' ? (
+            <ChevronUp className="w-3 h-3" />
+          ) : (
+            <ChevronDown className="w-3 h-3 text-slate-400" />
+          )}
+        </button>
+
+        {hasTeams && (
+          <button
+            type="button"
+            onClick={() => toggleMobilePill('teams')}
+            className={`py-1.5 px-2.5 rounded-xl text-[11px] font-bold border transition flex items-center gap-1 flex-shrink-0 ${
+              mobileOpenPanel === 'teams'
+                ? 'bg-blue-600 border-blue-500 text-white shadow-sm'
+                : excludedCount > 0
+                ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
+                : 'bg-slate-950/80 border-slate-800 text-slate-300'
+            }`}
+          >
+            <span>
+              Teams: {includedCount}/{teams.length}
+            </span>
+            {mobileOpenPanel === 'teams' ? (
+              <ChevronUp className="w-3 h-3" />
+            ) : (
+              <ChevronDown className="w-3 h-3 text-slate-400" />
+            )}
+          </button>
+        )}
+      </div>
+
+      {/* ========================================================= */}
+      {/* DESKTOP ACTIVE SHOPPING PACKAGE BANNER (>= 640px)         */}
+      {/* ========================================================= */}
+      {userTeam && (
+        <div className="hidden sm:flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-800/80">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                {tradeType} Trade
+              </span>
+              <span className="text-[10px] font-bold text-slate-400">
+                Offering ({offeredPlayers.length}/{sendCount})
+              </span>
+              {totalIncomingCount > 0 && (
+                <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                  <Flame className="w-2.5 h-2.5 text-amber-400 fill-amber-400/30" />
+                  <span>{totalIncomingCount} Incoming</span>
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+              {offeredPlayers.length > 0 ? (
+                offeredPlayers.map((player, idx) => {
+                  const surname = player.fullName
+                    .replace(/\s+(Jr\.|Sr\.|III|II|IV)$/i, '')
+                    .split(' ')
+                    .pop();
+
+                  return (
+                    <div key={player.id} className="flex items-center gap-1 flex-shrink-0">
+                      {idx > 0 && <span className="text-[10px] text-blue-400 font-black">+</span>}
+                      <div
+                        className={`${
+                          offeredPlayers.length >= 3 ? 'w-6 h-6' : 'w-7 h-7'
+                        } rounded-full bg-slate-800 border border-blue-500/40 overflow-hidden flex-shrink-0`}
+                      >
+                        <img
+                          src={player.headshotUrl}
+                          alt={player.fullName}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <span
+                        className={`font-bold text-white truncate ${
+                          offeredPlayers.length >= 3 ? 'text-[11px] max-w-[65px]' : 'text-xs max-w-[90px]'
+                        }`}
+                      >
+                        {surname}
+                      </span>
+                    </div>
+                  );
+                })
+              ) : (
+                <span className="text-xs text-amber-400 font-medium">No players on trade block</span>
+              )}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={toggleDesktopPackage}
+            className={`ml-3 px-3 py-1.5 rounded-xl border text-xs font-bold transition flex-shrink-0 flex items-center gap-1 ${
+              activeTab === 'package'
+                ? 'bg-blue-600 border-blue-500 text-white shadow-sm'
+                : 'bg-blue-600/20 hover:bg-blue-600/30 border-blue-500/30 text-blue-300'
+            }`}
+          >
+            <span>Change Package</span>
+            {activeTab === 'package' ? (
+              <ChevronUp className="w-3.5 h-3.5" />
+            ) : (
+              <ChevronDown className="w-3.5 h-3.5" />
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* Sub-Tabs on Desktop: Package vs Positions vs Trade With */}
       {hasTeams && (
-        <div className="flex items-center gap-1 p-1 bg-slate-950/70 border border-slate-800/80 rounded-xl mb-3">
+        <div className="hidden sm:flex items-center gap-1 p-1 bg-slate-950/70 border border-slate-800/80 rounded-xl mb-3">
+          {userTeam && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('package')}
+              className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 ${
+                activeTab === 'package'
+                  ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <ArrowLeftRight className="w-3.5 h-3.5" />
+              <span>Package</span>
+              <span
+                className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                  activeTab === 'package'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-slate-800 text-slate-400'
+                }`}
+              >
+                {tradeType}
+              </span>
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setActiveTab('positions')}
@@ -152,9 +390,173 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
       )}
 
       {/* ========================================================= */}
+      {/* TAB 0: INLINE PACKAGE SWITCHER (SEND 1-3 / GET 1-3 + ROSTER) */}
+      {/* ========================================================= */}
+      {userTeam && (
+        <div
+          className={`${
+            mobileOpenPanel === 'package' ? 'block mt-2.5 pt-2.5 border-t border-slate-800' : 'hidden'
+          } ${activeTab === 'package' ? 'sm:block' : 'sm:hidden'} animate-in fade-in duration-150`}
+        >
+          {/* Send / Get Count Selectors */}
+          <div className="grid grid-cols-2 gap-2 mb-2.5">
+            <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-2">
+              <div className="text-[10px] uppercase font-bold text-slate-400 mb-1.5 flex items-center justify-between">
+                <span>You Send</span>
+                <span className="text-blue-400">{sendCount}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-1">
+                {[1, 2, 3].map((num) => (
+                  <button
+                    key={`inline_send_${num}`}
+                    type="button"
+                    onClick={() =>
+                      onTradeTypeChange && onTradeTypeChange(`${num}-for-${receiveCount}` as TradeType)
+                    }
+                    className={`py-1 rounded-lg text-xs font-black transition border ${
+                      sendCount === num
+                        ? 'bg-blue-600 border-blue-500 text-white shadow-sm'
+                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    {num}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-2">
+              <div className="text-[10px] uppercase font-bold text-slate-400 mb-1.5 flex items-center justify-between">
+                <span>You Get</span>
+                <span className="text-emerald-400">{receiveCount}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-1">
+                {[1, 2, 3].map((num) => (
+                  <button
+                    key={`inline_get_${num}`}
+                    type="button"
+                    onClick={() =>
+                      onTradeTypeChange && onTradeTypeChange(`${sendCount}-for-${num}` as TradeType)
+                    }
+                    className={`py-1 rounded-lg text-xs font-black transition border ${
+                      receiveCount === num
+                        ? 'bg-emerald-600 border-emerald-500 text-white shadow-sm'
+                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    {num}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Incoming Activity Hint Pills */}
+          {interestedTradeTypes.length > 0 && (
+            <div className="mb-2.5 flex items-center gap-1.5 flex-wrap">
+              {interestedTradeTypes.map((tType) => (
+                <button
+                  key={`inline_hint_${tType}`}
+                  type="button"
+                  onClick={() => onTradeTypeChange && onTradeTypeChange(tType)}
+                  className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition flex items-center gap-1 ${
+                    tradeType === tType
+                      ? 'bg-amber-500/25 border-amber-400 text-amber-200'
+                      : 'bg-amber-500/10 border-amber-500/30 text-amber-300 hover:bg-amber-500/20'
+                  }`}
+                >
+                  <Flame className="w-2.5 h-2.5 text-amber-400 fill-amber-400/30" />
+                  <span>🔥 Incoming {tType} interest</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Inline Roster Position Filter Pills */}
+          <div className="flex items-center justify-between gap-1 mb-2">
+            <div className="flex items-center gap-1">
+              {(['All', 'QB', 'RB', 'WR', 'TE'] as const).map((pos) => (
+                <button
+                  key={`inline_roster_pos_${pos}`}
+                  type="button"
+                  onClick={() => setRosterPosFilter(pos)}
+                  className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition ${
+                    rosterPosFilter === pos
+                      ? 'bg-blue-600 border-blue-500 text-white'
+                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {pos}
+                </button>
+              ))}
+            </div>
+            {onOpenFullRoster && (
+              <button
+                type="button"
+                onClick={onOpenFullRoster}
+                className="text-[10px] font-bold text-blue-400 hover:text-blue-300 underline"
+              >
+                Full Trade Block →
+              </button>
+            )}
+          </div>
+
+          {/* Compact Roster Selection List */}
+          <div className="max-h-48 overflow-y-auto pr-1 space-y-1 custom-scrollbar">
+            {filteredInlineRoster.map((player) => {
+              const isSelected = selectedOfferedPlayerIds.includes(player.id);
+              const isTargeted = targetedPlayerIdSet.has(player.id);
+
+              return (
+                <button
+                  key={`inline_player_${player.id}`}
+                  type="button"
+                  onClick={() => onToggleOfferedPlayer && onToggleOfferedPlayer(player)}
+                  className={`w-full p-2 rounded-xl border text-left transition flex items-center justify-between gap-2 ${
+                    isSelected
+                      ? 'bg-blue-600/20 border-blue-500 text-white'
+                      : 'bg-slate-950/70 border-slate-800/90 text-slate-300 hover:border-slate-700'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <div
+                      className={`w-4 h-4 rounded-md flex items-center justify-center flex-shrink-0 border ${
+                        isSelected
+                          ? 'bg-blue-600 border-blue-400 text-white'
+                          : 'bg-slate-900 border-slate-700'
+                      }`}
+                    >
+                      {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                    </div>
+                    <span className="text-xs font-bold truncate">{player.fullName}</span>
+                    <span className="text-[10px] font-semibold text-blue-400 flex-shrink-0">
+                      {player.position} • {player.nflTeam}
+                    </span>
+                    {isTargeted && (
+                      <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-0.5 flex-shrink-0">
+                        <Flame className="w-2.5 h-2.5 text-amber-400" />
+                        <span>Wanted</span>
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[10px] text-slate-400 font-semibold flex-shrink-0">
+                    {player.projectedPoints.toFixed(1)} proj
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
       {/* TAB 1: POSITIONS FILTER */}
       {/* ========================================================= */}
-      {activeTab === 'positions' && (
+      <div
+        className={`${
+          mobileOpenPanel === 'positions' ? 'block mt-2.5 pt-2.5 border-t border-slate-800' : 'hidden'
+        } ${activeTab === 'positions' ? 'sm:block' : 'sm:hidden'}`}
+      >
         <div>
           {/* Header Summary & Toggle */}
           <div className="flex items-center justify-between">
@@ -313,13 +715,17 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
             </div>
           )}
         </div>
-      )}
+      </div>
 
       {/* ========================================================= */}
       {/* TAB 2: TRADE WITH (TEAMS & OWNERS) FILTER */}
       {/* ========================================================= */}
-      {activeTab === 'teams' && hasTeams && (
-        <div className="animate-in fade-in duration-150">
+      {hasTeams && (
+        <div
+          className={`${
+            mobileOpenPanel === 'teams' ? 'block mt-2.5 pt-2.5 border-t border-slate-800' : 'hidden'
+          } ${activeTab === 'teams' ? 'sm:block' : 'sm:hidden'} animate-in fade-in duration-150`}
+        >
           {/* Header Summary & Actions */}
           <div className="flex items-center justify-between mb-2.5">
             <div className="flex items-center gap-2">
@@ -509,7 +915,10 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
             </span>
             <button
               type="button"
-              onClick={() => setActiveTab('positions')}
+              onClick={() => {
+                setActiveTab('positions');
+                setMobileOpenPanel('positions');
+              }}
               className="text-blue-400 hover:text-blue-300 font-bold text-[10px]"
             >
               Back to Positions →

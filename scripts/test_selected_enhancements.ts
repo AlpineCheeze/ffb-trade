@@ -465,6 +465,62 @@ export const testPromise = (async () => {
 
   console.log('✓ Enhancements 1.2, 1.5, 3.1 Passed: All UI and keyboard shortcut contracts verified.');
 
+  // -------------------------------------------------------------------------
+  // 6. Test Sprint 1-3 Fixes: Reciprocal hint clearing, Rapid swipe celebration, Auth 401 handling, Default positions
+  // -------------------------------------------------------------------------
+  console.log('[Enhancement Sprint 1-3] Testing Reciprocal Swipe Hint Clearing...');
+  const swipeFromTeam2: Swipe = {
+    id: 'sw_team2_want_team1',
+    teamId: team2.id,
+    tradeType: '1-for-1',
+    offeredPlayerIds: [team2.roster[0].id],
+    targetPlayerIds: [team1.roster[0].id],
+    targetTeamId: team1.id,
+    isInterested: true,
+    createdAt: new Date().toISOString(),
+  };
+  const hintsBefore = computeIncomingActivityHints([swipeFromTeam2], team1.id);
+  assert.strictEqual(hintsBefore.totalIncomingCount, 1, 'Should have 1 incoming hint before reciprocal response');
+
+  const reciprocalResponse: Swipe = {
+    id: 'sw_team1_respond_pass',
+    teamId: team1.id,
+    tradeType: '1-for-1',
+    offeredPlayerIds: [team1.roster[0].id],
+    targetPlayerIds: [team2.roster[0].id],
+    targetTeamId: team2.id,
+    isInterested: false,
+    createdAt: new Date().toISOString(),
+  };
+  const hintsAfter = computeIncomingActivityHints([swipeFromTeam2, reciprocalResponse], team1.id);
+  assert.strictEqual(hintsAfter.totalIncomingCount, 0, 'Incoming hint must be cleared once responded to');
+  const prioAfter = computePriorityTargetKeys([swipeFromTeam2, reciprocalResponse], team1.id);
+  assert.strictEqual(prioAfter.length, 0, 'Priority target keys must be cleared once responded to');
+  console.log('✓ Enhancement Sprint 1-3: Reciprocal swipe hints and priority keys cleared successfully.');
+
+  console.log('[Enhancement Sprint 1-3] Testing page.tsx Rapid Swiping, 401 Expiry, and Filter defaults...');
+  assert.ok(
+    pageSrc.includes('undoneSwipeIdsRef') &&
+      pageSrc.includes('mutationQueueRef') &&
+      pageSrc.includes('buttonSwipeTimeoutRef'),
+    'page.tsx must define undoneSwipeIdsRef, mutationQueueRef, and buttonSwipeTimeoutRef'
+  );
+  assert.ok(
+    pageSrc.includes('!undoneSwipeIdsRef.current.has(newSwipe.id)') &&
+      pageSrc.includes('setActiveMatchCelebration(serverView.matchFound)'),
+    'page.tsx must preserve and celebrate match even on rapid swipe'
+  );
+  assert.ok(
+    pageSrc.includes('serverView.status === 401') &&
+      pageSrc.includes("handleOpenAuth('login')"),
+    'page.tsx must handle 401 session expiry and prompt login'
+  );
+  assert.ok(
+    pageSrc.includes('useState<Position[]>(ALL_POSITIONS)'),
+    'page.tsx must default selectedPositions to ALL_POSITIONS'
+  );
+  console.log('✓ Enhancement Sprint 1-3: Rapid swipe queue, 401 handling, and default positions verified.');
+
   console.log('\n========================================================');
   console.log('ALL 6 SELECTED ENHANCEMENTS VERIFICATION TESTS PASSED! 🎉');
   console.log('========================================================\n');

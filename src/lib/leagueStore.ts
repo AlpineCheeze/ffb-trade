@@ -384,14 +384,91 @@ function mapResponseToClientLeagueView(data: any): ClientLeagueView {
   };
 }
 
+export type LeagueStoreSuccess = {
+  view: ClientLeagueView;
+  status: number;
+  error?: null;
+} & ClientLeagueView;
+
+export type LeagueStoreFailure = {
+  view: null;
+  status: number;
+  error: string;
+  league?: undefined;
+  mySwipes?: undefined;
+  matches?: undefined;
+  deletedMatches?: undefined;
+  matchFound?: undefined;
+  lastResetAt?: undefined;
+  incomingActivityHints?: undefined;
+  priorityTargetKeys?: undefined;
+  warmLeads?: undefined;
+};
+
+export type LeagueStoreResult = LeagueStoreSuccess | LeagueStoreFailure;
+
+async function handleLeagueResponse(
+  res: Response,
+  espnLeagueId: string
+): Promise<LeagueStoreResult> {
+  if (!res.ok) {
+    if (res.status === 404) {
+      removeStoredLeague(espnLeagueId);
+    }
+    let errorMsg = `Request failed (${res.status})`;
+    try {
+      const errData = await res.json();
+      if (errData?.error) errorMsg = errData.error;
+    } catch {
+      // Ignore
+    }
+    return {
+      view: null,
+      status: res.status,
+      error: errorMsg,
+    };
+  }
+
+  try {
+    const data = await res.json();
+    if (data && data.league) {
+      saveLeague(data.league);
+      if (Array.isArray(data.mySwipes)) saveLocalSwipes(espnLeagueId, data.mySwipes);
+      if (Array.isArray(data.matches)) saveLocalMatches(espnLeagueId, data.matches);
+      if (Array.isArray(data.deletedMatches)) {
+        saveLocalDeletedMatches(espnLeagueId, data.deletedMatches);
+      }
+      const view = mapResponseToClientLeagueView(data);
+      return {
+        view,
+        status: res.status,
+        error: null,
+        ...view,
+      };
+    }
+  } catch (err: any) {
+    return {
+      view: null,
+      status: res.status,
+      error: err.message || 'Invalid response data',
+    };
+  }
+
+  return {
+    view: null,
+    status: res.status,
+    error: 'No league data returned',
+  };
+}
+
 /**
  * Synchronizes league state (team claims, user's swipes, confirmed matches, and deleted matches) with the backend server.
  */
 export async function syncLeagueStateWithServer(
   league: League,
   teamId?: string | null
-): Promise<ClientLeagueView | null> {
-  if (typeof window === 'undefined') return null;
+): Promise<LeagueStoreResult> {
+  if (typeof window === 'undefined') return { view: null, status: 0, error: 'Window undefined' };
   try {
     const res = await fetch('/api/league', {
       method: 'POST',
@@ -402,26 +479,10 @@ export async function syncLeagueStateWithServer(
         teamId: teamId || undefined,
       }),
     });
-    if (!res.ok) {
-      if (res.status === 404) {
-        removeStoredLeague(league.espnLeagueId);
-      }
-      return null;
-    }
-    const data = await res.json();
-    if (data && data.league) {
-      saveLeague(data.league);
-      if (Array.isArray(data.mySwipes)) saveLocalSwipes(league.espnLeagueId, data.mySwipes);
-      if (Array.isArray(data.matches)) saveLocalMatches(league.espnLeagueId, data.matches);
-      if (Array.isArray(data.deletedMatches)) {
-        saveLocalDeletedMatches(league.espnLeagueId, data.deletedMatches);
-      }
-      return mapResponseToClientLeagueView(data);
-    }
+    return await handleLeagueResponse(res, league.espnLeagueId);
   } catch {
-    // Fallback to local state if offline
+    return { view: null, status: 0, error: 'Network error or offline' };
   }
-  return null;
 }
 
 /**
@@ -434,8 +495,8 @@ export async function claimTeamOnServer(
   fallbackLeague?: League,
   previousTeamId?: string | null,
   userId?: string | null
-): Promise<ClientLeagueView | null> {
-  if (typeof window === 'undefined') return null;
+): Promise<LeagueStoreResult> {
+  if (typeof window === 'undefined') return { view: null, status: 0, error: 'Window undefined' };
   try {
     const res = await fetch('/api/league', {
       method: 'POST',
@@ -450,21 +511,10 @@ export async function claimTeamOnServer(
         fallbackLeague,
       }),
     });
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (data && data.league) {
-      saveLeague(data.league);
-      if (Array.isArray(data.mySwipes)) saveLocalSwipes(espnLeagueId, data.mySwipes);
-      if (Array.isArray(data.matches)) saveLocalMatches(espnLeagueId, data.matches);
-      if (Array.isArray(data.deletedMatches)) {
-        saveLocalDeletedMatches(espnLeagueId, data.deletedMatches);
-      }
-      return mapResponseToClientLeagueView(data);
-    }
+    return await handleLeagueResponse(res, espnLeagueId);
   } catch {
-    // Fallback to local state if offline
+    return { view: null, status: 0, error: 'Network error or offline' };
   }
-  return null;
 }
 
 /**
@@ -474,8 +524,8 @@ export async function recordSwipeOnServer(
   espnLeagueId: string,
   swipe: Swipe,
   fallbackLeague?: League
-): Promise<ClientLeagueView | null> {
-  if (typeof window === 'undefined') return null;
+): Promise<LeagueStoreResult> {
+  if (typeof window === 'undefined') return { view: null, status: 0, error: 'Window undefined' };
   try {
     const res = await fetch('/api/league', {
       method: 'POST',
@@ -487,21 +537,10 @@ export async function recordSwipeOnServer(
         fallbackLeague,
       }),
     });
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (data && data.league) {
-      saveLeague(data.league);
-      if (Array.isArray(data.mySwipes)) saveLocalSwipes(espnLeagueId, data.mySwipes);
-      if (Array.isArray(data.matches)) saveLocalMatches(espnLeagueId, data.matches);
-      if (Array.isArray(data.deletedMatches)) {
-        saveLocalDeletedMatches(espnLeagueId, data.deletedMatches);
-      }
-      return mapResponseToClientLeagueView(data);
-    }
+    return await handleLeagueResponse(res, espnLeagueId);
   } catch {
-    // Fallback to local state if offline
+    return { view: null, status: 0, error: 'Network error or offline' };
   }
-  return null;
 }
 
 /**
@@ -512,8 +551,8 @@ export async function undoSwipeOnServer(
   teamId: string,
   tradeType: TradeType,
   offeredPlayerIds: string[]
-): Promise<ClientLeagueView | null> {
-  if (typeof window === 'undefined') return null;
+): Promise<LeagueStoreResult> {
+  if (typeof window === 'undefined') return { view: null, status: 0, error: 'Window undefined' };
   try {
     const res = await fetch('/api/league', {
       method: 'POST',
@@ -526,21 +565,10 @@ export async function undoSwipeOnServer(
         offeredPlayerIds,
       }),
     });
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (data && data.league) {
-      saveLeague(data.league);
-      if (Array.isArray(data.mySwipes)) saveLocalSwipes(espnLeagueId, data.mySwipes);
-      if (Array.isArray(data.matches)) saveLocalMatches(espnLeagueId, data.matches);
-      if (Array.isArray(data.deletedMatches)) {
-        saveLocalDeletedMatches(espnLeagueId, data.deletedMatches);
-      }
-      return mapResponseToClientLeagueView(data);
-    }
+    return await handleLeagueResponse(res, espnLeagueId);
   } catch {
-    // Fallback to local state if offline
+    return { view: null, status: 0, error: 'Network error or offline' };
   }
-  return null;
 }
 
 /**
@@ -552,8 +580,8 @@ export async function deleteMatchOnServer(
   matchId: string,
   fallbackLeague?: League,
   matchSnapshot?: Match
-): Promise<ClientLeagueView | null> {
-  if (typeof window === 'undefined') return null;
+): Promise<LeagueStoreResult> {
+  if (typeof window === 'undefined') return { view: null, status: 0, error: 'Window undefined' };
   try {
     const res = await fetch('/api/league', {
       method: 'POST',
@@ -567,21 +595,10 @@ export async function deleteMatchOnServer(
         matchSnapshot,
       }),
     });
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (data && data.league) {
-      saveLeague(data.league);
-      if (Array.isArray(data.mySwipes)) saveLocalSwipes(espnLeagueId, data.mySwipes);
-      if (Array.isArray(data.matches)) saveLocalMatches(espnLeagueId, data.matches);
-      if (Array.isArray(data.deletedMatches)) {
-        saveLocalDeletedMatches(espnLeagueId, data.deletedMatches);
-      }
-      return mapResponseToClientLeagueView(data);
-    }
+    return await handleLeagueResponse(res, espnLeagueId);
   } catch {
-    // Fallback to local state if offline
+    return { view: null, status: 0, error: 'Network error or offline' };
   }
-  return null;
 }
 
 /**
@@ -593,8 +610,8 @@ export async function deleteAllMatchesOnServer(
   teamId: string,
   fallbackLeague?: League,
   clientMatches?: Match[]
-): Promise<ClientLeagueView | null> {
-  if (typeof window === 'undefined') return null;
+): Promise<LeagueStoreResult> {
+  if (typeof window === 'undefined') return { view: null, status: 0, error: 'Window undefined' };
   try {
     const res = await fetch('/api/league', {
       method: 'POST',
@@ -607,21 +624,10 @@ export async function deleteAllMatchesOnServer(
         clientMatches,
       }),
     });
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (data && data.league) {
-      saveLeague(data.league);
-      if (Array.isArray(data.mySwipes)) saveLocalSwipes(espnLeagueId, data.mySwipes);
-      if (Array.isArray(data.matches)) saveLocalMatches(espnLeagueId, data.matches);
-      if (Array.isArray(data.deletedMatches)) {
-        saveLocalDeletedMatches(espnLeagueId, data.deletedMatches);
-      }
-      return mapResponseToClientLeagueView(data);
-    }
+    return await handleLeagueResponse(res, espnLeagueId);
   } catch {
-    // Fallback to local state if offline
+    return { view: null, status: 0, error: 'Network error or offline' };
   }
-  return null;
 }
 
 /**
@@ -632,9 +638,9 @@ export async function recyclePassesOnServer(
   espnLeagueId: string,
   teamId: string,
   fallbackLeague?: League
-): Promise<ClientLeagueView | null> {
+): Promise<LeagueStoreResult> {
   const cleanId = espnLeagueId.trim();
-  if (typeof window === 'undefined') return null;
+  if (typeof window === 'undefined') return { view: null, status: 0, error: 'Window undefined' };
   try {
     const res = await fetch('/api/league', {
       method: 'POST',
@@ -646,21 +652,10 @@ export async function recyclePassesOnServer(
         fallbackLeague,
       }),
     });
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (data && data.league) {
-      saveLeague(data.league);
-      if (Array.isArray(data.mySwipes)) saveLocalSwipes(cleanId, data.mySwipes);
-      if (Array.isArray(data.matches)) saveLocalMatches(cleanId, data.matches);
-      if (Array.isArray(data.deletedMatches)) {
-        saveLocalDeletedMatches(cleanId, data.deletedMatches);
-      }
-      return mapResponseToClientLeagueView(data);
-    }
+    return await handleLeagueResponse(res, cleanId);
   } catch {
-    // Fallback to local state if offline
+    return { view: null, status: 0, error: 'Network error or offline' };
   }
-  return null;
 }
 
 /**
@@ -670,7 +665,7 @@ export async function resetTeamSwipesOnServer(
   espnLeagueId: string,
   teamId: string,
   fallbackLeague?: League
-): Promise<ClientLeagueView | null> {
+): Promise<LeagueStoreResult> {
   const cleanId = espnLeagueId.trim();
   if (typeof window !== 'undefined') {
     try {
@@ -679,7 +674,7 @@ export async function resetTeamSwipesOnServer(
       saveLocalDeletedMatches(cleanId, []);
     } catch {}
   }
-  if (typeof window === 'undefined') return null;
+  if (typeof window === 'undefined') return { view: null, status: 0, error: 'Window undefined' };
   try {
     const res = await fetch('/api/league', {
       method: 'POST',
@@ -691,29 +686,25 @@ export async function resetTeamSwipesOnServer(
         fallbackLeague,
       }),
     });
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (data && data.league) {
-      saveLeague(data.league);
-      if (Array.isArray(data.mySwipes)) saveLocalSwipes(cleanId, data.mySwipes);
-      if (Array.isArray(data.matches)) saveLocalMatches(cleanId, data.matches);
-      if (Array.isArray(data.deletedMatches)) {
-        saveLocalDeletedMatches(cleanId, data.deletedMatches);
-      }
-      return mapResponseToClientLeagueView(data);
-    }
+    return await handleLeagueResponse(res, cleanId);
   } catch {
     const localLeague = getLeagueById(cleanId) || fallbackLeague;
     if (localLeague) {
-      return {
+      const fallbackView: ClientLeagueView = {
         league: localLeague,
         mySwipes: [],
         matches: [],
         deletedMatches: [],
       };
+      return {
+        view: fallbackView,
+        status: 200,
+        error: null,
+        ...fallbackView,
+      };
     }
+    return { view: null, status: 0, error: 'Network error or offline' };
   }
-  return null;
 }
 
 /**
@@ -724,7 +715,7 @@ export async function resetLeagueSwipesOnServer(
   espnLeagueId: string,
   teamId?: string | null,
   fallbackLeague?: League
-): Promise<ClientLeagueView | null> {
+): Promise<LeagueStoreResult> {
   const cleanId = espnLeagueId.trim();
 
   if (typeof window !== 'undefined') {
@@ -737,7 +728,7 @@ export async function resetLeagueSwipesOnServer(
     }
   }
 
-  if (typeof window === 'undefined') return null;
+  if (typeof window === 'undefined') return { view: null, status: 0, error: 'Window undefined' };
   try {
     const res = await fetch('/api/league', {
       method: 'POST',
@@ -749,29 +740,24 @@ export async function resetLeagueSwipesOnServer(
         fallbackLeague,
       }),
     });
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (data && data.league) {
-      saveLeague(data.league);
-      if (Array.isArray(data.mySwipes)) saveLocalSwipes(cleanId, data.mySwipes);
-      if (Array.isArray(data.matches)) saveLocalMatches(cleanId, data.matches);
-      if (Array.isArray(data.deletedMatches)) {
-        saveLocalDeletedMatches(cleanId, data.deletedMatches);
-      }
-      return mapResponseToClientLeagueView(data);
-    }
+    return await handleLeagueResponse(res, cleanId);
   } catch {
-    // Fallback to local state if offline
     const localLeague = getLeagueById(cleanId) || fallbackLeague;
     if (localLeague) {
-      return {
+      const fallbackView: ClientLeagueView = {
         league: localLeague,
         mySwipes: [],
         matches: [],
         deletedMatches: [],
       };
+      return {
+        view: fallbackView,
+        status: 200,
+        error: null,
+        ...fallbackView,
+      };
     }
+    return { view: null, status: 0, error: 'Network error or offline' };
   }
-  return null;
 }
 

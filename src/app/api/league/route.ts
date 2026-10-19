@@ -41,16 +41,15 @@ function canViewPrivateTeamSwipes(
   teamId: string,
   state: ServerLeagueState
 ): boolean {
-  if (!user) return false;
-  if (user.isSuperUser) return true;
-  if (user.claimedTeams && user.claimedTeams[cleanLeagueId] === teamId) {
-    return true;
-  }
+  if (user?.isSuperUser) return true;
   const team = state.league.teams.find((t) => t.id === teamId);
-  if (team && team.claimedByUserId === user.id) {
+  // Allow viewing private team swipes/matches if team is unclaimed (demo sandbox / open demo)
+  if (!team?.claimedByUserId) {
     return true;
   }
-  return false;
+  // When claimedByUserId is present, it is authoritative
+  if (!user) return false;
+  return team.claimedByUserId === user.id;
 }
 
 export async function GET(req: NextRequest) {
@@ -93,7 +92,9 @@ export async function GET(req: NextRequest) {
   if (!state) {
     try {
       const fetched = await fetchEspnLeagueServer({ leagueId: cleanId });
-      saveServerLeagueSnapshot(fetched, cleanId);
+      await leagueLock.acquire(cleanId, async () => {
+        saveServerLeagueSnapshot(fetched, cleanId);
+      });
       state = getServerLeagueState(cleanId);
     } catch {
       return NextResponse.json(
@@ -322,8 +323,7 @@ export async function POST(req: NextRequest) {
           }
           if (
             !authUser.isSuperUser &&
-            authUser.id !== teamObj.claimedByUserId &&
-            authUser.claimedTeams?.[cleanId] !== safeTeamId
+            authUser.id !== teamObj.claimedByUserId
           ) {
             return NextResponse.json(
               { error: 'Forbidden: You do not own this team' },
@@ -399,8 +399,7 @@ export async function POST(req: NextRequest) {
           }
           if (
             !authUser.isSuperUser &&
-            authUser.id !== teamObj.claimedByUserId &&
-            authUser.claimedTeams?.[cleanId] !== teamId
+            authUser.id !== teamObj.claimedByUserId
           ) {
             return NextResponse.json(
               { error: 'Forbidden: You do not own this team' },
@@ -471,8 +470,7 @@ export async function POST(req: NextRequest) {
           }
           if (
             !authUser.isSuperUser &&
-            authUser.id !== teamObj.claimedByUserId &&
-            authUser.claimedTeams?.[cleanId] !== teamId
+            authUser.id !== teamObj.claimedByUserId
           ) {
             return NextResponse.json(
               { error: 'Forbidden: You do not own this team' },
@@ -548,8 +546,7 @@ export async function POST(req: NextRequest) {
           }
           if (
             !authUser.isSuperUser &&
-            authUser.id !== teamObj.claimedByUserId &&
-            authUser.claimedTeams?.[cleanId] !== teamId
+            authUser.id !== teamObj.claimedByUserId
           ) {
             return NextResponse.json(
               { error: 'Forbidden: You do not own this team' },
@@ -623,8 +620,7 @@ export async function POST(req: NextRequest) {
           }
           if (
             !authUser.isSuperUser &&
-            authUser.id !== teamObj.claimedByUserId &&
-            authUser.claimedTeams?.[cleanId] !== teamId
+            authUser.id !== teamObj.claimedByUserId
           ) {
             return NextResponse.json(
               { error: 'Forbidden: You do not own this team' },
@@ -693,8 +689,7 @@ export async function POST(req: NextRequest) {
           }
           if (
             !authUser.isSuperUser &&
-            authUser.id !== teamObj.claimedByUserId &&
-            authUser.claimedTeams?.[cleanId] !== teamId
+            authUser.id !== teamObj.claimedByUserId
           ) {
             return NextResponse.json(
               { error: 'Forbidden: You do not own this team' },

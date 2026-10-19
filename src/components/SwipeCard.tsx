@@ -73,6 +73,7 @@ export const SwipeCard = React.forwardRef<SwipeCardRef, SwipeCardProps>(function
       cardOpacity.set(0.6);
       x.set(0);
       setActionStamp(null);
+      setShowStats(false);
     }
   }, [isFront, cardOpacity, x]);
 

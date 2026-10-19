@@ -8,6 +8,7 @@ import {
   unlinkUserTeamClaim,
   unlinkAllUserClaimsForLeague,
   ensureSuperUserAccount,
+  userLock,
 } from '@/lib/serverUserStore';
 import {
   getAllServerLeagues,
@@ -15,6 +16,7 @@ import {
   superAssignTeam,
   superUnassignTeam,
   unclaimAllTeamsForUser,
+  leagueLock,
 } from '@/lib/serverLeagueStore';
 
 function extractToken(req: NextRequest, body?: any): string | null {
@@ -137,21 +139,23 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // Unclaim all teams held by this user across all leagues
-      unclaimAllTeamsForUser(targetUserId);
+      return await userLock.acquire(targetUserId, async () => {
+        // Unclaim all teams held by this user across all leagues
+        unclaimAllTeamsForUser(targetUserId);
 
-      // Delete the user from store
-      const deleted = deleteUser(targetUserId);
-      if (!deleted) {
-        return NextResponse.json(
-          { success: false, error: 'User not found or could not be deleted.' },
-          { status: 404 }
-        );
-      }
+        // Delete the user from store
+        const deleted = deleteUser(targetUserId);
+        if (!deleted) {
+          return NextResponse.json(
+            { success: false, error: 'User not found or could not be deleted.' },
+            { status: 404 }
+          );
+        }
 
-      return NextResponse.json({
-        success: true,
-        message: `User ${targetUserId} successfully deleted and unassigned from all teams.`,
+        return NextResponse.json({
+          success: true,
+          message: `User ${targetUserId} successfully deleted and unassigned from all teams.`,
+        });
       });
     }
 
@@ -165,21 +169,23 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // Unlink team claims for this league from all users
-      unlinkAllUserClaimsForLeague(targetLeagueId);
+      return await leagueLock.acquire(targetLeagueId, async () => {
+        // Unlink team claims for this league from all users
+        unlinkAllUserClaimsForLeague(targetLeagueId);
 
-      // Delete the league
-      const deleted = superDeleteLeague(targetLeagueId);
-      if (!deleted) {
-        return NextResponse.json(
-          { success: false, error: 'League could not be deleted.' },
-          { status: 400 }
-        );
-      }
+        // Delete the league
+        const deleted = superDeleteLeague(targetLeagueId);
+        if (!deleted) {
+          return NextResponse.json(
+            { success: false, error: 'League could not be deleted.' },
+            { status: 400 }
+          );
+        }
 
-      return NextResponse.json({
-        success: true,
-        message: `League #${targetLeagueId} successfully deleted.`,
+        return NextResponse.json({
+          success: true,
+          message: `League #${targetLeagueId} successfully deleted.`,
+        });
       });
     }
 
@@ -196,28 +202,32 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const targetUser = getUserById(userId);
-      if (!targetUser) {
-        return NextResponse.json(
-          { success: false, error: `User ID "${userId}" not found.` },
-          { status: 404 }
-        );
-      }
+      return await leagueLock.acquire(leagueId, async () => {
+        return await userLock.acquire(userId, async () => {
+          const targetUser = getUserById(userId);
+          if (!targetUser) {
+            return NextResponse.json(
+              { success: false, error: `User ID "${userId}" not found.` },
+              { status: 404 }
+            );
+          }
 
-      const updatedState = superAssignTeam(leagueId, teamId, targetUser.id, targetUser.username);
-      if (!updatedState) {
-        return NextResponse.json(
-          { success: false, error: 'Failed to assign user to team. Check league and team IDs.' },
-          { status: 400 }
-        );
-      }
+          const updatedState = superAssignTeam(leagueId, teamId, targetUser.id, targetUser.username);
+          if (!updatedState) {
+            return NextResponse.json(
+              { success: false, error: 'Failed to assign user to team. Check league and team IDs.' },
+              { status: 400 }
+            );
+          }
 
-      // Link team claim in user store
-      linkUserTeamClaim(targetUser.id, leagueId, teamId);
+          // Link team claim in user store
+          linkUserTeamClaim(targetUser.id, leagueId, teamId);
 
-      return NextResponse.json({
-        success: true,
-        message: `User @${targetUser.username} successfully assigned to team ${teamId} in league #${leagueId}.`,
+          return NextResponse.json({
+            success: true,
+            message: `User @${targetUser.username} successfully assigned to team ${teamId} in league #${leagueId}.`,
+          });
+        });
       });
     }
 
@@ -233,21 +243,25 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const { state: updatedState, previousUserId } = superUnassignTeam(leagueId, teamId);
-      if (!updatedState) {
-        return NextResponse.json(
-          { success: false, error: 'Failed to unassign team. Check league and team IDs.' },
-          { status: 400 }
-        );
-      }
+      return await leagueLock.acquire(leagueId, async () => {
+        const { state: updatedState, previousUserId } = superUnassignTeam(leagueId, teamId);
+        if (!updatedState) {
+          return NextResponse.json(
+            { success: false, error: 'Failed to unassign team. Check league and team IDs.' },
+            { status: 400 }
+          );
+        }
 
-      if (previousUserId) {
-        unlinkUserTeamClaim(previousUserId, leagueId);
-      }
+        if (previousUserId) {
+          await userLock.acquire(previousUserId, async () => {
+            unlinkUserTeamClaim(previousUserId, leagueId);
+          });
+        }
 
-      return NextResponse.json({
-        success: true,
-        message: `Team ${teamId} in league #${leagueId} is now unassigned.`,
+        return NextResponse.json({
+          success: true,
+          message: `Team ${teamId} in league #${leagueId} is now unassigned.`,
+        });
       });
     }
 

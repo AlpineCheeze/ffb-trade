@@ -338,7 +338,7 @@ export function ensureSuperUserAccount(): StoredUser {
         user.salt = salt;
         user.hash = hash;
         changed = true;
-      } else {
+      } else if (!user.hash.startsWith('pbkdf2:100000:')) {
         const { valid, needsRehash } = verifyPasswordWithUpgrade(superPassword, user.salt, user.hash);
         if (valid && needsRehash) {
           const { salt, hash } = hashPassword(superPassword);

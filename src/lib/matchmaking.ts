@@ -519,10 +519,32 @@ export function createSeedOpponentSwipes(league: League): Swipe[] {
 }
 
 /**
+ * Checks if the user has already responded with a reciprocal Want or Pass to an incoming swipe.
+ */
+export function hasUserRespondedToIncomingSwipe(
+  incomingSwipe: Swipe,
+  allSwipes: Swipe[],
+  userTeamId: string
+): boolean {
+  if (!incomingSwipe || !incomingSwipe.tradeType) return false;
+  const reciprocalType = getReciprocalTradeType(incomingSwipe.tradeType);
+  return allSwipes.some(
+    (r) =>
+      r &&
+      r.teamId === userTeamId &&
+      r.targetTeamId === incomingSwipe.teamId &&
+      r.tradeType === reciprocalType &&
+      arraysEqualIgnoreOrder(r.offeredPlayerIds || [], incomingSwipe.targetPlayerIds || []) &&
+      arraysEqualIgnoreOrder(r.targetPlayerIds || [], incomingSwipe.offeredPlayerIds || [])
+  );
+}
+
+/**
  * Computes blind-safe incoming activity hints for `userTeamId`.
  * Reveals which user-perspective trade types (e.g. '1-for-2' if an opponent swiped '2-for-1' on user)
  * and which of the user's own roster player IDs have incoming `isInterested: true` swipes from opponents,
  * without leaking which opponent swiped or which opponent players were offered.
+ * Excludes incoming swipes where the user has already responded with a reciprocal Want or Pass.
  */
 export function computeIncomingActivityHints(
   allSwipes: Swipe[],
@@ -541,7 +563,8 @@ export function computeIncomingActivityHints(
       s &&
       s.isInterested &&
       s.targetTeamId === userTeamId &&
-      s.teamId !== userTeamId
+      s.teamId !== userTeamId &&
+      !hasUserRespondedToIncomingSwipe(s, allSwipes, userTeamId)
   );
 
   const tradeTypeSet = new Set<TradeType>();
@@ -570,6 +593,7 @@ export function computeIncomingActivityHints(
  * for all opponent `isInterested: true` swipes targeting `userTeamId`.
  * Used for blind priority deck injection so candidate cards that complete an existing opponent
  * swipe appear near the top of the deck.
+ * Excludes incoming swipes where the user has already responded with a reciprocal Want or Pass.
  */
 export function computePriorityTargetKeys(
   allSwipes: Swipe[],
@@ -584,7 +608,8 @@ export function computePriorityTargetKeys(
       s.isInterested &&
       s.targetTeamId === userTeamId &&
       s.teamId !== userTeamId &&
-      s.tradeType
+      s.tradeType &&
+      !hasUserRespondedToIncomingSwipe(s, allSwipes, userTeamId)
     ) {
       const userTradeType = getReciprocalTradeType(s.tradeType);
       const key = generateSwipeKey(
@@ -658,17 +683,32 @@ export function computeWarmTradeLeads(
 
       if (isExactReciprocal) continue;
 
-      // Players from my roster that the partner wanted (or fallback to what I offered)
-      const myCandidateIds =
-        Array.isArray(partnerSwipe.targetPlayerIds) && partnerSwipe.targetPlayerIds.length > 0
-          ? partnerSwipe.targetPlayerIds
-          : mySwipe.offeredPlayerIds || [];
+      // Require player overlap between the user's swipe and the partner's swipe
+      const myOverlap = (mySwipe.offeredPlayerIds || []).filter((id) =>
+        (partnerSwipe.targetPlayerIds || []).includes(id)
+      );
+      const partnerOverlap = (mySwipe.targetPlayerIds || []).filter((id) =>
+        (partnerSwipe.offeredPlayerIds || []).includes(id)
+      );
+      if (myOverlap.length === 0 && partnerOverlap.length === 0) {
+        continue;
+      }
 
-      // Players from partner's roster that I wanted (or fallback to what partner offered)
+      // If both sides have specific overlapping players, focus on those overlapping players;
+      // otherwise, construct around partner's actual incoming offer
+      const myCandidateIds =
+        myOverlap.length > 0
+          ? myOverlap
+          : (Array.isArray(partnerSwipe.targetPlayerIds) && partnerSwipe.targetPlayerIds.length > 0
+              ? partnerSwipe.targetPlayerIds
+              : mySwipe.offeredPlayerIds || []);
+
       const partnerCandidateIds =
-        Array.isArray(mySwipe.targetPlayerIds) && mySwipe.targetPlayerIds.length > 0
-          ? mySwipe.targetPlayerIds
-          : partnerSwipe.offeredPlayerIds || [];
+        partnerOverlap.length > 0
+          ? partnerOverlap
+          : (Array.isArray(partnerSwipe.offeredPlayerIds) && partnerSwipe.offeredPlayerIds.length > 0
+              ? partnerSwipe.offeredPlayerIds
+              : mySwipe.targetPlayerIds || []);
 
       const myPlayers = (userTeam.roster || [])
         .filter((p) => p && myCandidateIds.includes(p.id))
@@ -681,6 +721,32 @@ export function computeWarmTradeLeads(
 
       const myPlayerIdsSorted = myPlayers.map((p) => p.id).sort();
       const partnerPlayerIdsSorted = partnerPlayers.map((p) => p.id).sort();
+
+      const suggestedTradeType = `${myPlayers.length}-for-${partnerPlayers.length}` as TradeType;
+
+      // Exclude any candidate combinations that the user has already swiped on (excluding this trigger swipe)
+      const alreadySwiped = allSwipes.some(
+        (s) =>
+          s &&
+          s.teamId === userTeamId &&
+          s.targetTeamId === partnerTeamId &&
+          s.tradeType === suggestedTradeType &&
+          s.id !== mySwipe.id &&
+          arraysEqualIgnoreOrder(s.offeredPlayerIds || [], myPlayerIdsSorted) &&
+          arraysEqualIgnoreOrder(s.targetPlayerIds || [], partnerPlayerIdsSorted)
+      );
+      if (alreadySwiped) continue;
+
+      const userPassed = allSwipes.some(
+        (s) =>
+          s &&
+          s.teamId === userTeamId &&
+          s.targetTeamId === partnerTeamId &&
+          !s.isInterested &&
+          arraysEqualIgnoreOrder(s.offeredPlayerIds || [], myPlayerIdsSorted) &&
+          arraysEqualIgnoreOrder(s.targetPlayerIds || [], partnerPlayerIdsSorted)
+      );
+      if (userPassed) continue;
 
       // Skip if an active confirmed match already exists with these exact players
       const alreadyMatched = safeMatches.some((m) => {
@@ -703,8 +769,6 @@ export function computeWarmTradeLeads(
       const leadKey = `${partnerTeamId}|${myPlayerIdsSorted.join(',')}|${partnerPlayerIdsSorted.join(',')}`;
       if (seenLeadKeys.has(leadKey)) continue;
       seenLeadKeys.add(leadKey);
-
-      const suggestedTradeType = `${myPlayers.length}-for-${partnerPlayers.length}` as TradeType;
 
       leads.push({
         id: `lead_${userTeamId}_${partnerTeamId}_${myPlayerIdsSorted.join('_')}_${partnerPlayerIdsSorted.join('_')}`,

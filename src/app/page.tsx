@@ -25,8 +25,9 @@ import {
   resetLeagueSwipesOnServer,
   recyclePassesOnServer,
   resetTeamSwipesOnServer,
+  claimTeamOnServer,
 } from '@/lib/leagueStore';
-import { getStoredUser, fetchCurrentUser, logoutAccount, AUTH_CHANGE_EVENT } from '@/lib/authStore';
+import { getStoredUser, fetchCurrentUser, logoutAccount, linkTeamToAccount, AUTH_CHANGE_EVENT } from '@/lib/authStore';
 import {
   checkForMutualMatch,
   createSeedOpponentSwipes,
@@ -63,7 +64,7 @@ import { SuperUserModal } from '@/components/SuperUserModal';
 import { PositionFilterBar, ALL_POSITIONS } from '@/components/PositionFilterBar';
 import { HomeHero } from '@/components/HomeHero';
 import { LeagueLockerRoom } from '@/components/LeagueLockerRoom';
-import { X, Check, RotateCcw, UserCheck, Sparkles, UserX, Users } from 'lucide-react';
+import { X, Check, RotateCcw, UserCheck, Sparkles, UserX, Users, AlertCircle } from 'lucide-react';
 
 function getMatchSignature(m: Match): string {
   const pairTeams = [m.teamAId, m.teamBId].sort().join('|');
@@ -99,7 +100,7 @@ export default function Home() {
   const [userTeamId, setUserTeamId] = useState<string | null>(null);
   const [tradeType, setTradeType] = useState<TradeType>('1-for-1');
   const [selectedOfferedPlayerIds, setSelectedOfferedPlayerIds] = useState<string[]>([]);
-  const [selectedPositions, setSelectedPositions] = useState<Position[]>(['RB', 'WR', 'TE', 'QB', 'FLEX']);
+  const [selectedPositions, setSelectedPositions] = useState<Position[]>(ALL_POSITIONS);
   const [activeTab, setActiveTab] = useState<'deck' | 'matches' | 'roster' | 'lobby'>('lobby');
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
 
@@ -122,6 +123,7 @@ export default function Home() {
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [isResettingSwipes, setIsResettingSwipes] = useState(false);
   const [resetNotification, setResetNotification] = useState<string | null>(null);
+  const [errorNotification, setErrorNotification] = useState<string | null>(null);
 
   // Session deck seed for stable randomized candidate player pool
   const [deckSeed, setDeckSeed] = useState<string>(() => {
@@ -143,6 +145,17 @@ export default function Home() {
   const leagueRef = useRef<League | null>(null);
   const mutationVersionRef = useRef(0);
   const lastResetAtRef = useRef<string | undefined>(undefined);
+  const undoneSwipeIdsRef = useRef<Set<string>>(new Set());
+  const mutationQueueRef = useRef<Promise<any>>(Promise.resolve());
+  const buttonSwipeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (buttonSwipeTimeoutRef.current) {
+        clearTimeout(buttonSwipeTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     currentUserRef.current = currentUser;
@@ -326,6 +339,18 @@ export default function Home() {
         if (firstTeam.roster.length > 0) {
           setSelectedOfferedPlayerIds([firstTeam.roster[0].id]);
         }
+        if (activeUser) {
+          saveStoredUserClaim(cleanLeagueId, resolvedTeamId);
+          linkTeamToAccount(cleanLeagueId, resolvedTeamId, activeUser.id);
+          claimTeamOnServer(
+            cleanLeagueId,
+            resolvedTeamId,
+            activeUser.username || firstTeam.ownerName || 'Manager',
+            selectedLeague,
+            undefined,
+            activeUser.id
+          );
+        }
       } else {
         // In real leagues, let manager pick their team in the Locker Room
         setUserTeamId(null);
@@ -337,7 +362,7 @@ export default function Home() {
 
     // Hydrate latest team claims, user swipes, matches, and deleted matches from backend server
     syncLeagueStateWithServer(selectedLeague, resolvedTeamId).then((serverView) => {
-      if (!serverView || mutationVersionRef.current !== reqVersion) return;
+      if (!serverView || !serverView.league || mutationVersionRef.current !== reqVersion) return;
       setLeague(serverView.league);
       leagueRef.current = serverView.league;
       lastResetAtRef.current = serverView.lastResetAt;
@@ -443,7 +468,7 @@ export default function Home() {
 
       // Sync swipes and matches for this newly claimed team from backend
       syncLeagueStateWithServer(currentLeague, teamId).then((serverView) => {
-        if (!serverView || mutationVersionRef.current !== reqVersion) return;
+        if (!serverView || !serverView.league || mutationVersionRef.current !== reqVersion) return;
         setLeague(serverView.league);
         leagueRef.current = serverView.league;
         lastResetAtRef.current = serverView.lastResetAt;
@@ -491,7 +516,7 @@ export default function Home() {
       const pollVersion = mutationVersionRef.current;
 
       syncLeagueStateWithServer(latestLeague, userTeamId).then((serverView) => {
-        if (!isMounted || !serverView || mutationVersionRef.current !== pollVersion) return;
+        if (!isMounted || !serverView || !serverView.league || mutationVersionRef.current !== pollVersion) return;
         setLeague(serverView.league);
         leagueRef.current = serverView.league;
         if (serverView.incomingActivityHints !== undefined) {
@@ -817,12 +842,17 @@ export default function Home() {
   // Handle programmatic button swipe with smooth card & badge animation
   const handleButtonSwipe = (isInterested: boolean) => {
     if (isSwipingCard) return;
+    if (buttonSwipeTimeoutRef.current) {
+      clearTimeout(buttonSwipeTimeoutRef.current);
+      buttonSwipeTimeoutRef.current = null;
+    }
     if (cardRef.current) {
       setIsSwipingCard(true);
       cardRef.current.swipe(isInterested);
       // Safety timeout to reset isSwipingCard in case animation is interrupted
-      setTimeout(() => {
+      buttonSwipeTimeoutRef.current = setTimeout(() => {
         setIsSwipingCard(false);
+        buttonSwipeTimeoutRef.current = null;
       }, 600);
     } else {
       handleSwipe(isInterested);
@@ -831,6 +861,10 @@ export default function Home() {
 
   // Handle Swipe (Interested or Pass)
   const handleSwipe = (isInterested: boolean) => {
+    if (buttonSwipeTimeoutRef.current) {
+      clearTimeout(buttonSwipeTimeoutRef.current);
+      buttonSwipeTimeoutRef.current = null;
+    }
     setIsSwipingCard(false);
     if (!currentCard || offeredPlayers.length !== requiredOfferedCount || !userTeam || !league) return;
 
@@ -876,34 +910,67 @@ export default function Home() {
       }
     }
 
-    // Record swipe on backend server and check against all leaguemates' secret swipes
-    recordSwipeOnServer(league.espnLeagueId, newSwipe, league).then((serverView) => {
-      if (!serverView || mutationVersionRef.current !== swipeVersion) return;
-      if (serverView.incomingActivityHints !== undefined) {
-        setServerIncomingHints(serverView.incomingActivityHints || null);
-      }
-      if (serverView.priorityTargetKeys !== undefined) {
-        setServerPriorityKeys(serverView.priorityTargetKeys || []);
-      }
-      if (serverView.warmLeads !== undefined) {
-        setServerWarmLeads(serverView.warmLeads || []);
-      }
-      const isMock = league.id === 'league_mock_123' || league.espnLeagueId === '12345678';
-      const serverDeleted = serverView.deletedMatches || [];
-      setDeletedMatches((prevDel) =>
-        isMock ? mergeMatchesUnique(serverDeleted, prevDel) : serverDeleted
-      );
-      setMatches((prev) => {
-        const next = isMock
-          ? mergeMatchesUnique(serverView.matches, prev, serverDeleted)
-          : serverView.matches;
-        saveLocalMatches(league.espnLeagueId, next);
-        return next;
+    // Sequence server swipe in mutation queue to prevent out-of-order race conditions on rapid swipe
+    mutationQueueRef.current = mutationQueueRef.current
+      .then(async () => {
+        const serverView = await recordSwipeOnServer(league.espnLeagueId, newSwipe, league);
+        if (!serverView) return;
+
+        // Session / permission error handling
+        if (serverView.status === 401) {
+          setErrorNotification('Your session has expired. Please log in again.');
+          setTimeout(() => setErrorNotification(null), 5000);
+          handleOpenAuth('login');
+          return;
+        }
+        if (serverView.status === 403 || serverView.status === 409) {
+          setErrorNotification(serverView.error || `Swipe failed (${serverView.status})`);
+          setTimeout(() => setErrorNotification(null), 5000);
+          return;
+        }
+
+        // Celebrate and merge match found by this swipe even if subsequent rapid swipes happened,
+        // as long as the user did NOT undo this specific swipe
+        if (serverView.matchFound && !undoneSwipeIdsRef.current.has(newSwipe.id)) {
+          setMatches((prev) => {
+            const next = mergeMatchesUnique([serverView.matchFound!], prev);
+            saveLocalMatches(league.espnLeagueId, next);
+            return next;
+          });
+          if (!triggeredLocalMatch) {
+            setActiveMatchCelebration(serverView.matchFound);
+          }
+        }
+
+        if (mutationVersionRef.current !== swipeVersion) return;
+        if (serverView.incomingActivityHints !== undefined) {
+          setServerIncomingHints(serverView.incomingActivityHints || null);
+        }
+        if (serverView.priorityTargetKeys !== undefined) {
+          setServerPriorityKeys(serverView.priorityTargetKeys || []);
+        }
+        if (serverView.warmLeads !== undefined) {
+          setServerWarmLeads(serverView.warmLeads || []);
+        }
+        const isMock = league.id === 'league_mock_123' || league.espnLeagueId === '12345678';
+        const serverDeleted = serverView.deletedMatches || [];
+        setDeletedMatches((prevDel) =>
+          isMock ? mergeMatchesUnique(serverDeleted, prevDel) : serverDeleted
+        );
+        if (serverView.matches) {
+          const serverMatches = serverView.matches;
+          setMatches((prev) => {
+            const next = isMock
+              ? mergeMatchesUnique(serverMatches, prev, serverDeleted)
+              : serverMatches;
+            saveLocalMatches(league.espnLeagueId, next);
+            return next;
+          });
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to record swipe on server:', err);
       });
-      if (serverView.matchFound && !triggeredLocalMatch) {
-        setActiveMatchCelebration(serverView.matchFound);
-      }
-    });
   };
 
   // Handle Undo Last Swipe
@@ -923,6 +990,8 @@ export default function Home() {
     const undoVersion = mutationVersionRef.current;
 
     const lastSwipe = userSwipesForPackage[userSwipesForPackage.length - 1];
+    undoneSwipeIdsRef.current.add(lastSwipe.id);
+
     const nextSwipes = swipes.filter((s) => s.id !== lastSwipe.id);
     setSwipes(nextSwipes);
     saveLocalSwipes(
@@ -954,10 +1023,30 @@ export default function Home() {
       });
     }
 
-    // Sync undo with backend server
-    undoSwipeOnServer(league.espnLeagueId, userTeam.id, tradeType, activeOfferedIds).then(
-      (serverView) => {
-        if (!serverView || mutationVersionRef.current !== undoVersion) return;
+    // Sequence undo mutation in mutationQueueRef
+    mutationQueueRef.current = mutationQueueRef.current
+      .then(async () => {
+        const serverView = await undoSwipeOnServer(
+          league.espnLeagueId,
+          userTeam.id,
+          tradeType,
+          activeOfferedIds
+        );
+        if (!serverView) return;
+
+        if (serverView.status === 401) {
+          setErrorNotification('Your session has expired. Please log in again.');
+          setTimeout(() => setErrorNotification(null), 5000);
+          handleOpenAuth('login');
+          return;
+        }
+        if (serverView.status === 403 || serverView.status === 409) {
+          setErrorNotification(serverView.error || `Undo failed (${serverView.status})`);
+          setTimeout(() => setErrorNotification(null), 5000);
+          return;
+        }
+
+        if (mutationVersionRef.current !== undoVersion) return;
         if (serverView.incomingActivityHints !== undefined) {
           setServerIncomingHints(serverView.incomingActivityHints || null);
         }
@@ -972,15 +1061,20 @@ export default function Home() {
         setDeletedMatches((prevDel) =>
           isMock ? mergeMatchesUnique(serverDeleted, prevDel) : serverDeleted
         );
-        setMatches((prev) => {
-          const next = isMock
-            ? mergeMatchesUnique(prev, serverView.matches, serverDeleted)
-            : serverView.matches;
-          saveLocalMatches(league.espnLeagueId, next);
-          return next;
-        });
-      }
-    );
+        if (serverView.matches) {
+          const serverMatches = serverView.matches;
+          setMatches((prev) => {
+            const next = isMock
+              ? mergeMatchesUnique(prev, serverMatches, serverDeleted)
+              : serverMatches;
+            saveLocalMatches(league.espnLeagueId, next);
+            return next;
+          });
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to undo swipe on server:', err);
+      });
   };
 
   // Handle Delete Single Match (removes from both users' active matches and archives under deletedMatches)
@@ -1051,7 +1145,7 @@ export default function Home() {
       league,
       matchToDelete
     ).then((serverView) => {
-      if (!serverView || mutationVersionRef.current !== deleteVersion) return;
+      if (!serverView || !serverView.matches || mutationVersionRef.current !== deleteVersion) return;
       if (serverView.incomingActivityHints !== undefined) {
         setServerIncomingHints(serverView.incomingActivityHints || null);
       }
@@ -1139,7 +1233,7 @@ export default function Home() {
       league,
       myActiveMatches
     ).then((serverView) => {
-      if (!serverView || mutationVersionRef.current !== deleteAllVersion) return;
+      if (!serverView || !serverView.matches || mutationVersionRef.current !== deleteAllVersion) return;
       if (serverView.incomingActivityHints !== undefined) {
         setServerIncomingHints(serverView.incomingActivityHints || null);
       }
@@ -1191,7 +1285,7 @@ export default function Home() {
           league
         );
 
-        if (serverView && mutationVersionRef.current === resetVersion) {
+        if (serverView && serverView.league && mutationVersionRef.current === resetVersion) {
           setLeague(serverView.league);
           leagueRef.current = serverView.league;
           if (serverView.incomingActivityHints !== undefined) {
@@ -1238,7 +1332,7 @@ export default function Home() {
           league
         );
 
-        if (serverView && mutationVersionRef.current === resetVersion) {
+        if (serverView && serverView.league && mutationVersionRef.current === resetVersion) {
           setLeague(serverView.league);
           leagueRef.current = serverView.league;
           if (serverView.incomingActivityHints !== undefined) {
@@ -1296,7 +1390,7 @@ export default function Home() {
         league
       );
 
-      if (serverView && mutationVersionRef.current === resetVersion) {
+      if (serverView && serverView.league && mutationVersionRef.current === resetVersion) {
         setLeague(serverView.league);
         leagueRef.current = serverView.league;
         if (serverView.lastResetAt) {
@@ -1673,6 +1767,22 @@ export default function Home() {
                 </button>
               </div>
             )}
+
+            {errorNotification && (
+              <div className="pointer-events-auto w-full px-3.5 py-2.5 rounded-2xl bg-slate-900/95 border border-amber-500/40 text-xs font-semibold flex items-center justify-between shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="flex items-center gap-2 text-amber-300">
+                  <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                  <span>{errorNotification}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setErrorNotification(null)}
+                  className="text-xs text-slate-400 hover:text-white ml-2 flex-shrink-0"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
           </div>
           <LeagueLockerRoom
             league={league}
@@ -1768,6 +1878,22 @@ export default function Home() {
                 className="text-xs font-bold text-blue-400 hover:text-white underline ml-2 flex-shrink-0"
               >
                 Undo
+              </button>
+            </div>
+          )}
+
+          {errorNotification && (
+            <div className="pointer-events-auto w-full px-3.5 py-2.5 rounded-2xl bg-slate-900/95 border border-amber-500/40 text-xs font-semibold flex items-center justify-between shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="flex items-center gap-2 text-amber-300">
+                <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                <span>{errorNotification}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setErrorNotification(null)}
+                className="text-xs text-slate-400 hover:text-white ml-2 flex-shrink-0"
+              >
+                <X className="w-3.5 h-3.5" />
               </button>
             </div>
           )}

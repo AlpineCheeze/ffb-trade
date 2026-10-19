@@ -9,7 +9,12 @@ import {
   logoutUser,
   userLock,
 } from '@/lib/serverUserStore';
-import { ensureCleanSlateMigration, getServerLeagueState } from '@/lib/serverLeagueStore';
+import {
+  ensureCleanSlateMigration,
+  getServerLeagueState,
+  sanitizeLeagueId,
+  sanitizeTeamId,
+} from '@/lib/serverLeagueStore';
 import { UserAccount, UserClaimedLeagueSummary } from '@/types/fantasy';
 
 function enrichUserWithClaimedLeagues(user: UserAccount): UserAccount {
@@ -195,13 +200,38 @@ export async function POST(req: NextRequest) {
           { status: 400 }
         );
       }
+
+      let cleanLeagueId: string;
+      let cleanTeamId: string;
+      try {
+        cleanLeagueId = sanitizeLeagueId(String(leagueId));
+        cleanTeamId = sanitizeTeamId(String(teamId));
+      } catch {
+        return NextResponse.json(
+          { success: false, error: 'Invalid leagueId or teamId format' },
+          { status: 400 }
+        );
+      }
+
       // Derive userId strictly from session token unless superuser specifies a target userId
       const targetUserId = (authUser.isSuperUser && typeof body.userId === 'string' && body.userId.trim())
         ? body.userId.trim()
         : authUser.id;
 
+      // Verify against server league state that the team is not already claimed by a different user
+      const leagueState = getServerLeagueState(cleanLeagueId);
+      if (leagueState) {
+        const team = leagueState.league.teams.find((t) => t.id === cleanTeamId);
+        if (team?.claimedByUserId && team.claimedByUserId !== targetUserId && !authUser.isSuperUser) {
+          return NextResponse.json(
+            { success: false, error: 'Team is already claimed by another user' },
+            { status: 409 }
+          );
+        }
+      }
+
       const updatedUser = await userLock.acquire(targetUserId, async () => {
-        return linkUserTeamClaim(targetUserId, String(leagueId).trim(), String(teamId).trim());
+        return linkUserTeamClaim(targetUserId, cleanLeagueId, cleanTeamId);
       });
       if (!updatedUser) {
         return NextResponse.json(

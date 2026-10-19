@@ -82,7 +82,9 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
   const handleSelectAll = onSelectAllPositions || onSelectAll || (() => {});
   const handleSelectPreset = onSelectPresetPositions || onSelectPreset || (() => {});
 
-  const isAllSelected = selectedPositions.length === ALL_POSITIONS.length;
+  const isAllSelected =
+    selectedPositions.length >= ALL_POSITIONS.length ||
+    ALL_POSITIONS.every((p) => selectedPositions.includes(p));
   const hasTeams = teams && teams.length > 0;
   const excludedCount = excludedTeamIds.length;
   const includedCount = Math.max(0, teams.length - excludedCount);

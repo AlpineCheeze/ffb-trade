@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { registerAccount, loginAccount } from '@/lib/authStore';
 import { UserAccount } from '@/types/fantasy';
 import { User, Lock, ArrowRight, Loader2, X, ShieldCheck, Sparkles } from 'lucide-react';
@@ -24,6 +24,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setMode(initialMode);
+      setError(null);
+    }
+  }, [isOpen, initialMode]);
 
   if (!isOpen) return null;
 

@@ -188,17 +188,28 @@ export async function fetchEspnLeagueServer(params: {
   const currentSeason = getCurrentNFLSeason();
   const seasonsToTry = Array.from(new Set([primarySeason, currentSeason, '2026', '2025', '2024', '2023']));
 
+  const TOTAL_TIMEOUT_MS = 15000;
+  const waterfallStartTime = Date.now();
+
   let sawAuthError = false;
   let sawNotFound = false;
 
   async function executeEspnFetch(url: string, cookieHeader?: string) {
+    const elapsed = Date.now() - waterfallStartTime;
+    if (elapsed >= TOTAL_TIMEOUT_MS) {
+      return { success: false, status: 504 };
+    }
+
     const reqHeaders = { ...baseHeaders };
     if (cookieHeader) {
       reqHeaders['Cookie'] = cookieHeader;
     }
 
+    const remainingTime = Math.max(500, TOTAL_TIMEOUT_MS - elapsed);
+    const timeoutMs = Math.min(8000, remainingTime);
+
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
       const res = await fetch(url, {
@@ -257,12 +268,17 @@ export async function fetchEspnLeagueServer(params: {
   const cookieList = cookieHeadersToTry.length > 0 ? cookieHeadersToTry : [undefined];
 
   for (const season of seasonsToTry) {
-    if (resultData) break;
+    if (resultData || Date.now() - waterfallStartTime >= TOTAL_TIMEOUT_MS) break;
 
     let standardSeasonNotFound = false;
     let historySeasonNotFound = false;
+    let seasonAllCookies401 = cookieList.length > 0;
 
     for (const cookieHeader of cookieList) {
+      if (Date.now() - waterfallStartTime >= TOTAL_TIMEOUT_MS) break;
+
+      let cookieSaw401 = false;
+
       if (!standardSeasonNotFound) {
         const standardUrl = `${baseHost}/seasons/${encodeURIComponent(season)}/segments/0/leagues/${safeLeagueId}?view=mRoster&view=mTeam&view=mSettings&view=mMatchupScore`;
         const res = await executeEspnFetch(standardUrl, cookieHeader);
@@ -271,12 +287,15 @@ export async function fetchEspnLeagueServer(params: {
           resolvedSeason = season;
           break;
         }
+        if (res.status === 401 || res.status === 403) {
+          cookieSaw401 = true;
+        }
         if (res.status === 404) {
           standardSeasonNotFound = true;
         }
       }
 
-      if (!historySeasonNotFound) {
+      if (!historySeasonNotFound && !resultData) {
         const historyUrl = `${baseHost}/leagueHistory/${safeLeagueId}?seasonId=${encodeURIComponent(season)}&view=mRoster&view=mTeam&view=mSettings&view=mMatchupScore`;
         const resHistory = await executeEspnFetch(historyUrl, cookieHeader);
         if (resHistory.success && resHistory.data) {
@@ -284,15 +303,28 @@ export async function fetchEspnLeagueServer(params: {
           resolvedSeason = season;
           break;
         }
+        if (resHistory.status === 401 || resHistory.status === 403) {
+          cookieSaw401 = true;
+        }
         if (resHistory.status === 404) {
           historySeasonNotFound = true;
         }
+      }
+
+      if (!cookieSaw401) {
+        seasonAllCookies401 = false;
       }
 
       // If both endpoints returned 404 for this season, no need to retry other cookie formats on this season
       if (standardSeasonNotFound && historySeasonNotFound) {
         break;
       }
+    }
+
+    // Abort immediately if all cookie variations return 401 on the active season
+    if (season === primarySeason && seasonAllCookies401 && cookieHeadersToTry.length > 0) {
+      sawAuthError = true;
+      break;
     }
   }
 

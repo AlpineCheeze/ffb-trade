@@ -4,6 +4,7 @@ import {
   getServerLeagueSnapshot,
   saveServerLeagueSnapshot,
   sanitizeLeagueId,
+  leagueLock,
 } from '@/lib/serverLeagueStore';
 
 export async function GET(req: NextRequest) {
@@ -40,7 +41,9 @@ export async function GET(req: NextRequest) {
       leagueId: cleanId,
       seasonId,
     });
-    const mergedLeague = saveServerLeagueSnapshot(freshLeague, cleanId);
+    const mergedLeague = await leagueLock.acquire(cleanId, async () => {
+      return saveServerLeagueSnapshot(freshLeague, cleanId);
+    });
     return NextResponse.json({ success: true, league: mergedLeague });
   } catch (err: any) {
     const isNotFound = Boolean(err.isNotFound);
@@ -98,7 +101,9 @@ export async function POST(req: NextRequest) {
 
     // Handle Demo League refresh cleanly without hitting live ESPN
     if (cleanId === '12345678') {
-      const mergedDemo = saveServerLeagueSnapshot(createMockLeague(), '12345678');
+      const mergedDemo = await leagueLock.acquire('12345678', async () => {
+        return saveServerLeagueSnapshot(createMockLeague(), '12345678');
+      });
       return NextResponse.json({ success: true, league: mergedDemo });
     }
 
@@ -122,7 +127,9 @@ export async function POST(req: NextRequest) {
     });
 
     // Save snapshot on server (preserving existing team claims and valid swipes/matches)
-    const mergedLeague = saveServerLeagueSnapshot(freshLeague, cleanId);
+    const mergedLeague = await leagueLock.acquire(cleanId, async () => {
+      return saveServerLeagueSnapshot(freshLeague, cleanId);
+    });
 
     return NextResponse.json({ success: true, league: mergedLeague });
   } catch (err: any) {

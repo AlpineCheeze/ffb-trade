@@ -362,7 +362,7 @@ export const SwipeCard = React.forwardRef<SwipeCardRef, SwipeCardProps>(function
           <div className="flex items-center justify-between pb-2.5 border-b border-slate-800 flex-shrink-0">
             <div>
               <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-indigo-500/20 border border-indigo-500/40 text-indigo-400">
-                {players.length}-Player Package
+                You Receive ({players.length} Players)
               </span>
               <div className="flex items-center gap-2 mt-1">
                 <span className="text-xs text-slate-400 font-semibold truncate">
@@ -391,15 +391,16 @@ export const SwipeCard = React.forwardRef<SwipeCardRef, SwipeCardProps>(function
           <div className={`flex-1 flex flex-col justify-around min-h-0 py-1 ${players.length >= 3 ? 'gap-1' : 'gap-2'}`}>
             {players.map((player, idx) => (
               <React.Fragment key={player.id}>
-                {/* Plus separator between rows */}
+                {/* Plus / AND separator between package rows */}
                 {idx > 0 && (
-                  <div className="flex items-center justify-center -my-1 sm:-my-0.5 z-10 flex-shrink-0">
+                  <div className="flex items-center justify-center -my-1 sm:-my-0.5 z-10 flex-shrink-0 pointer-events-none">
                     <div
-                      className={`rounded-full bg-slate-800 border border-slate-700 text-slate-400 flex items-center justify-center shadow ${
-                        players.length >= 3 ? 'w-5 h-5' : 'w-6 h-6'
-                      }`}
+                      className={`flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-800/90 border border-slate-700/80 text-slate-300 shadow-sm ${
+                        players.length >= 3 ? 'text-[9px]' : 'text-[10px]'
+                      } font-black uppercase tracking-wider`}
                     >
-                      <Plus className={players.length >= 3 ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
+                      <Plus className={players.length >= 3 ? 'w-2.5 h-2.5 text-blue-400' : 'w-3 h-3 text-blue-400'} />
+                      <span>AND</span>
                     </div>
                   </div>
                 )}

@@ -482,8 +482,10 @@ export const testPromise = (async () => {
       filterBarSrc.includes('isMinimized') &&
       filterBarSrc.includes('handleToggleMinimize') &&
       filterBarSrc.includes('pasta_loft_package_minimized') &&
-      filterBarSrc.includes('Minimize2'),
-    'PositionFilterBar.tsx must include compact mobile pills, package switcher, Proj/Avg removed, and minimizable trade package card'
+      filterBarSrc.includes('Minimize2') &&
+      filterBarSrc.includes('Your Offer:') &&
+      filterBarSrc.includes('Change Package'),
+    'PositionFilterBar.tsx must include compact mobile pills, package switcher, Proj/Avg removed, minimizable trade package card, explicit Your Offer banner, and Change Package button'
   );
 
   assert.ok(

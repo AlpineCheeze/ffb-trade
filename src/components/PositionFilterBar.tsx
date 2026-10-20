@@ -170,6 +170,17 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
     setMobileOpenPanel((prev) => (prev === 'package' ? null : 'package'));
   };
 
+  const isPackageOpen = mobileOpenPanel === 'package' || activeTab === 'package';
+
+  const handleTogglePackage = () => {
+    if (isPackageOpen) {
+      setMobileOpenPanel(null);
+      setActiveTab('positions');
+    } else {
+      toggleMobilePill('package');
+    }
+  };
+
   const positionLabels: Record<Position, { label: string; full: string; color: string }> = {
     RB: { label: 'RB', full: 'Running Back', color: 'from-emerald-500 to-green-600' },
     WR: { label: 'WR', full: 'Wide Receiver', color: 'from-blue-500 to-indigo-600' },
@@ -209,18 +220,13 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
           className="flex-1 min-w-0 flex items-center gap-2 sm:gap-2.5 text-left p-1 rounded-xl hover:bg-slate-800/60 transition-colors group"
           title="Click to expand trade package & filters"
         >
-          {/* Trade Type Tag */}
-          <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-blue-500/20 text-blue-400 border border-blue-500/30 flex-shrink-0 group-hover:border-blue-400/60 transition-colors">
-            {tradeType}
-          </span>
-
           {/* Overlapping Player Avatars */}
           <div className="flex items-center -space-x-1.5 flex-shrink-0">
             {offeredPlayers.length > 0 ? (
               offeredPlayers.map((player) => (
                 <div
                   key={player.id}
-                  className="w-7 h-7 rounded-full bg-slate-800 border-2 border-slate-900 overflow-hidden flex-shrink-0 shadow"
+                  className="w-8 h-8 rounded-full bg-slate-800 border-2 border-slate-900 overflow-hidden flex-shrink-0 shadow"
                   title={player.fullName}
                 >
                   <img
@@ -231,25 +237,21 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
                 </div>
               ))
             ) : (
-              <div className="w-7 h-7 rounded-full bg-slate-800 border border-amber-500/40 flex items-center justify-center text-xs text-amber-400 font-bold">
+              <div className="w-8 h-8 rounded-full bg-slate-800 border border-amber-500/40 flex items-center justify-center text-xs text-amber-400 font-bold">
                 ?
               </div>
             )}
           </div>
 
-          {/* Package details: Sending & Looking for */}
+          {/* Package details: "Your Offer:" & Full Player Name & Trade Type */}
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5 leading-tight truncate">
-              <span className="text-[11px] font-bold text-white truncate">
-                {offeredPlayers.length > 0
-                  ? offeredPlayers.map((p) => p.fullName.split(' ').pop()).join(' + ')
-                  : 'Choose Player'}
+            <div className="flex items-center gap-1.5 leading-tight">
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                Your Offer:
               </span>
-              {offeredPlayers.length === 1 && (
-                <span className="px-1 py-0.2 rounded text-[9px] font-black bg-blue-600 text-white flex-shrink-0">
-                  {offeredPlayers[0].position}
-                </span>
-              )}
+              <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black uppercase bg-blue-500/20 text-blue-400 border border-blue-500/30 flex-shrink-0">
+                {tradeType}
+              </span>
               {totalIncomingCount > 0 && (
                 <span
                   className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-0.5 flex-shrink-0"
@@ -260,68 +262,152 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
                 </span>
               )}
             </div>
-            <div className="text-[10px] text-slate-400 truncate mt-0.5 flex items-center gap-1 font-medium">
-              <span className="text-blue-300/90 font-semibold">Get {receiveCount}</span>
-              <span>•</span>
-              <span className="text-slate-300 truncate">
-                {isAllSelected ? 'Any Pos' : selectedPositions.join(', ')}
+            <div className="text-xs font-black text-white truncate mt-0.5 flex items-center gap-1.5">
+              <span className="truncate">
+                {offeredPlayers.length > 0
+                  ? offeredPlayers.map((p) => p.fullName).join(' + ')
+                  : 'Select player(s)'}
               </span>
-              {excludedCount > 0 && (
-                <>
-                  <span>•</span>
-                  <span className="text-amber-400/90 flex-shrink-0">{includedCount}/{teams.length} teams</span>
-                </>
+              {offeredPlayers.length === 1 && (
+                <span className="px-1 py-0.2 rounded text-[9px] font-black bg-blue-600 text-white flex-shrink-0">
+                  {offeredPlayers[0].position}
+                </span>
               )}
             </div>
           </div>
         </button>
 
-        {/* Expand Filters Button */}
-        <button
-          type="button"
-          onClick={() => handleToggleMinimize(false)}
-          className="py-1.5 px-2.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 border border-slate-700/80 text-slate-300 hover:text-white text-xs font-bold transition flex items-center gap-1 flex-shrink-0 shadow-sm"
-          title="Expand trade package & filters"
-        >
-          <SlidersHorizontal className="w-3.5 h-3.5 text-blue-400" />
-          <span className="text-[11px] hidden min-[360px]:inline">Filters</span>
-          <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-        </button>
+        {/* Change Package & Filters controls */}
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => {
+              handleToggleMinimize(false);
+              handleTogglePackage();
+            }}
+            className="py-1 px-2.5 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-300 hover:text-white text-xs font-bold transition flex items-center gap-1 shadow-sm"
+            title="Change package"
+          >
+            <span>Change</span>
+            <ChevronDown className="w-3 h-3 text-blue-400" />
+          </button>
+          <button
+            type="button"
+            onClick={() => handleToggleMinimize(false)}
+            className="p-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 border border-slate-700/80 text-slate-300 hover:text-white text-xs font-bold transition flex items-center gap-1 shadow-sm"
+            title="Expand filters"
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5 text-blue-400" />
+          </button>
+        </div>
       </div>
     </div>
   ) : (
     <div className="w-full max-w-sm mb-3 sm:mb-4 bg-slate-900/90 border border-slate-800 rounded-2xl p-2.5 sm:p-3 shadow-xl backdrop-blur-md">
       {/* ========================================================= */}
-      {/* MOBILE COMPACT UNIFIED DECK CONTROL BAR (< 640px)         */}
+      {/* ALWAYS VISIBLE: "YOUR OFFER" BANNER & "CHANGE PACKAGE"    */}
+      {/* (Mobile & Desktop)                                       */}
+      {/* ========================================================= */}
+      {userTeam && (
+        <div className="flex items-center justify-between pb-2 sm:pb-2.5 mb-2 sm:mb-2.5 border-b border-slate-800/80">
+          <div className="min-w-0 flex-1 flex items-center gap-2">
+            {/* Offered Player Photo(s) */}
+            <div className="flex items-center -space-x-1.5 flex-shrink-0">
+              {offeredPlayers.length > 0 ? (
+                offeredPlayers.map((player) => (
+                  <div
+                    key={player.id}
+                    className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-slate-800 border-2 border-slate-900 overflow-hidden flex-shrink-0 shadow"
+                    title={player.fullName}
+                  >
+                    <img
+                      src={player.headshotUrl}
+                      alt={player.fullName}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                ))
+              ) : (
+                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-slate-800 border border-amber-500/40 flex items-center justify-center text-xs text-amber-400 font-bold">
+                  ?
+                </div>
+              )}
+            </div>
+
+            {/* Offer Details */}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[10px] sm:text-xs font-black uppercase tracking-wider text-slate-400">
+                  Your Offer:
+                </span>
+                <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black uppercase bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                  {tradeType}
+                </span>
+                <span className="text-[10px] font-bold text-slate-400">
+                  ({offeredPlayers.length}/{sendCount})
+                </span>
+                {totalIncomingCount > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                    <Flame className="w-2.5 h-2.5 text-amber-400 fill-amber-400/30" />
+                    <span>{totalIncomingCount} Incoming</span>
+                  </span>
+                )}
+              </div>
+
+              <div className="text-xs sm:text-sm font-black text-white truncate flex items-center gap-1.5 mt-0.5">
+                <span className="truncate">
+                  {offeredPlayers.length > 0
+                    ? offeredPlayers.map((p) => p.fullName).join(' + ')
+                    : 'Select player(s) to offer'}
+                </span>
+                {offeredPlayers.length === 1 && (
+                  <span className="px-1 py-0.2 rounded text-[9px] font-black bg-blue-600 text-white flex-shrink-0">
+                    {offeredPlayers[0].position}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Change Package & Minimize Controls */}
+          <div className="flex items-center gap-1.5 flex-shrink-0 ml-2 sm:ml-3">
+            <button
+              type="button"
+              onClick={handleTogglePackage}
+              className={`px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-bold transition flex items-center gap-1 ${
+                isPackageOpen
+                  ? 'bg-blue-600 border-blue-500 text-white shadow-sm'
+                  : 'bg-blue-600/20 hover:bg-blue-600/30 border-blue-500/30 text-blue-300'
+              }`}
+            >
+              <span>Change Package</span>
+              {isPackageOpen ? (
+                <ChevronUp className="w-3.5 h-3.5" />
+              ) : (
+                <ChevronDown className="w-3.5 h-3.5" />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleToggleMinimize(true)}
+              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700 text-xs font-bold text-slate-300 hover:text-white transition flex items-center gap-1"
+              title="Minimize trade package & filters to focus on swiping"
+            >
+              <Minimize2 className="w-3.5 h-3.5 sm:w-3 sm:h-3 text-blue-400" />
+              <span className="hidden sm:inline">Minimize</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* MOBILE FILTER PILLS ROW (< 640px)                         */}
       {/* ========================================================= */}
       <div className="flex sm:hidden items-center gap-1.5">
         <button
           type="button"
-          onClick={() => toggleMobilePill('package')}
-          className={`flex-1 min-w-0 py-1.5 px-2.5 rounded-xl text-[11px] font-bold border transition flex items-center justify-between gap-1 ${
-            mobileOpenPanel === 'package'
-              ? 'bg-blue-600 border-blue-500 text-white shadow-sm'
-              : 'bg-slate-950/80 border-slate-800 text-slate-200 hover:border-slate-700'
-          }`}
-        >
-          <span className="truncate flex items-center gap-1">
-            {totalIncomingCount > 0 && (
-              <Flame className="w-3 h-3 text-amber-400 fill-amber-400/30 flex-shrink-0" />
-            )}
-            <span className="text-blue-400 font-black">{tradeType}:</span>
-            <span className="truncate">{offeredSummaryNames}</span>
-          </span>
-          {mobileOpenPanel === 'package' ? (
-            <ChevronUp className="w-3.5 h-3.5 flex-shrink-0" />
-          ) : (
-            <ChevronDown className="w-3.5 h-3.5 flex-shrink-0 text-slate-400" />
-          )}
-        </button>
-
-        <button
-          type="button"
           onClick={() => toggleMobilePill('positions')}
-          className={`py-1.5 px-2.5 rounded-xl text-[11px] font-bold border transition flex items-center gap-1 flex-shrink-0 ${
+          className={`flex-1 py-1.5 px-2.5 rounded-xl text-[11px] font-bold border transition flex items-center justify-between gap-1 ${
             mobileOpenPanel === 'positions'
               ? 'bg-blue-600 border-blue-500 text-white shadow-sm'
               : !isAllSelected
@@ -329,11 +415,14 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
               : 'bg-slate-950/80 border-slate-800 text-slate-300'
           }`}
         >
-          <span>Pos: {isAllSelected ? 'All' : selectedPositions.length}</span>
+          <span className="flex items-center gap-1 truncate">
+            <SlidersHorizontal className="w-3 h-3 text-blue-400 flex-shrink-0" />
+            <span className="truncate">Target: {isAllSelected ? 'All Positions' : selectedPositions.join(', ')}</span>
+          </span>
           {mobileOpenPanel === 'positions' ? (
-            <ChevronUp className="w-3 h-3" />
+            <ChevronUp className="w-3 h-3 flex-shrink-0" />
           ) : (
-            <ChevronDown className="w-3 h-3 text-slate-400" />
+            <ChevronDown className="w-3 h-3 text-slate-400 flex-shrink-0" />
           )}
         </button>
 
@@ -349,6 +438,7 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
                 : 'bg-slate-950/80 border-slate-800 text-slate-300'
             }`}
           >
+            <Users className="w-3 h-3 text-blue-400 flex-shrink-0" />
             <span>
               Teams: {includedCount}/{teams.length}
             </span>
@@ -359,105 +449,7 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
             )}
           </button>
         )}
-
-        <button
-          type="button"
-          onClick={() => handleToggleMinimize(true)}
-          className="p-1.5 min-w-[34px] min-h-[34px] rounded-xl text-slate-400 hover:text-white bg-slate-950/80 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 transition flex items-center justify-center flex-shrink-0"
-          title="Minimize trade package & filters"
-        >
-          <Minimize2 className="w-3.5 h-3.5 text-blue-400" />
-        </button>
       </div>
-
-      {/* ========================================================= */}
-      {/* DESKTOP ACTIVE SHOPPING PACKAGE BANNER (>= 640px)         */}
-      {/* ========================================================= */}
-      {userTeam && (
-        <div className="hidden sm:flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-800/80">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5 mb-1">
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-blue-500/20 text-blue-400 border border-blue-500/30">
-                {tradeType} Trade
-              </span>
-              <span className="text-[10px] font-bold text-slate-400">
-                Offering ({offeredPlayers.length}/{sendCount})
-              </span>
-              {totalIncomingCount > 0 && (
-                <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1">
-                  <Flame className="w-2.5 h-2.5 text-amber-400 fill-amber-400/30" />
-                  <span>{totalIncomingCount} Incoming</span>
-                </span>
-              )}
-            </div>
-
-            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-              {offeredPlayers.length > 0 ? (
-                offeredPlayers.map((player, idx) => {
-                  const surname = player.fullName
-                    .replace(/\s+(Jr\.|Sr\.|III|II|IV)$/i, '')
-                    .split(' ')
-                    .pop();
-
-                  return (
-                    <div key={player.id} className="flex items-center gap-1 flex-shrink-0">
-                      {idx > 0 && <span className="text-[10px] text-blue-400 font-black">+</span>}
-                      <div
-                        className={`${
-                          offeredPlayers.length >= 3 ? 'w-6 h-6' : 'w-7 h-7'
-                        } rounded-full bg-slate-800 border border-blue-500/40 overflow-hidden flex-shrink-0`}
-                      >
-                        <img
-                          src={player.headshotUrl}
-                          alt={player.fullName}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                      <span
-                        className={`font-bold text-white truncate ${
-                          offeredPlayers.length >= 3 ? 'text-[11px] max-w-[65px]' : 'text-xs max-w-[90px]'
-                        }`}
-                      >
-                        {surname}
-                      </span>
-                    </div>
-                  );
-                })
-              ) : (
-                <span className="text-xs text-amber-400 font-medium">No players on trade block</span>
-              )}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1.5 flex-shrink-0 ml-3">
-            <button
-              type="button"
-              onClick={toggleDesktopPackage}
-              className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition flex items-center gap-1 ${
-                activeTab === 'package'
-                  ? 'bg-blue-600 border-blue-500 text-white shadow-sm'
-                  : 'bg-blue-600/20 hover:bg-blue-600/30 border-blue-500/30 text-blue-300'
-              }`}
-            >
-              <span>Change Package</span>
-              {activeTab === 'package' ? (
-                <ChevronUp className="w-3.5 h-3.5" />
-              ) : (
-                <ChevronDown className="w-3.5 h-3.5" />
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={() => handleToggleMinimize(true)}
-              className="px-2.5 py-1.5 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700 text-xs font-bold text-slate-300 hover:text-white transition flex items-center gap-1"
-              title="Minimize trade package & filters to focus on swiping"
-            >
-              <Minimize2 className="w-3 h-3 text-blue-400" />
-              <span>Minimize</span>
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Sub-Tabs on Desktop: Package vs Positions vs Trade With */}
       {hasTeams && (

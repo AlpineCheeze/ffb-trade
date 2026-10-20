@@ -21,6 +21,76 @@ const SWIPES_STORAGE_PREFIX = 'tradehorny_swipes_';
 const MATCHES_STORAGE_PREFIX = 'tradehorny_matches_';
 const DELETED_MATCHES_STORAGE_PREFIX = 'tradehorny_deleted_matches_';
 const EXCLUDED_TEAMS_STORAGE_PREFIX = 'tradehorny_excluded_teams_';
+const CREDS_STORAGE_PREFIX = 'pastaloft_creds_';
+const LEGACY_CREDS_STORAGE_PREFIXES = ['tradehorny_creds_', 'espn_creds_'];
+
+export interface StoredLeagueCreds {
+  espnS2?: string;
+  swid?: string;
+}
+
+export function saveStoredLeagueCreds(
+  espnLeagueId: string,
+  creds: { espnS2?: string; swid?: string }
+): void {
+  if (typeof window === 'undefined') return;
+  const cleanId = espnLeagueId.trim();
+  if (!cleanId) return;
+  try {
+    const payload: StoredLeagueCreds = {
+      espnS2: creds.espnS2?.trim() || undefined,
+      swid: creds.swid?.trim() || undefined,
+    };
+    if (payload.espnS2 || payload.swid) {
+      const serialized = JSON.stringify(payload);
+      localStorage.setItem(CREDS_STORAGE_PREFIX + cleanId, serialized);
+      sessionStorage.setItem(`espn_creds_${cleanId}`, serialized);
+    }
+  } catch {}
+}
+
+export function getStoredLeagueCreds(espnLeagueId: string): StoredLeagueCreds | null {
+  if (typeof window === 'undefined') return null;
+  const cleanId = espnLeagueId.trim();
+  if (!cleanId) return null;
+  try {
+    let raw = localStorage.getItem(CREDS_STORAGE_PREFIX + cleanId);
+    if (!raw) {
+      for (const prefix of LEGACY_CREDS_STORAGE_PREFIXES) {
+        const legacy = localStorage.getItem(prefix + cleanId);
+        if (legacy) {
+          raw = legacy;
+          break;
+        }
+      }
+    }
+    if (!raw) {
+      raw = sessionStorage.getItem(`espn_creds_${cleanId}`);
+    }
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && (parsed.espnS2 || parsed.swid)) {
+        return {
+          espnS2: parsed.espnS2 || undefined,
+          swid: parsed.swid || undefined,
+        };
+      }
+    }
+  } catch {}
+  return null;
+}
+
+export function removeStoredLeagueCreds(espnLeagueId: string): void {
+  if (typeof window === 'undefined') return;
+  const cleanId = espnLeagueId.trim();
+  try {
+    localStorage.removeItem(CREDS_STORAGE_PREFIX + cleanId);
+    for (const prefix of LEGACY_CREDS_STORAGE_PREFIXES) {
+      localStorage.removeItem(prefix + cleanId);
+    }
+    sessionStorage.removeItem(`espn_creds_${cleanId}`);
+  } catch {}
+}
 
 export const CLIENT_RESET_EPOCH = 'tradehorny_epoch_20261016_purge_v3';
 
@@ -71,6 +141,7 @@ export function removeStoredLeague(espnLeagueId: string): void {
       localStorage.removeItem(SWIPES_STORAGE_PREFIX + cleanId);
       localStorage.removeItem(MATCHES_STORAGE_PREFIX + cleanId);
       localStorage.removeItem(DELETED_MATCHES_STORAGE_PREFIX + cleanId);
+      removeStoredLeagueCreds(cleanId);
       for (const prefix of LEGACY_LEAGUE_STORAGE_PREFIXES) {
         localStorage.removeItem(prefix + cleanId);
       }

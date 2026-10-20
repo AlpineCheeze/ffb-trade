@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { League, Team, UserAccount } from '@/types/fantasy';
-import { claimTeam, claimTeamOnServer, saveLeague } from '@/lib/leagueStore';
+import { claimTeam, claimTeamOnServer, saveLeague, getStoredLeagueCreds, saveStoredLeagueCreds } from '@/lib/leagueStore';
 import { linkTeamToAccount } from '@/lib/authStore';
 import { fetchEspnLeague } from '@/lib/espn';
 import { Users, Copy, Check, Sparkles, ArrowRight, ShieldCheck, Flame, UserCheck, AlertCircle, RefreshCw, RotateCcw } from 'lucide-react';
@@ -54,14 +54,8 @@ export const LeagueLockerRoom: React.FC<LeagueLockerRoomProps> = ({
     setRefreshMessage(null);
 
     try {
-      // Check if credentials are saved in sessionStorage for this private league
-      let storedCreds: { espnS2?: string; swid?: string } = {};
-      if (typeof window !== 'undefined') {
-        try {
-          const raw = sessionStorage.getItem(`espn_creds_${localLeague.espnLeagueId}`);
-          if (raw) storedCreds = JSON.parse(raw);
-        } catch {}
-      }
+      // Check if credentials are saved for this private league
+      const storedCreds = getStoredLeagueCreds(localLeague.espnLeagueId) || {};
 
       // Fetch latest rosters from ESPN (bypassing stale snapshot)
       const freshLeague = await fetchEspnLeague({
@@ -71,6 +65,10 @@ export const LeagueLockerRoom: React.FC<LeagueLockerRoomProps> = ({
         swid: storedCreds.swid,
         forceRefresh: true,
       });
+
+      if (storedCreds.espnS2 && storedCreds.swid) {
+        saveStoredLeagueCreds(freshLeague.espnLeagueId, storedCreds);
+      }
 
       // Preserve local claimed status on teams
       const mergedTeams = freshLeague.teams.map((ft) => {

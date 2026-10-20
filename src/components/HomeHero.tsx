@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { fetchEspnLeague, normalizeEspnCookies } from '@/lib/espn';
-import { getLeagueById, saveLeague, getSavedLeagues } from '@/lib/leagueStore';
+import { getLeagueById, saveLeague, getSavedLeagues, getStoredLeagueCreds, saveStoredLeagueCreds } from '@/lib/leagueStore';
 import { registerAccount, loginAccount, logoutAccount } from '@/lib/authStore';
 import { League, UserAccount, UserClaimedLeagueSummary } from '@/types/fantasy';
 import {
@@ -141,7 +141,10 @@ export const HomeHero: React.FC<HomeHeroProps> = ({
 
     try {
       const norm = normalizeEspnCookies(espnS2, swid);
-      const hasCookies = Boolean(norm.espnS2 && norm.swid);
+      const stored = getStoredLeagueCreds(cleanId);
+      const effectiveS2 = norm.espnS2 || stored?.espnS2;
+      const effectiveSwid = norm.swid || stored?.swid;
+      const hasCookies = Boolean(effectiveS2 && effectiveSwid);
 
       if (!hasCookies) {
         const existing = getLeagueById(cleanId);
@@ -154,15 +157,13 @@ export const HomeHero: React.FC<HomeHeroProps> = ({
 
       const fetched = await fetchEspnLeague({
         leagueId: cleanId,
-        espnS2: norm.espnS2,
-        swid: norm.swid,
+        espnS2: effectiveS2,
+        swid: effectiveSwid,
       });
 
       const saved = saveLeague(fetched);
-      if (norm.espnS2 && norm.swid && typeof window !== 'undefined') {
-        try {
-          sessionStorage.setItem(`espn_creds_${cleanId}`, JSON.stringify({ espnS2: norm.espnS2, swid: norm.swid }));
-        } catch {}
+      if (effectiveS2 && effectiveSwid) {
+        saveStoredLeagueCreds(cleanId, { espnS2: effectiveS2, swid: effectiveSwid });
       }
       setIsLoading(false);
       onSelectLeague(saved);
@@ -576,6 +577,14 @@ export const HomeHero: React.FC<HomeHeroProps> = ({
           {error && (
             <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-medium">
               {error}
+            </div>
+          )}
+
+          {/* Stored Credentials Indicator */}
+          {leagueIdInput.trim() && getStoredLeagueCreds(leagueIdInput.trim()) && (
+            <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center gap-2 text-xs text-emerald-400 font-medium">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+              <span>Stored ESPN cookies found for League #{leagueIdInput.trim()}. Ready to sync!</span>
             </div>
           )}
 

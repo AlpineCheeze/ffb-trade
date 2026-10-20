@@ -322,7 +322,11 @@ export function saveServerLeagueState(state: ServerLeagueState): ServerLeagueSta
  * team claims (`isClaimed`, `claimedBy`), active swipes, matches, and Elo ratings.
  * Prunes any stale swipes or matches whose players are no longer on those teams.
  */
-export function saveServerLeagueSnapshot(freshLeague: League, forcedCleanId?: string): League {
+export function saveServerLeagueSnapshot(
+  freshLeague: League,
+  forcedCleanId?: string,
+  credentials?: { espnS2?: string; swid?: string }
+): League {
   const cleanId = forcedCleanId ? sanitizeLeagueId(forcedCleanId) : sanitizeLeagueId(freshLeague.espnLeagueId);
   const safeFreshLeague: League = {
     ...freshLeague,
@@ -330,8 +334,15 @@ export function saveServerLeagueSnapshot(freshLeague: League, forcedCleanId?: st
   };
   const existingState = getServerLeagueState(cleanId);
 
+  const effectiveCreds = credentials?.espnS2 && credentials?.swid
+    ? { espnS2: credentials.espnS2, swid: credentials.swid }
+    : existingState?.espnCredentials;
+
   if (!existingState) {
     const initial = createInitialServerState(safeFreshLeague, cleanId);
+    if (effectiveCreds) {
+      initial.espnCredentials = effectiveCreds;
+    }
     saveServerLeagueState(initial);
     return initial.league;
   }
@@ -391,6 +402,7 @@ export function saveServerLeagueSnapshot(freshLeague: League, forcedCleanId?: st
     matches: validMatches,
     deletedMatches: existingState.deletedMatches || [],
     updatedAt: new Date().toISOString(),
+    ...(effectiveCreds ? { espnCredentials: effectiveCreds } : {}),
   };
 
   saveServerLeagueState(updatedState);

@@ -148,6 +148,10 @@ export interface ServerLeagueState {
   elo: Record<string, InternalEloRecord>;
   updatedAt: string;
   lastResetAt?: string;
+  espnCredentials?: {
+    espnS2?: string;
+    swid?: string;
+  };
 }
 
 export interface ClientLeagueView {

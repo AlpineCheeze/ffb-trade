@@ -53,6 +53,10 @@ async function run() {
   if (enhancementsModule && enhancementsModule.testPromise) {
     await enhancementsModule.testPromise;
   }
+  const credsModule = jiti('./test_stored_credentials_resync.ts');
+  if (credsModule && credsModule.testPromise) {
+    await credsModule.testPromise;
+  }
 }
 
 run().catch((err) => {

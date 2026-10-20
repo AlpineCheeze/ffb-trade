@@ -1747,6 +1747,8 @@ export default function Home() {
             isOpen={isSyncModalOpen}
             onClose={() => setIsSyncModalOpen(false)}
             onLeagueLoaded={handleLeagueLoaded}
+            initialLeagueId={pendingLeagueId || undefined}
+            currentLeague={null}
           />
         )}
         <AuthModal
@@ -1834,6 +1836,8 @@ export default function Home() {
             isOpen={isSyncModalOpen}
             onClose={() => setIsSyncModalOpen(false)}
             onLeagueLoaded={handleLeagueLoaded}
+            initialLeagueId={league.espnLeagueId}
+            currentLeague={league}
           />
         )}
         <AuthModal
@@ -2205,6 +2209,8 @@ export default function Home() {
         isOpen={isSyncModalOpen}
         onClose={() => setIsSyncModalOpen(false)}
         onLeagueLoaded={handleLeagueLoaded}
+        initialLeagueId={league?.espnLeagueId || pendingLeagueId || undefined}
+        currentLeague={league}
       />
 
       {/* Universal Auth Modal */}

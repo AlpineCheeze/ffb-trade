@@ -10,6 +10,7 @@
 html, body {
   overscroll-behavior-y: none;
   -webkit-tap-highlight-color: transparent;
+  overflow-x: hidden;
 }
 
 button, a, input, select {

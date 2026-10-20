@@ -259,7 +259,7 @@ export const LeagueLockerRoom: React.FC<LeagueLockerRoomProps> = ({
         </div>
 
         {/* Shareable League Invite Box */}
-        <div className="mt-5 p-4 rounded-2xl bg-slate-950/70 border border-blue-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div className="mt-5 p-4 rounded-2xl bg-slate-950/70 border border-blue-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 overflow-hidden">
           <div className="min-w-0 flex-1">
             <div className="text-xs font-bold text-white flex items-center gap-1.5">
               <Flame className="w-3.5 h-3.5 text-amber-500" />

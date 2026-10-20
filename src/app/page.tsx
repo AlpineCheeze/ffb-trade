@@ -1799,7 +1799,7 @@ export default function Home() {
         />
         <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6 pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] sm:pb-6">
           {/* Floating Notification Toasts */}
-          <div className="fixed top-[calc(4.5rem+env(safe-area-inset-top,0px))] left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-sm pointer-events-none flex flex-col gap-2">
+          <div className="fixed top-[calc(4.5rem+env(safe-area-inset-top,0px))] left-1/2 -translate-x-1/2 z-50 w-[92vw] max-w-sm pointer-events-none flex flex-col gap-2">
             {resetNotification && (
               <div className="pointer-events-auto w-full px-3.5 py-2.5 rounded-2xl bg-slate-900/95 border border-emerald-500/40 text-xs font-semibold flex items-center justify-between shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-200">
                 <div className="flex items-center gap-2 text-emerald-300">
@@ -1900,7 +1900,7 @@ export default function Home() {
 
       <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6 pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] sm:pb-6 flex flex-col items-center justify-start sm:justify-center">
         {/* Floating Notification Toasts */}
-        <div className="fixed top-[calc(4.5rem+env(safe-area-inset-top,0px))] left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-sm pointer-events-none flex flex-col gap-2">
+        <div className="fixed top-[calc(4.5rem+env(safe-area-inset-top,0px))] left-1/2 -translate-x-1/2 z-50 w-[92vw] max-w-sm pointer-events-none flex flex-col gap-2">
           {resetNotification && (
             <div className="pointer-events-auto w-full px-3.5 py-2.5 rounded-2xl bg-slate-900/95 border border-emerald-500/40 text-xs font-semibold flex items-center justify-between shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-200">
               <div className="flex items-center gap-2 text-emerald-300">

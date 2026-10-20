@@ -645,7 +645,9 @@ export default function Home() {
           const seeds = createSeedOpponentSwipes(serverView.league);
           setSwipes([
             ...seeds,
-            ...serverView.mySwipes.filter((ms) => !seeds.some((s) => s.id === ms.id)),
+            ...serverView.mySwipes.filter(
+              (ms) => !undoneSwipeIdsRef.current.has(ms.id) && !seeds.some((s) => s.id === ms.id)
+            ),
           ]);
         }
       });
@@ -988,6 +990,12 @@ export default function Home() {
   const currentCard = deckItems[0] || null;
   const nextCard = deckItems[1] || null;
 
+  // Check if user has any swipes that can be undone
+  const canUndoAnySwipe = useMemo(() => {
+    if (!userTeam) return false;
+    return swipes.some((s) => s.teamId === userTeam.id);
+  }, [userTeam, swipes]);
+
   const cardRef = useRef<SwipeCardRef | null>(null);
   const [isSwipingCard, setIsSwipingCard] = useState(false);
 
@@ -1248,14 +1256,42 @@ export default function Home() {
 
   // Handle Undo Last Swipe
   const handleUndo = () => {
+    if (buttonSwipeTimeoutRef.current) {
+      clearTimeout(buttonSwipeTimeoutRef.current);
+      buttonSwipeTimeoutRef.current = null;
+    }
+    setIsSwipingCard(false);
+
+    if (!userTeam || !league) return;
+
     const activeOfferedIds = offeredPlayers.map((p) => p.id);
-    if (activeOfferedIds.length === 0 || !userTeam || !league) return;
-    const userSwipesForPackage = swipes.filter(
+    let targetTradeType = tradeType;
+    let targetOfferedIds = activeOfferedIds;
+
+    let userSwipesForPackage = swipes.filter(
       (s) =>
         s.teamId === userTeam.id &&
         s.tradeType === tradeType &&
         arraysEqualIgnoreOrder(s.offeredPlayerIds, activeOfferedIds)
     );
+
+    // Fallback: If no swipes found matching the active package selection,
+    // find the manager's most recent swipe overall and restore its package
+    if (userSwipesForPackage.length === 0) {
+      const allTeamSwipes = swipes.filter((s) => s.teamId === userTeam.id);
+      if (allTeamSwipes.length === 0) return;
+      const mostRecentSwipe = allTeamSwipes[allTeamSwipes.length - 1];
+      targetTradeType = mostRecentSwipe.tradeType;
+      targetOfferedIds = mostRecentSwipe.offeredPlayerIds || [];
+      userSwipesForPackage = [mostRecentSwipe];
+
+      if (mostRecentSwipe.tradeType !== tradeType) {
+        setTradeType(mostRecentSwipe.tradeType);
+      }
+      if (targetOfferedIds.length > 0 && !arraysEqualIgnoreOrder(selectedOfferedPlayerIds, targetOfferedIds)) {
+        setSelectedOfferedPlayerIds(targetOfferedIds);
+      }
+    }
 
     if (userSwipesForPackage.length === 0) return;
 
@@ -1302,8 +1338,8 @@ export default function Home() {
         const serverView = await undoSwipeOnServer(
           league.espnLeagueId,
           userTeam.id,
-          tradeType,
-          activeOfferedIds
+          targetTradeType,
+          targetOfferedIds
         );
         if (!serverView) return;
 
@@ -1351,6 +1387,15 @@ export default function Home() {
             saveLocalMatches(league.espnLeagueId, next);
             return next;
           });
+        }
+        if (serverView.mySwipes) {
+          const seeds = isMock ? createSeedOpponentSwipes(serverView.league || league) : [];
+          setSwipes([
+            ...seeds,
+            ...serverView.mySwipes.filter(
+              (ms) => !undoneSwipeIdsRef.current.has(ms.id) && !seeds.some((s) => s.id === ms.id)
+            ),
+          ]);
         }
       })
       .catch((err) => {
@@ -2273,7 +2318,7 @@ export default function Home() {
             {/* The Interactive Card Stack */}
             <div className="card-stack relative mb-4 sm:mb-6">
               {currentCard ? (
-                <AnimatePresence mode="popLayout">
+                <>
                   {/* Next Card in Stack (Depth preview) */}
                   {nextCard && (
                     <SwipeCard
@@ -2286,17 +2331,19 @@ export default function Home() {
                   )}
 
                   {/* Active Front Card */}
-                  <SwipeCard
-                    ref={cardRef}
-                    key={currentCard.id}
-                    players={currentCard.players}
-                    ownerTeam={currentCard.ownerTeam}
-                    isFront={true}
-                    onSwipe={handleSwipe}
-                    onSwipeStart={() => setIsSwipingCard(true)}
-                    onExcludeOwner={handleExcludeOwner}
-                  />
-                </AnimatePresence>
+                  <AnimatePresence>
+                    <SwipeCard
+                      ref={cardRef}
+                      key={currentCard.id}
+                      players={currentCard.players}
+                      ownerTeam={currentCard.ownerTeam}
+                      isFront={true}
+                      onSwipe={handleSwipe}
+                      onSwipeStart={() => setIsSwipingCard(true)}
+                      onExcludeOwner={handleExcludeOwner}
+                    />
+                  </AnimatePresence>
+                </>
               ) : offeredPlayers.length < requiredOfferedCount ? (
                 /* Empty or Incomplete Selection State */
                 <div className="w-full h-full min-h-[380px] sm:min-h-[500px] rounded-3xl bg-slate-900/70 border border-dashed border-amber-500/30 flex flex-col items-center justify-center p-4 sm:p-6 text-center">
@@ -2350,6 +2397,15 @@ export default function Home() {
                   </p>
 
                   <div className="mt-6 flex flex-col gap-2.5 w-full max-w-xs">
+                    {canUndoAnySwipe && (
+                      <button
+                        onClick={handleUndo}
+                        className="py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-lg shadow-blue-500/25"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                        <span>Undo Last Swipe</span>
+                      </button>
+                    )}
                     {excludedTeamIds.length > 0 && (
                       <button
                         onClick={handleIncludeAllTeams}
@@ -2480,6 +2536,8 @@ export default function Home() {
               onBackToMatches={() => setActiveTab('matches')}
               onSwipeLike={handleSwipeLike}
               onStartSwipingDeck={() => setActiveTab('deck')}
+              onUndo={handleUndo}
+              canUndo={canUndoAnySwipe}
             />
           </div>
         )}

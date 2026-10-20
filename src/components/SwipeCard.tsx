@@ -59,17 +59,22 @@ export const SwipeCard = React.forwardRef<SwipeCardRef, SwipeCardProps>(function
   const opacityPass = useTransform(x, [-20, -100], [0, 1]);
 
   useEffect(() => {
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      return;
-    }
     if (isFront) {
+      if (isInitialMount.current) {
+        isInitialMount.current = false;
+        cardOpacity.set(1);
+        x.set(0);
+        setActionStamp(null);
+        isSwipingRef.current = false;
+        return;
+      }
       cardOpacity.set(0.6);
       animate(cardOpacity, 1, { duration: 0.25, ease: 'easeOut' });
       x.set(0);
       setActionStamp(null);
       isSwipingRef.current = false;
     } else {
+      isInitialMount.current = false;
       cardOpacity.set(0.6);
       x.set(0);
       setActionStamp(null);
@@ -158,9 +163,18 @@ export const SwipeCard = React.forwardRef<SwipeCardRef, SwipeCardProps>(function
         rotate: isFront ? rotate : 0,
         opacity: isFront ? cardOpacity : 0.6,
       }}
+      initial={{
+        scale: isFront ? 0.96 : 0.92,
+        y: isFront ? 0 : 8,
+      }}
       animate={{
         scale: isFront ? 1 : 0.96,
         y: isFront ? 0 : 8,
+      }}
+      exit={{
+        opacity: 0,
+        scale: 0.92,
+        transition: { duration: 0.2 },
       }}
       transition={{
         duration: 0.2,

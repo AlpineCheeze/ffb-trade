@@ -25,6 +25,8 @@ interface YourLikesViewProps {
   onBackToMatches: () => void;
   onSwipeLike: (like: IncomingLike, isInterested: boolean) => void;
   onStartSwipingDeck: () => void;
+  onUndo?: () => void;
+  canUndo?: boolean;
 }
 
 export const YourLikesView: React.FC<YourLikesViewProps> = ({
@@ -33,6 +35,8 @@ export const YourLikesView: React.FC<YourLikesViewProps> = ({
   onBackToMatches,
   onSwipeLike,
   onStartSwipingDeck,
+  onUndo,
+  canUndo = false,
 }) => {
   const [viewMode, setViewMode] = useState<'deck' | 'list'>('deck');
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -102,12 +106,15 @@ export const YourLikesView: React.FC<YourLikesViewProps> = ({
       } else if (e.key === 'ArrowLeft') {
         e.preventDefault();
         handleExecuteAction(activeLike, false);
+      } else if ((e.key === 'z' || e.key === 'Z' || e.key === 'Backspace') && onUndo && canUndo) {
+        e.preventDefault();
+        onUndo();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [viewMode, activeLike, isAnimatingOut, handleExecuteAction]);
+  }, [viewMode, activeLike, isAnimatingOut, handleExecuteAction, onUndo, canUndo]);
 
   // Points diff calculation helper
   const calculatePointsDiff = (like: IncomingLike) => {
@@ -469,27 +476,39 @@ export const YourLikesView: React.FC<YourLikesViewProps> = ({
           </div>
 
           {/* Action Buttons Below the Card */}
-          <div className="flex items-center justify-center gap-4 pt-2">
+          <div className="flex items-center justify-center gap-3 pt-2">
             <button
               type="button"
               disabled={isAnimatingOut}
               onClick={() => handleExecuteAction(activeLike, false)}
-              className="flex-1 max-w-[170px] py-3.5 px-4 rounded-2xl bg-slate-900 hover:bg-rose-950/30 border border-slate-800 hover:border-rose-500/50 text-rose-400 font-extrabold text-sm flex items-center justify-center gap-2 transition active:scale-95 shadow-lg shadow-black/40 disabled:opacity-50"
+              className="flex-1 max-w-[150px] py-3.5 px-4 rounded-2xl bg-slate-900 hover:bg-rose-950/30 border border-slate-800 hover:border-rose-500/50 text-rose-400 font-extrabold text-sm flex items-center justify-center gap-2 transition active:scale-95 shadow-lg shadow-black/40 disabled:opacity-50"
               title="Pass on this trade offer"
             >
               <X className="w-5 h-5 stroke-[2.5]" />
               <span>Pass</span>
             </button>
 
+            {onUndo && (
+              <button
+                type="button"
+                disabled={isAnimatingOut || !canUndo}
+                onClick={onUndo}
+                className="w-12 h-12 rounded-2xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-slate-200 flex items-center justify-center transition active:scale-95 shadow-lg disabled:opacity-40 disabled:pointer-events-none flex-shrink-0"
+                title="Undo Last Swipe (Z or Backspace)"
+              >
+                <RotateCcw className="w-5 h-5" />
+              </button>
+            )}
+
             <button
               type="button"
               disabled={isAnimatingOut}
               onClick={() => handleExecuteAction(activeLike, true)}
-              className="flex-1 max-w-[210px] py-3.5 px-4 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 hover:from-emerald-500 hover:to-teal-400 text-white font-extrabold text-sm flex items-center justify-center gap-2 transition active:scale-95 shadow-lg shadow-emerald-950/60 hover:shadow-emerald-500/30 border border-emerald-400/40 disabled:opacity-50"
+              className="flex-1 max-w-[190px] py-3.5 px-4 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 hover:from-emerald-500 hover:to-teal-400 text-white font-extrabold text-sm flex items-center justify-center gap-2 transition active:scale-95 shadow-lg shadow-emerald-950/60 hover:shadow-emerald-500/30 border border-emerald-400/40 disabled:opacity-50"
               title="Accept trade and create mutual match!"
             >
               <Check className="w-5 h-5 stroke-[2.5]" />
-              <span>Swipe Yes / Match</span>
+              <span>Swipe Yes</span>
             </button>
           </div>
         </div>

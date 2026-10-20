@@ -77,6 +77,10 @@ async function run() {
   if (incomingLikesModule && incomingLikesModule.testPromise) {
     await incomingLikesModule.testPromise;
   }
+  const undoCardPopulationModule = jiti('./test_undo_card_population.ts');
+  if (undoCardPopulationModule && undoCardPopulationModule.testPromise) {
+    await undoCardPopulationModule.testPromise;
+  }
 }
 
 run().catch((err) => {

@@ -401,9 +401,9 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
       )}
 
       {/* ========================================================= */}
-      {/* MOBILE FILTER PILLS ROW (< 640px)                         */}
+      {/* MOBILE FILTER PILLS ROW (< 640px - when panels closed)     */}
       {/* ========================================================= */}
-      <div className="flex sm:hidden items-center gap-1.5">
+      <div className={`${isPackageOpen || mobileOpenPanel !== null ? 'hidden' : 'flex sm:hidden'} items-center gap-1.5`}>
         <button
           type="button"
           onClick={() => toggleMobilePill('positions')}
@@ -451,78 +451,100 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
         )}
       </div>
 
-      {/* Sub-Tabs on Desktop: Package vs Positions vs Trade With */}
+      {/* ========================================================= */}
+      {/* STACKED SUB-TABS: Package vs Positions vs Trade With      */}
+      {/* ========================================================= */}
       {hasTeams && (
-        <div className="hidden sm:flex items-center gap-1 p-1 bg-slate-950/70 border border-slate-800/80 rounded-xl mb-3">
+        <div
+          className={`${
+            isPackageOpen || mobileOpenPanel !== null ? 'flex' : 'hidden sm:flex'
+          } items-center gap-1 p-1 bg-slate-950/70 border border-slate-800/80 rounded-xl mb-3`}
+        >
           {userTeam && (
             <button
               type="button"
-              onClick={() => setActiveTab('package')}
-              className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 ${
+              onClick={() => {
+                setActiveTab('package');
+                setMobileOpenPanel('package');
+              }}
+              className={`flex-1 py-1.5 px-1.5 rounded-lg text-xs font-bold transition flex flex-col items-center justify-center min-w-0 ${
                 activeTab === 'package'
                   ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20'
-                  : 'text-slate-400 hover:text-white'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-900/60'
               }`}
             >
-              <ArrowLeftRight className="w-3.5 h-3.5" />
-              <span>Package</span>
+              <div className="flex items-center gap-1 text-[11px] sm:text-xs leading-none">
+                <ArrowLeftRight className="w-3.5 h-3.5 flex-shrink-0" />
+                <span className="whitespace-nowrap">Package</span>
+              </div>
               <span
-                className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                className={`mt-1 px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider leading-none ${
                   activeTab === 'package'
                     ? 'bg-blue-500 text-white'
-                    : 'bg-slate-800 text-slate-400'
+                    : 'bg-slate-800 text-slate-300'
                 }`}
               >
                 {tradeType}
               </span>
             </button>
           )}
+
           <button
             type="button"
-            onClick={() => setActiveTab('positions')}
-            className={`flex-1 py-1.5 px-2.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+            onClick={() => {
+              setActiveTab('positions');
+              setMobileOpenPanel('positions');
+            }}
+            className={`flex-1 py-1.5 px-1.5 rounded-lg text-xs font-bold transition flex flex-col items-center justify-center min-w-0 ${
               activeTab === 'positions'
                 ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20'
-                : 'text-slate-400 hover:text-white'
+                : 'text-slate-400 hover:text-white hover:bg-slate-900/60'
             }`}
           >
-            <SlidersHorizontal className="w-3.5 h-3.5" />
-            <span>Positions</span>
+            <div className="flex items-center gap-1 text-[11px] sm:text-xs leading-none">
+              <SlidersHorizontal className="w-3.5 h-3.5 flex-shrink-0" />
+              <span className="whitespace-nowrap">Positions</span>
+            </div>
             <span
-              className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+              className={`mt-1 px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider leading-none ${
                 activeTab === 'positions'
                   ? 'bg-blue-500 text-white'
-                  : 'bg-slate-800 text-slate-400'
+                  : 'bg-slate-800 text-slate-300'
               }`}
             >
-              {isAllSelected ? 'All' : selectedPositions.length}
+              {isAllSelected ? 'All' : `${selectedPositions.length} Selected`}
             </span>
           </button>
 
           <button
             type="button"
-            onClick={() => setActiveTab('teams')}
-            className={`flex-1 py-1.5 px-2.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+            onClick={() => {
+              setActiveTab('teams');
+              setMobileOpenPanel('teams');
+            }}
+            className={`flex-1 py-1.5 px-1.5 rounded-lg text-xs font-bold transition flex flex-col items-center justify-center min-w-0 ${
               activeTab === 'teams'
                 ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20'
-                : 'text-slate-400 hover:text-white'
+                : 'text-slate-400 hover:text-white hover:bg-slate-900/60'
             }`}
           >
-            <Users className="w-3.5 h-3.5" />
-            <span>Trade With</span>
+            <div className="flex items-center gap-1 text-[11px] sm:text-xs leading-none">
+              <Users className="w-3.5 h-3.5 flex-shrink-0" />
+              <span className="whitespace-nowrap">Trade With</span>
+            </div>
             {excludedCount > 0 ? (
-              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-rose-500/20 text-rose-300 border border-rose-500/40">
+              <span className="mt-1 px-1.5 py-0.5 rounded-full text-[9px] font-black leading-none bg-rose-500/20 text-rose-300 border border-rose-500/40">
                 {includedCount}/{teams.length}
               </span>
             ) : (
               <span
-                className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                className={`mt-1 px-1.5 py-0.5 rounded-full text-[9px] font-black leading-none ${
                   activeTab === 'teams'
                     ? 'bg-blue-500 text-white'
-                    : 'bg-slate-800 text-slate-400'
+                    : 'bg-slate-800 text-slate-300'
                 }`}
               >
-                {teams.length}
+                All {teams.length}
               </span>
             )}
           </button>
@@ -530,7 +552,7 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
           <button
             type="button"
             onClick={() => handleToggleMinimize(true)}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition flex items-center justify-center flex-shrink-0 ml-0.5"
+            className="p-1.5 sm:p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition flex items-center justify-center flex-shrink-0 ml-0.5"
             title="Minimize filters to focus on swiping"
           >
             <Minimize2 className="w-3.5 h-3.5 text-blue-400" />

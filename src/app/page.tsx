@@ -129,16 +129,16 @@ export default function Home() {
   const [deckSeed, setDeckSeed] = useState<string>(() => {
     if (typeof window !== 'undefined' && window.sessionStorage) {
       try {
-        const stored = window.sessionStorage.getItem('trade_horny_deck_seed');
+        const stored = window.sessionStorage.getItem('pasta_loft_deck_seed');
         if (stored) return stored;
         const generated = `seed_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-        window.sessionStorage.setItem('trade_horny_deck_seed', generated);
+        window.sessionStorage.setItem('pasta_loft_deck_seed', generated);
         return generated;
       } catch {
         // Fallback if sessionStorage is blocked
       }
     }
-    return 'seed_static_trade_horny';
+    return 'seed_static_pasta_loft';
   });
 
   // Refs to prevent stale closures and out-of-order network race conditions
@@ -577,7 +577,7 @@ export default function Home() {
           setDeckSeed(freshSeed);
           if (typeof window !== 'undefined' && window.sessionStorage) {
             try {
-              window.sessionStorage.setItem('trade_horny_deck_seed', freshSeed);
+              window.sessionStorage.setItem('pasta_loft_deck_seed', freshSeed);
             } catch {
               // Ignore
             }
@@ -1390,7 +1390,7 @@ export default function Home() {
         setDeckSeed(freshSeed);
         if (typeof window !== 'undefined' && window.sessionStorage) {
           try {
-            window.sessionStorage.setItem('trade_horny_deck_seed', freshSeed);
+            window.sessionStorage.setItem('pasta_loft_deck_seed', freshSeed);
           } catch {
             // Ignore
           }
@@ -1452,7 +1452,7 @@ export default function Home() {
       setDeckSeed(freshSeed);
       if (typeof window !== 'undefined' && window.sessionStorage) {
         try {
-          window.sessionStorage.setItem('trade_horny_deck_seed', freshSeed);
+          window.sessionStorage.setItem('pasta_loft_deck_seed', freshSeed);
         } catch {
           // Ignore
         }

@@ -115,7 +115,7 @@ export const LeagueLockerRoom: React.FC<LeagueLockerRoomProps> = ({
   };
 
   const handleCopyInvite = async () => {
-    const message = `🏈 Hey guys! I loaded our fantasy league "${localLeague.name}" on Trade Horny so we can swipe on trades. Claim your team here: ${inviteUrl}`;
+    const message = `🏈 Hey guys! I loaded our fantasy league "${localLeague.name}" on Pasta Loft so we can swipe on trades. Claim your team here: ${inviteUrl}`;
     try {
       if (navigator?.clipboard?.writeText) {
         await navigator.clipboard.writeText(message);

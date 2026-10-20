@@ -64,7 +64,7 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
     const tradeLabel = `${effectiveType}`;
 
     const partnerName = partnerTeam.claimedBy || partnerTeam.ownerName || 'Partner';
-    const text = `Hey ${partnerName}! Trade Horny found a mutual ${tradeLabel} trade match: My ${sendNames} for your ${receiveNames}. Sending proposal in ESPN!`;
+    const text = `Hey ${partnerName}! Pasta Loft found a mutual ${tradeLabel} trade match: My ${sendNames} for your ${receiveNames}. Sending proposal in ESPN!`;
 
     try {
       if (navigator?.clipboard?.writeText) {

@@ -45,7 +45,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 min-w-0">
-                <span className="font-black text-lg sm:text-xl tracking-tight text-white truncate">Trade Horny</span>
+                <span className="font-black text-lg sm:text-xl tracking-tight text-white truncate">Pasta Loft</span>
                 {currentTeam && (
                   <span className="hidden min-[380px]:inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30 truncate max-w-[90px] sm:max-w-[120px] flex-shrink-0">
                     {currentTeam.name}

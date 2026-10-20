@@ -144,6 +144,7 @@ function getWritableUserDir(): string | null {
 
   const candidates = [
     path.join(process.cwd(), '.data', 'users'),
+    path.join(os.tmpdir(), 'pasta-loft', 'users'),
     path.join(os.tmpdir(), 'trade-horny', 'users'),
   ];
 
@@ -748,6 +749,7 @@ export function clearAllServerUsers(): { deletedUsers: number } {
   const candidateDirs = [
     ...(process.env.DATA_DIR ? [path.join(process.env.DATA_DIR, 'users')] : []),
     path.join(process.cwd(), '.data', 'users'),
+    path.join(os.tmpdir(), 'pasta-loft', 'users'),
     path.join(os.tmpdir(), 'trade-horny', 'users'),
   ];
 
@@ -778,6 +780,7 @@ export function clearAllServerUsers(): { deletedUsers: number } {
   const rootCandidates = [
     ...(process.env.DATA_DIR ? [path.join(process.env.DATA_DIR, 'users.json')] : []),
     path.join(process.cwd(), '.data', 'users.json'),
+    path.join(os.tmpdir(), 'pasta-loft', 'users.json'),
     path.join(os.tmpdir(), 'trade-horny', 'users.json'),
   ];
   for (const rootFile of rootCandidates) {
@@ -840,6 +843,7 @@ export function deleteUser(userId: string): boolean {
   const candidateDirs = [
     ...(process.env.DATA_DIR ? [path.join(process.env.DATA_DIR, 'users')] : []),
     path.join(process.cwd(), '.data', 'users'),
+    path.join(os.tmpdir(), 'pasta-loft', 'users'),
     path.join(os.tmpdir(), 'trade-horny', 'users'),
   ];
 

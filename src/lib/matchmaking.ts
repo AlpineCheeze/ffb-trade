@@ -86,7 +86,7 @@ export function hashDeckSeed(key: string, seed: number = 0): number {
  */
 export function shuffleDeckItems<T extends { id: string }>(
   items: T[],
-  seed: string | number = 'trade_horny_deck_seed'
+  seed: string | number = 'pasta_loft_deck_seed'
 ): T[] {
   if (!Array.isArray(items) || items.length <= 1) {
     return Array.isArray(items) ? [...items] : [];
@@ -139,7 +139,7 @@ export function generateDeckItems({
   swipes = [],
   selectedPositions = ['RB', 'WR', 'TE', 'QB', 'FLEX'],
   includedOpponentTeams,
-  seed = 'trade_horny_deck_seed',
+  seed = 'pasta_loft_deck_seed',
   priorityTargetKeys,
 }: GenerateDeckItemsOptions): DeckItem[] {
   if (!userTeam) return [];

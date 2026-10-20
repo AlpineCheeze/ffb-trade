@@ -9,8 +9,8 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: 'Trade Horny | Fantasy Football Trade Matchmaker',
-  description: 'Grindr for the gridiron. Trade matchmaking for fantasy football managers with Trade Horny. Sync your ESPN league, shop your players, and match with league mates.',
+  title: 'Pasta Loft | Fantasy Football Trade Matchmaker',
+  description: 'Trade matchmaking for fantasy football managers with Pasta Loft. Sync your ESPN league, shop your players, and match with league mates.',
 };
 
 export default function RootLayout({

@@ -82,7 +82,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
             <div>
               <h2 className="text-xl font-black text-white">
-                {mode === 'register' ? 'Create Your Account' : 'Log In to Trade Horny'}
+                {mode === 'register' ? 'Create Your Account' : 'Log In to Pasta Loft'}
               </h2>
               <p className="text-xs text-slate-400">
                 Keep your claimed team synced across phone, tablet, and PC

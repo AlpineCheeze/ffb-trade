@@ -161,6 +161,7 @@ function getWritableDataDir(): string | null {
 
   const candidates = [
     path.join(process.cwd(), '.data', 'leagues'),
+    path.join(os.tmpdir(), 'pasta-loft', 'leagues'),
     path.join(os.tmpdir(), 'trade-horny', 'leagues'),
   ];
 
@@ -1066,6 +1067,7 @@ function getCandidateDataDirs(): string[] {
   return [
     ...(process.env.DATA_DIR ? [process.env.DATA_DIR] : []),
     path.join(process.cwd(), '.data'),
+    path.join(os.tmpdir(), 'pasta-loft'),
     path.join(os.tmpdir(), 'trade-horny'),
   ];
 }
@@ -1131,6 +1133,7 @@ export function clearAllServerLeagues(): { deletedLeagues: string[]; demoReseede
   const candidateDirs = [
     ...(process.env.DATA_DIR ? [path.join(process.env.DATA_DIR, 'leagues')] : []),
     path.join(process.cwd(), '.data', 'leagues'),
+    path.join(os.tmpdir(), 'pasta-loft', 'leagues'),
     path.join(os.tmpdir(), 'trade-horny', 'leagues'),
   ];
   const deletedSet = new Set<string>();
@@ -1211,6 +1214,7 @@ export function getAllServerLeagues(): ServerLeagueState[] {
   const candidateDirs = [
     ...(process.env.DATA_DIR ? [path.join(process.env.DATA_DIR, 'leagues')] : []),
     path.join(process.cwd(), '.data', 'leagues'),
+    path.join(os.tmpdir(), 'pasta-loft', 'leagues'),
     path.join(os.tmpdir(), 'trade-horny', 'leagues'),
   ];
 
@@ -1261,6 +1265,7 @@ export function superDeleteLeague(espnLeagueId: string): boolean {
   const candidateDirs = [
     ...(process.env.DATA_DIR ? [path.join(process.env.DATA_DIR, 'leagues')] : []),
     path.join(process.cwd(), '.data', 'leagues'),
+    path.join(os.tmpdir(), 'pasta-loft', 'leagues'),
     path.join(os.tmpdir(), 'trade-horny', 'leagues'),
   ];
 

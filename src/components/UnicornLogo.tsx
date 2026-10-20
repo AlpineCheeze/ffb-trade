@@ -18,7 +18,7 @@ export const UnicornLogo: React.FC<UnicornLogoProps> = ({
       width={size}
       height={size}
       className={className}
-      aria-label="Trade Horny Unicorn Logo"
+      aria-label="Pasta Loft Unicorn Logo"
       {...props}
     >
       {/* Unicorn Head Silhouette */}

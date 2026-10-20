@@ -196,7 +196,7 @@ export const LeagueSyncModal: React.FC<LeagueSyncModalProps> = ({
                   />
                 </div>
                 <div className="text-[10px] text-slate-500 italic">
-                  💡 Tip: You can paste your entire cookie string into either box above — Trade Horny will automatically extract both cookies!
+                  💡 Tip: You can paste your entire cookie string into either box above — Pasta Loft will automatically extract both cookies!
                 </div>
               </div>
             </div>

@@ -1,3 +1,5 @@
+import { Player, TradeType } from '@/types/fantasy';
+
 export interface AdminUserSummary {
   id: string;
   username: string;
@@ -142,4 +144,64 @@ export async function adminUnassignTeam(
   if (!res.ok || !data.success) {
     throw new Error(data.error || 'Failed to unassign team.');
   }
+}
+
+export interface AdminSwipeDetail {
+  id: string;
+  teamId: string;
+  teamName: string;
+  teamLogoUrl?: string | null;
+  teamOwnerName?: string;
+  claimedBy?: string;
+  targetTeamId?: string;
+  targetTeamName?: string;
+  targetTeamLogoUrl?: string | null;
+  targetTeamOwnerName?: string;
+  targetClaimedBy?: string;
+  tradeType: TradeType;
+  offeredPlayerIds: string[];
+  offeredPlayers: Player[];
+  targetPlayerIds: string[];
+  targetPlayers: Player[];
+  isInterested: boolean; // true = Want, false = Pass
+  createdAt: string;
+  isMatched?: boolean;
+  matchId?: string;
+  hasTargetResponded?: boolean;
+  targetResponse?: 'want' | 'pass' | 'none';
+}
+
+export interface AdminLeagueSwipesResponse {
+  success: boolean;
+  leagueId: string;
+  leagueName: string;
+  espnLeagueId: string;
+  totalSwipesCount: number;
+  wantsCount: number;
+  passesCount: number;
+  matchesCount: number;
+  wantRate?: number;
+  swipes: AdminSwipeDetail[];
+  teams: AdminTeamSummary[];
+  error?: string;
+}
+
+export async function fetchAdminLeagueSwipes(
+  leagueId: string,
+  token: string
+): Promise<AdminLeagueSwipesResponse> {
+  const res = await fetch(`/api/admin?leagueId=${encodeURIComponent(leagueId)}`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+    cache: 'no-store',
+  });
+
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.error || `Failed to fetch swipe activity for league #${leagueId}.`);
+  }
+
+  return data;
 }

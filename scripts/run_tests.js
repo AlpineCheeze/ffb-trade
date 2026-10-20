@@ -69,6 +69,10 @@ async function run() {
   if (rosterInterestedTeamsModule && rosterInterestedTeamsModule.testPromise) {
     await rosterInterestedTeamsModule.testPromise;
   }
+  const adminSwipeActivityModule = jiti('./test_admin_swipe_activity.ts');
+  if (adminSwipeActivityModule && adminSwipeActivityModule.testPromise) {
+    await adminSwipeActivityModule.testPromise;
+  }
 }
 
 run().catch((err) => {

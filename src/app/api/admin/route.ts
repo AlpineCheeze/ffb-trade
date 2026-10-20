@@ -12,6 +12,7 @@ import {
 } from '@/lib/serverUserStore';
 import {
   getAllServerLeagues,
+  getLeagueSwipeActivity,
   superDeleteLeague,
   superAssignTeam,
   superUnassignTeam,
@@ -20,11 +21,19 @@ import {
 } from '@/lib/serverLeagueStore';
 
 function extractToken(req: NextRequest, body?: any): string | null {
-  const authHeader = req.headers.get('Authorization');
+  const authHeader = req.headers.get('Authorization') || req.headers.get('authorization');
   if (authHeader && authHeader.startsWith('Bearer ')) {
     return authHeader.substring(7).trim();
   }
-  const queryToken = req.nextUrl.searchParams.get('token');
+  let queryToken: string | null = null;
+  if (req.nextUrl?.searchParams) {
+    queryToken = req.nextUrl.searchParams.get('token');
+  } else if (req.url) {
+    try {
+      const parsedUrl = new URL(req.url);
+      queryToken = parsedUrl.searchParams.get('token');
+    } catch {}
+  }
   if (queryToken && queryToken.trim()) {
     return queryToken.trim();
   }
@@ -34,21 +43,21 @@ function extractToken(req: NextRequest, body?: any): string | null {
   return null;
 }
 
-function verifySuperUser(req: NextRequest, body?: any) {
+function verifySuperUser(req: NextRequest, body?: any): { authorized: boolean; error?: string; statusCode?: number; user?: any } {
   ensureSuperUserAccount();
   const token = extractToken(req, body);
   if (!token) {
-    return { authorized: false, error: 'Authentication required. No session token provided.' };
+    return { authorized: false, error: 'Authentication required. No session token provided.', statusCode: 401 };
   }
 
   const user = getUserByToken(token);
   if (!user) {
-    return { authorized: false, error: 'Invalid session token. Please log in again.' };
+    return { authorized: false, error: 'Invalid session token. Please log in again.', statusCode: 401 };
   }
 
   const isSuper = user.isSuperUser || user.username.toLowerCase() === 'superu';
   if (!isSuper) {
-    return { authorized: false, error: 'Forbidden: Superuser access required.' };
+    return { authorized: false, error: 'Forbidden: Superuser access required.', statusCode: 403 };
   }
 
   return { authorized: true, user };
@@ -60,8 +69,33 @@ export async function GET(req: NextRequest) {
     if (!authCheck.authorized) {
       return NextResponse.json(
         { success: false, error: authCheck.error },
-        { status: 403 }
+        { status: authCheck.statusCode || 403 }
       );
+    }
+
+    // Specific league swipe activity lookup
+    let leagueIdParam: string | null = null;
+    if (req.nextUrl?.searchParams) {
+      leagueIdParam = req.nextUrl.searchParams.get('leagueId');
+    } else if (req.url) {
+      try {
+        const parsedUrl = new URL(req.url);
+        leagueIdParam = parsedUrl.searchParams.get('leagueId');
+      } catch {}
+    }
+    if (leagueIdParam) {
+      const activity = getLeagueSwipeActivity(leagueIdParam.trim());
+      if (!activity) {
+        return NextResponse.json(
+          { success: false, error: `League with ID "${leagueIdParam}" not found.` },
+          { status: 404 }
+        );
+      }
+      return NextResponse.json({
+        success: true,
+        ...activity,
+        timestamp: new Date().toISOString(),
+      });
     }
 
     const users = getAllUsers();
@@ -123,11 +157,34 @@ export async function POST(req: NextRequest) {
     if (!authCheck.authorized) {
       return NextResponse.json(
         { success: false, error: authCheck.error },
-        { status: 403 }
+        { status: authCheck.statusCode || 403 }
       );
     }
 
     const action = String(body.action ?? '').toLowerCase().trim();
+
+    // 0. GET LEAGUE SWIPE ACTIVITY
+    if (action === 'get_league_swipes') {
+      const targetLeagueId = String(body.leagueId ?? '').trim();
+      if (!targetLeagueId) {
+        return NextResponse.json(
+          { success: false, error: 'Missing leagueId.' },
+          { status: 400 }
+        );
+      }
+      const activity = getLeagueSwipeActivity(targetLeagueId);
+      if (!activity) {
+        return NextResponse.json(
+          { success: false, error: `League with ID "${targetLeagueId}" not found.` },
+          { status: 404 }
+        );
+      }
+      return NextResponse.json({
+        success: true,
+        ...activity,
+        timestamp: new Date().toISOString(),
+      });
+    }
 
     // 1. DELETE USER
     if (action === 'delete_user') {

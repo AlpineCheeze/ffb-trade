@@ -19,9 +19,16 @@ import {
   Crown,
   Layers,
   Sparkles,
+  Flame,
+  ArrowRight,
+  ArrowLeftRight,
+  Activity,
+  Filter,
+  Clock,
 } from 'lucide-react';
 import {
   fetchAdminOverview,
+  fetchAdminLeagueSwipes,
   adminDeleteUser,
   adminDeleteLeague,
   adminAssignTeam,
@@ -29,6 +36,8 @@ import {
   AdminUserSummary,
   AdminLeagueSummary,
   AdminTeamSummary,
+  AdminSwipeDetail,
+  AdminLeagueSwipesResponse,
 } from '@/lib/adminStore';
 import { getStoredToken } from '@/lib/authStore';
 
@@ -64,9 +73,51 @@ export const SuperUserModal: React.FC<SuperUserModalProps> = ({
   const [assigningTeamKey, setAssigningTeamKey] = useState<string | null>(null); // `${leagueId}_${teamId}`
   const [selectedAssignUserId, setSelectedAssignUserId] = useState<string>('');
 
+  // Swipe activity view states per league
+  const [leagueSubTab, setLeagueSubTab] = useState<Record<string, 'teams' | 'swipes'>>({});
+  const [leagueSwipesData, setLeagueSwipesData] = useState<Record<string, AdminLeagueSwipesResponse>>({});
+  const [loadingSwipesLeagueId, setLoadingSwipesLeagueId] = useState<string | null>(null);
+  const [swipesTeamFilter, setSwipesTeamFilter] = useState<Record<string, string>>({});
+  const [swipesActionFilter, setSwipesActionFilter] = useState<Record<string, 'all' | 'want' | 'pass' | 'matched'>>({});
+  const [swipesSearch, setSwipesSearch] = useState<Record<string, string>>({});
+  const [swipesSort, setSwipesSort] = useState<Record<string, 'newest' | 'oldest'>>({});
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const loadLeagueSwipes = useCallback(async (leagueId: string, forceRefresh = false) => {
+    if (!forceRefresh && leagueSwipesData[leagueId]) {
+      return;
+    }
+    const token = getStoredToken();
+    if (!token) return;
+
+    setLoadingSwipesLeagueId(leagueId);
+    try {
+      const data = await fetchAdminLeagueSwipes(leagueId, token);
+      setLeagueSwipesData((prev) => ({ ...prev, [leagueId]: data }));
+    } catch (err: any) {
+      showToast(err.message || `Failed to load swipe activity for league #${leagueId}.`);
+    } finally {
+      setLoadingSwipesLeagueId(null);
+    }
+  }, [leagueSwipesData]);
+
+  const handleOpenSwipes = (leagueId: string) => {
+    setExpandedLeagueId(leagueId);
+    setLeagueSubTab((prev) => ({ ...prev, [leagueId]: 'swipes' }));
+    loadLeagueSwipes(leagueId);
+  };
+
+  const handleToggleTeams = (leagueId: string) => {
+    if (expandedLeagueId === leagueId && leagueSubTab[leagueId] === 'teams') {
+      setExpandedLeagueId(null);
+    } else {
+      setExpandedLeagueId(leagueId);
+      setLeagueSubTab((prev) => ({ ...prev, [leagueId]: 'teams' }));
+    }
   };
 
   const loadData = useCallback(async () => {
@@ -399,15 +450,34 @@ export const SuperUserModal: React.FC<SuperUserModalProps> = ({
                               </button>
                             )}
 
+                            {/* Swipe Activity Button */}
                             <button
                               type="button"
-                              onClick={() =>
-                                setExpandedLeagueId(isExpanded ? null : league.espnLeagueId)
-                              }
-                              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center gap-1.5 transition"
+                              onClick={() => handleOpenSwipes(league.espnLeagueId)}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition active:scale-95 border ${
+                                isExpanded && leagueSubTab[league.espnLeagueId] === 'swipes'
+                                  ? 'bg-amber-500/20 border-amber-500/50 text-amber-300'
+                                  : 'bg-slate-900 hover:bg-slate-800 border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white'
+                              }`}
+                              title="View all swipe activity for this league"
                             >
-                              <span>Teams</span>
-                              {isExpanded ? (
+                              <Activity className="w-3.5 h-3.5 text-amber-400" />
+                              <span>Swipes ({league.swipesCount})</span>
+                            </button>
+
+                            {/* Teams Toggle Button */}
+                            <button
+                              type="button"
+                              onClick={() => handleToggleTeams(league.espnLeagueId)}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition border ${
+                                isExpanded && leagueSubTab[league.espnLeagueId] !== 'swipes'
+                                  ? 'bg-purple-600/20 border-purple-500/50 text-purple-200'
+                                  : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-200'
+                              }`}
+                            >
+                              <Users className="w-3.5 h-3.5 text-purple-400" />
+                              <span>Teams ({league.teamsCount})</span>
+                              {isExpanded && leagueSubTab[league.espnLeagueId] !== 'swipes' ? (
                                 <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
                               ) : (
                                 <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
@@ -416,150 +486,666 @@ export const SuperUserModal: React.FC<SuperUserModalProps> = ({
                           </div>
                         </div>
 
-                        {/* Expandable Teams & Claims List */}
+                        {/* Expandable Content (Swipes Feed or Teams List) */}
                         {isExpanded && (
-                          <div className="p-4 pt-1 border-t border-slate-800/80 bg-slate-900/40 space-y-2 animate-in fade-in duration-150">
-                            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">
-                              Roster Teams ({league.teams.length})
+                          <div className="border-t border-slate-800/80 bg-slate-900/40 animate-in fade-in duration-150">
+                            {/* Sub-tab Navigation */}
+                            <div className="flex items-center gap-1 px-4 pt-3 border-b border-slate-800/60 bg-slate-950/40">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setLeagueSubTab((prev) => ({ ...prev, [league.espnLeagueId]: 'swipes' }));
+                                  loadLeagueSwipes(league.espnLeagueId);
+                                }}
+                                className={`px-3 py-2 rounded-t-xl text-xs font-bold flex items-center gap-2 border-b-2 transition ${
+                                  leagueSubTab[league.espnLeagueId] === 'swipes'
+                                    ? 'text-amber-400 border-amber-400 bg-amber-500/10'
+                                    : 'text-slate-400 border-transparent hover:text-slate-200 hover:bg-slate-800/40'
+                                }`}
+                              >
+                                <Activity className="w-3.5 h-3.5" />
+                                <span>Swipe Activity ({league.swipesCount})</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setLeagueSubTab((prev) => ({ ...prev, [league.espnLeagueId]: 'teams' }))
+                                }
+                                className={`px-3 py-2 rounded-t-xl text-xs font-bold flex items-center gap-2 border-b-2 transition ${
+                                  leagueSubTab[league.espnLeagueId] !== 'swipes'
+                                    ? 'text-purple-300 border-purple-400 bg-purple-500/10'
+                                    : 'text-slate-400 border-transparent hover:text-slate-200 hover:bg-slate-800/40'
+                                }`}
+                              >
+                                <Users className="w-3.5 h-3.5" />
+                                <span>Teams & Claims ({league.teams.length})</span>
+                              </button>
                             </div>
 
-                            <div className="grid grid-cols-1 gap-2">
-                              {league.teams.map((team: AdminTeamSummary) => {
-                                const teamAssignKey = `${league.espnLeagueId}_${team.id}`;
-                                const isAssigningThis = assigningTeamKey === teamAssignKey;
-                                const isActionBusy =
-                                  busyActionKey === `assign_${league.espnLeagueId}_${team.id}` ||
-                                  busyActionKey === `unassign_${league.espnLeagueId}_${team.id}`;
+                            {/* Sub-tab View 1: Swipe Activity */}
+                            {leagueSubTab[league.espnLeagueId] === 'swipes' && (
+                              <div className="p-4 space-y-3">
+                                {(() => {
+                                  const swipesResponse = leagueSwipesData[league.espnLeagueId];
+                                  const isLoadingSwipes = loadingSwipesLeagueId === league.espnLeagueId;
+                                  const teamFilter = swipesTeamFilter[league.espnLeagueId] || 'all';
+                                  const actionFilter = swipesActionFilter[league.espnLeagueId] || 'all';
+                                  const searchQuery = (swipesSearch[league.espnLeagueId] || '').toLowerCase().trim();
+                                  const sortOrder = swipesSort[league.espnLeagueId] || 'newest';
 
-                                return (
-                                  <div
-                                    key={team.id}
-                                    className="p-3 rounded-xl bg-slate-950 border border-slate-800/90 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-left"
-                                  >
-                                    <div className="flex items-center gap-3 min-w-0">
-                                      {team.logoUrl ? (
-                                        <img
-                                          src={team.logoUrl}
-                                          alt={team.name}
-                                          className="w-8 h-8 rounded-lg object-cover bg-slate-900 border border-slate-800 flex-shrink-0"
-                                        />
-                                      ) : (
-                                        <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-400 font-black text-xs flex items-center justify-center flex-shrink-0">
-                                          {team.name.slice(0, 2).toUpperCase()}
+                                  const allSwipes = swipesResponse?.swipes || [];
+
+                                  const filteredSwipes = allSwipes
+                                    .filter((s) => {
+                                      if (
+                                        teamFilter !== 'all' &&
+                                        s.teamId !== teamFilter &&
+                                        s.targetTeamId !== teamFilter
+                                      ) {
+                                        return false;
+                                      }
+                                      if (actionFilter === 'want' && !s.isInterested) return false;
+                                      if (actionFilter === 'pass' && s.isInterested) return false;
+                                      if (actionFilter === 'matched' && !s.isMatched) return false;
+
+                                      if (searchQuery) {
+                                        const matchInitiating =
+                                          s.teamName.toLowerCase().includes(searchQuery) ||
+                                          (s.claimedBy && s.claimedBy.toLowerCase().includes(searchQuery));
+                                        const matchTarget =
+                                          (s.targetTeamName &&
+                                            s.targetTeamName.toLowerCase().includes(searchQuery)) ||
+                                          (s.targetClaimedBy &&
+                                            s.targetClaimedBy.toLowerCase().includes(searchQuery));
+                                        const matchOffered = s.offeredPlayers.some((p) =>
+                                          p.fullName.toLowerCase().includes(searchQuery)
+                                        );
+                                        const matchTargetPlayers = s.targetPlayers.some((p) =>
+                                          p.fullName.toLowerCase().includes(searchQuery)
+                                        );
+                                        if (
+                                          !matchInitiating &&
+                                          !matchTarget &&
+                                          !matchOffered &&
+                                          !matchTargetPlayers
+                                        ) {
+                                          return false;
+                                        }
+                                      }
+                                      return true;
+                                    })
+                                    .sort((a, b) => {
+                                      const timeA = new Date(a.createdAt || 0).getTime();
+                                      const timeB = new Date(b.createdAt || 0).getTime();
+                                      return sortOrder === 'newest' ? timeB - timeA : timeA - timeB;
+                                    });
+
+                                  const totalSwipes = swipesResponse?.totalSwipesCount ?? 0;
+                                  const wants = swipesResponse?.wantsCount ?? 0;
+                                  const passes = swipesResponse?.passesCount ?? 0;
+                                  const matches = swipesResponse?.matchesCount ?? 0;
+                                  const wantRate =
+                                    swipesResponse?.wantRate ??
+                                    (totalSwipes > 0 ? Math.round((wants / totalSwipes) * 100) : 0);
+
+                                  return (
+                                    <>
+                                      {/* Metrics Banner */}
+                                      {swipesResponse && (
+                                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 p-2.5 bg-slate-950/80 rounded-xl border border-slate-800/80 text-center">
+                                          <div className="p-2 rounded-lg bg-slate-900/60 border border-slate-800/80">
+                                            <div className="text-[10px] uppercase font-bold text-slate-400">
+                                              Total Swipes
+                                            </div>
+                                            <div className="text-base font-black text-white">
+                                              {totalSwipes}
+                                            </div>
+                                          </div>
+                                          <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                                            <div className="text-[10px] uppercase font-bold text-emerald-400">
+                                              Wants
+                                            </div>
+                                            <div className="text-base font-black text-emerald-300">
+                                              {wants}
+                                            </div>
+                                          </div>
+                                          <div className="p-2 rounded-lg bg-rose-500/10 border border-rose-500/20">
+                                            <div className="text-[10px] uppercase font-bold text-rose-400">
+                                              Passes
+                                            </div>
+                                            <div className="text-base font-black text-rose-300">
+                                              {passes}
+                                            </div>
+                                          </div>
+                                          <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                                            <div className="text-[10px] uppercase font-bold text-amber-400">
+                                              Want Rate
+                                            </div>
+                                            <div className="text-base font-black text-amber-300">
+                                              {wantRate}%
+                                            </div>
+                                          </div>
+                                          <div className="p-2 rounded-lg bg-purple-500/10 border border-purple-500/20 col-span-2 sm:col-span-1">
+                                            <div className="text-[10px] uppercase font-bold text-purple-400">
+                                              Matches
+                                            </div>
+                                            <div className="text-base font-black text-purple-300">
+                                              {matches}
+                                            </div>
+                                          </div>
                                         </div>
                                       )}
 
-                                      <div className="min-w-0">
-                                        <div className="text-xs font-bold text-white truncate">
-                                          {team.name}
+                                      {/* Search & Filter Controls */}
+                                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                                        <div className="relative flex-1">
+                                          <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                                          <input
+                                            type="text"
+                                            value={swipesSearch[league.espnLeagueId] || ''}
+                                            onChange={(e) =>
+                                              setSwipesSearch((prev) => ({
+                                                ...prev,
+                                                [league.espnLeagueId]: e.target.value,
+                                              }))
+                                            }
+                                            placeholder="Search player, team, or @user..."
+                                            className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500/50"
+                                          />
                                         </div>
-                                        <div className="text-[10px] text-slate-400 flex items-center gap-1.5 flex-wrap">
-                                          <span>Owner: {team.ownerName}</span>
-                                          <span>•</span>
-                                          <span>{team.rosterCount} Players</span>
-                                        </div>
-                                      </div>
-                                    </div>
 
-                                    {/* Claim Status & Actions */}
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                      {team.isClaimed ? (
-                                        <>
-                                          <div className="px-2 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-[11px] font-semibold flex items-center gap-1">
-                                            <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
-                                            <span>
-                                              Claimed: <strong>@{team.claimedBy}</strong>
-                                            </span>
-                                          </div>
+                                        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                                          {/* Team Filter */}
+                                          <select
+                                            value={teamFilter}
+                                            onChange={(e) =>
+                                              setSwipesTeamFilter((prev) => ({
+                                                ...prev,
+                                                [league.espnLeagueId]: e.target.value,
+                                              }))
+                                            }
+                                            className="px-2 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-300 focus:outline-none focus:border-amber-500/50"
+                                          >
+                                            <option value="all">All Teams</option>
+                                            {league.teams.map((t) => (
+                                              <option key={t.id} value={t.id}>
+                                                {t.name}
+                                              </option>
+                                            ))}
+                                          </select>
 
+                                          {/* Action Filter */}
+                                          <select
+                                            value={actionFilter}
+                                            onChange={(e) =>
+                                              setSwipesActionFilter((prev) => ({
+                                                ...prev,
+                                                [league.espnLeagueId]: e.target.value as any,
+                                              }))
+                                            }
+                                            className="px-2 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-300 focus:outline-none focus:border-amber-500/50"
+                                          >
+                                            <option value="all">All Actions</option>
+                                            <option value="want">Wants Only</option>
+                                            <option value="pass">Passes Only</option>
+                                            <option value="matched">Mutual Matches Only</option>
+                                          </select>
+
+                                          {/* Sort Order */}
+                                          <select
+                                            value={sortOrder}
+                                            onChange={(e) =>
+                                              setSwipesSort((prev) => ({
+                                                ...prev,
+                                                [league.espnLeagueId]: e.target.value as any,
+                                              }))
+                                            }
+                                            className="px-2 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-300 focus:outline-none focus:border-amber-500/50"
+                                          >
+                                            <option value="newest">Newest First</option>
+                                            <option value="oldest">Oldest First</option>
+                                          </select>
+
+                                          {/* Refresh Button */}
                                           <button
                                             type="button"
-                                            disabled={isActionBusy}
-                                            onClick={() => handleUnassignTeam(league.espnLeagueId, team.id)}
-                                            className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-rose-600/20 border border-slate-800 hover:border-rose-500/40 text-rose-400 text-xs font-semibold flex items-center gap-1 transition disabled:opacity-50"
-                                            title="Unassign user from this team"
+                                            disabled={isLoadingSwipes}
+                                            onClick={() => loadLeagueSwipes(league.espnLeagueId, true)}
+                                            className="p-2 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-white transition flex-shrink-0 disabled:opacity-50"
+                                            title="Refresh swipe records"
                                           >
-                                            {isActionBusy ? (
-                                              <Loader2 className="w-3 h-3 animate-spin" />
-                                            ) : (
-                                              <>
-                                                <UserX className="w-3 h-3" />
-                                                <span>Unassign</span>
-                                              </>
-                                            )}
+                                            <RefreshCw
+                                              className={`w-3.5 h-3.5 ${
+                                                isLoadingSwipes ? 'animate-spin text-amber-400' : ''
+                                              }`}
+                                            />
                                           </button>
-                                        </>
-                                      ) : (
-                                        <>
-                                          <span className="text-[11px] text-slate-500 font-medium">
-                                            Unclaimed
-                                          </span>
+                                        </div>
+                                      </div>
 
-                                          {isAssigningThis ? (
-                                            <div className="flex items-center gap-1.5 bg-slate-900 p-1 rounded-xl border border-purple-500/40">
-                                              <select
-                                                value={selectedAssignUserId}
-                                                onChange={(e) => setSelectedAssignUserId(e.target.value)}
-                                                className="px-2 py-1 rounded-lg bg-slate-950 border border-slate-800 text-xs text-white outline-none"
+                                      {/* Loading Spinner */}
+                                      {isLoadingSwipes && !swipesResponse && (
+                                        <div className="py-12 flex flex-col items-center justify-center gap-2 text-slate-400 text-xs">
+                                          <Loader2 className="w-5 h-5 animate-spin text-amber-400" />
+                                          <span>Loading swipe activity from server store...</span>
+                                        </div>
+                                      )}
+
+                                      {/* Empty States */}
+                                      {!isLoadingSwipes && allSwipes.length === 0 && (
+                                        <div className="py-10 text-center rounded-xl bg-slate-950/60 border border-slate-800/80 text-slate-400 text-xs space-y-1">
+                                          <Activity className="w-6 h-6 mx-auto text-slate-600 mb-1" />
+                                          <div className="font-semibold text-slate-300">
+                                            No Swipes Recorded Yet
+                                          </div>
+                                          <p className="text-[11px] text-slate-500">
+                                            Managers in this league have not swiped on any trade packages yet.
+                                          </p>
+                                        </div>
+                                      )}
+
+                                      {!isLoadingSwipes &&
+                                        allSwipes.length > 0 &&
+                                        filteredSwipes.length === 0 && (
+                                          <div className="py-8 text-center rounded-xl bg-slate-950/60 border border-slate-800/80 text-slate-400 text-xs space-y-1">
+                                            <Filter className="w-5 h-5 mx-auto text-slate-600 mb-1" />
+                                            <div className="font-semibold text-slate-300">
+                                              No Swipes Match Filter
+                                            </div>
+                                            <p className="text-[11px] text-slate-500">
+                                              Try clearing your search query or changing the team/action filters.
+                                            </p>
+                                          </div>
+                                        )}
+
+                                      {/* Swipes Feed */}
+                                      {filteredSwipes.length > 0 && (
+                                        <div className="space-y-2.5 max-h-[500px] overflow-y-auto pr-1">
+                                          {filteredSwipes.map((swipe) => {
+                                            const formattedDate = swipe.createdAt
+                                              ? new Date(swipe.createdAt).toLocaleString([], {
+                                                  month: 'short',
+                                                  day: 'numeric',
+                                                  hour: 'numeric',
+                                                  minute: '2-digit',
+                                                })
+                                              : 'Unknown time';
+
+                                            return (
+                                              <div
+                                                key={swipe.id}
+                                                className={`p-3.5 rounded-xl border transition text-left space-y-2.5 ${
+                                                  swipe.isMatched
+                                                    ? 'bg-purple-950/20 border-purple-500/40 hover:border-purple-500/60'
+                                                    : swipe.isInterested
+                                                    ? 'bg-slate-950 border-emerald-500/30 hover:border-emerald-500/50'
+                                                    : 'bg-slate-950 border-slate-800 hover:border-slate-700'
+                                                }`}
                                               >
-                                                <option value="">Select User...</option>
-                                                {users.map((u) => (
-                                                  <option key={u.id} value={u.id}>
-                                                    @{u.username}
-                                                  </option>
-                                                ))}
-                                              </select>
+                                                {/* Header: Teams, Action, Reciprocity & Time */}
+                                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/60 pb-2">
+                                                  <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                                                    {/* Initiating Team */}
+                                                    <div className="flex items-center gap-1.5 min-w-0">
+                                                      {swipe.teamLogoUrl ? (
+                                                        <img
+                                                          src={swipe.teamLogoUrl}
+                                                          alt={swipe.teamName}
+                                                          className="w-5 h-5 rounded-md object-cover bg-slate-900 border border-slate-800 flex-shrink-0"
+                                                        />
+                                                      ) : (
+                                                        <div className="w-5 h-5 rounded-md bg-blue-500/10 border border-blue-500/30 text-blue-400 font-bold text-[9px] flex items-center justify-center flex-shrink-0">
+                                                          {swipe.teamName.slice(0, 2).toUpperCase()}
+                                                        </div>
+                                                      )}
+                                                      <span className="text-xs font-bold text-white truncate max-w-[130px]">
+                                                        {swipe.teamName}
+                                                      </span>
+                                                      {swipe.claimedBy && (
+                                                        <span className="text-[10px] text-purple-300 font-medium">
+                                                          (@{swipe.claimedBy})
+                                                        </span>
+                                                      )}
+                                                    </div>
+
+                                                    <ArrowRight className="w-3 h-3 text-slate-500 flex-shrink-0" />
+
+                                                    {/* Target Team */}
+                                                    <div className="flex items-center gap-1.5 min-w-0">
+                                                      {swipe.targetTeamLogoUrl ? (
+                                                        <img
+                                                          src={swipe.targetTeamLogoUrl}
+                                                          alt={swipe.targetTeamName || 'Opponent'}
+                                                          className="w-5 h-5 rounded-md object-cover bg-slate-900 border border-slate-800 flex-shrink-0"
+                                                        />
+                                                      ) : (
+                                                        <div className="w-5 h-5 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-400 font-bold text-[9px] flex items-center justify-center flex-shrink-0">
+                                                          {(swipe.targetTeamName || 'OP').slice(0, 2).toUpperCase()}
+                                                        </div>
+                                                      )}
+                                                      <span className="text-xs font-bold text-slate-200 truncate max-w-[130px]">
+                                                        {swipe.targetTeamName || `Team #${swipe.targetTeamId}`}
+                                                      </span>
+                                                      {swipe.targetClaimedBy && (
+                                                        <span className="text-[10px] text-purple-300 font-medium">
+                                                          (@{swipe.targetClaimedBy})
+                                                        </span>
+                                                      )}
+                                                    </div>
+                                                  </div>
+
+                                                  {/* Action Badge & Mutual Match Status */}
+                                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                                    {swipe.isInterested ? (
+                                                      <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 flex items-center gap-1">
+                                                        <Flame className="w-2.5 h-2.5" />
+                                                        WANT
+                                                      </span>
+                                                    ) : (
+                                                      <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-rose-500/20 border border-rose-500/40 text-rose-300 flex items-center gap-1">
+                                                        <X className="w-2.5 h-2.5" />
+                                                        PASS
+                                                      </span>
+                                                    )}
+
+                                                    {swipe.isMatched ? (
+                                                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-500/20 border border-purple-500/40 text-purple-300 flex items-center gap-1">
+                                                        🤝 Confirmed Match
+                                                      </span>
+                                                    ) : swipe.targetResponse === 'want' ? (
+                                                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/20 border border-amber-500/40 text-amber-300 flex items-center gap-1">
+                                                        🔥 Opponent Liked
+                                                      </span>
+                                                    ) : swipe.targetResponse === 'pass' ? (
+                                                      <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-900 border border-slate-800 text-slate-400">
+                                                        ✕ Opponent Passed
+                                                      </span>
+                                                    ) : (
+                                                      <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-900/80 border border-slate-800/80 text-slate-500 flex items-center gap-1">
+                                                        <Clock className="w-2.5 h-2.5" />
+                                                        Awaiting
+                                                      </span>
+                                                    )}
+
+                                                    <span className="text-[10px] text-slate-500 font-mono pl-1">
+                                                      {formattedDate}
+                                                    </span>
+                                                  </div>
+                                                </div>
+
+                                                {/* Trade Package Players Grid */}
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-0.5">
+                                                  {/* Offered Players (Initiator Gives) */}
+                                                  <div className="p-2 rounded-lg bg-slate-900/60 border border-slate-800/70 space-y-1.5">
+                                                    <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                                      <span>Offered by {swipe.teamName}</span>
+                                                      <span className="text-slate-500 font-mono">
+                                                        {swipe.tradeType.split('-for-')[0] ||
+                                                          swipe.offeredPlayers.length}{' '}
+                                                        Player
+                                                        {swipe.offeredPlayers.length > 1 ? 's' : ''}
+                                                      </span>
+                                                    </div>
+
+                                                    <div className="space-y-1">
+                                                      {swipe.offeredPlayers.length > 0 ? (
+                                                        swipe.offeredPlayers.map((player) => (
+                                                          <div
+                                                            key={player.id}
+                                                            className="flex items-center justify-between p-1.5 rounded-md bg-slate-950/80 border border-slate-800/60"
+                                                          >
+                                                            <div className="flex items-center gap-2 min-w-0">
+                                                              {player.headshotUrl ? (
+                                                                <img
+                                                                  src={player.headshotUrl}
+                                                                  alt={player.fullName}
+                                                                  className="w-6 h-6 rounded-full object-cover bg-slate-900 border border-slate-800 flex-shrink-0"
+                                                                />
+                                                              ) : (
+                                                                <div className="w-6 h-6 rounded-full bg-slate-800 text-[9px] font-bold text-slate-400 flex items-center justify-center flex-shrink-0">
+                                                                  {player.position}
+                                                                </div>
+                                                             )}
+                                                              <div className="min-w-0">
+                                                                <div className="text-xs font-semibold text-white truncate">
+                                                                  {player.fullName}
+                                                                </div>
+                                                                <div className="text-[9px] text-slate-400 flex items-center gap-1">
+                                                                  <span className="font-bold text-amber-400">
+                                                                    {player.position}
+                                                                  </span>
+                                                                  <span>•</span>
+                                                                  <span>{player.nflTeam}</span>
+                                                                </div>
+                                                              </div>
+                                                            </div>
+                                                            <div className="text-[10px] font-bold text-emerald-400 font-mono ml-2">
+                                                              {player.projectedPoints?.toFixed(1) || '0.0'} Proj
+                                                            </div>
+                                                          </div>
+                                                        ))
+                                                      ) : (
+                                                        <div className="text-[10px] text-slate-500 italic p-1">
+                                                          {swipe.offeredPlayerIds.join(', ') || 'No player IDs'}
+                                                        </div>
+                                                      )}
+                                                    </div>
+                                                  </div>
+
+                                                  {/* Requested Players (Target Gives) */}
+                                                  <div className="p-2 rounded-lg bg-slate-900/60 border border-slate-800/70 space-y-1.5">
+                                                    <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                                      <span>Requested from {swipe.targetTeamName || 'Opponent'}</span>
+                                                      <span className="text-slate-500 font-mono">
+                                                        {swipe.tradeType.split('-for-')[1] ||
+                                                          swipe.targetPlayers.length}{' '}
+                                                        Player
+                                                        {swipe.targetPlayers.length > 1 ? 's' : ''}
+                                                      </span>
+                                                    </div>
+
+                                                    <div className="space-y-1">
+                                                      {swipe.targetPlayers.length > 0 ? (
+                                                        swipe.targetPlayers.map((player) => (
+                                                          <div
+                                                            key={player.id}
+                                                            className="flex items-center justify-between p-1.5 rounded-md bg-slate-950/80 border border-slate-800/60"
+                                                          >
+                                                            <div className="flex items-center gap-2 min-w-0">
+                                                              {player.headshotUrl ? (
+                                                                <img
+                                                                  src={player.headshotUrl}
+                                                                  alt={player.fullName}
+                                                                  className="w-6 h-6 rounded-full object-cover bg-slate-900 border border-slate-800 flex-shrink-0"
+                                                                />
+                                                             ) : (
+                                                                <div className="w-6 h-6 rounded-full bg-slate-800 text-[9px] font-bold text-slate-400 flex items-center justify-center flex-shrink-0">
+                                                                  {player.position}
+                                                                </div>
+                                                              )}
+                                                              <div className="min-w-0">
+                                                                <div className="text-xs font-semibold text-white truncate">
+                                                                  {player.fullName}
+                                                                </div>
+                                                                <div className="text-[9px] text-slate-400 flex items-center gap-1">
+                                                                  <span className="font-bold text-amber-400">
+                                                                    {player.position}
+                                                                  </span>
+                                                                  <span>•</span>
+                                                                  <span>{player.nflTeam}</span>
+                                                                </div>
+                                                              </div>
+                                                            </div>
+                                                            <div className="text-[10px] font-bold text-emerald-400 font-mono ml-2">
+                                                              {player.projectedPoints?.toFixed(1) || '0.0'} Proj
+                                                            </div>
+                                                          </div>
+                                                        ))
+                                                      ) : (
+                                                        <div className="text-[10px] text-slate-500 italic p-1">
+                                                          {swipe.targetPlayerIds.join(', ') || 'No player IDs'}
+                                                        </div>
+                                                      )}
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
+                                    </>
+                                  );
+                                })()}
+                              </div>
+                            )}
+
+                            {/* Sub-tab View 2: Teams & Claims */}
+                            {leagueSubTab[league.espnLeagueId] !== 'swipes' && (
+                              <div className="p-4 space-y-2">
+                                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">
+                                  Roster Teams ({league.teams.length})
+                                </div>
+
+                                <div className="grid grid-cols-1 gap-2">
+                                  {league.teams.map((team: AdminTeamSummary) => {
+                                    const teamAssignKey = `${league.espnLeagueId}_${team.id}`;
+                                    const isAssigningThis = assigningTeamKey === teamAssignKey;
+                                    const isActionBusy =
+                                      busyActionKey === `assign_${league.espnLeagueId}_${team.id}` ||
+                                      busyActionKey === `unassign_${league.espnLeagueId}_${team.id}`;
+
+                                    return (
+                                      <div
+                                        key={team.id}
+                                        className="p-3 rounded-xl bg-slate-950 border border-slate-800/90 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-left"
+                                      >
+                                        <div className="flex items-center gap-3 min-w-0">
+                                          {team.logoUrl ? (
+                                            <img
+                                              src={team.logoUrl}
+                                              alt={team.name}
+                                              className="w-8 h-8 rounded-lg object-cover bg-slate-900 border border-slate-800 flex-shrink-0"
+                                            />
+                                          ) : (
+                                            <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-400 font-black text-xs flex items-center justify-center flex-shrink-0">
+                                              {team.name.slice(0, 2).toUpperCase()}
+                                            </div>
+                                          )}
+
+                                          <div className="min-w-0">
+                                            <div className="text-xs font-bold text-white truncate">
+                                              {team.name}
+                                            </div>
+                                            <div className="text-[10px] text-slate-400 flex items-center gap-1.5 flex-wrap">
+                                              <span>Owner: {team.ownerName}</span>
+                                              <span>•</span>
+                                              <span>{team.rosterCount} Players</span>
+                                            </div>
+                                          </div>
+                                        </div>
+
+                                        {/* Claim Status & Actions */}
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          {team.isClaimed ? (
+                                            <>
+                                              <div className="px-2 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-[11px] font-semibold flex items-center gap-1">
+                                                <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
+                                                <span>
+                                                  Claimed: <strong>@{team.claimedBy}</strong>
+                                                </span>
+                                              </div>
 
                                               <button
                                                 type="button"
-                                                disabled={!selectedAssignUserId || isActionBusy}
-                                                onClick={() =>
-                                                  handleAssignTeam(
-                                                    league.espnLeagueId,
-                                                    team.id,
-                                                    selectedAssignUserId
-                                                  )
-                                                }
-                                                className="px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white text-xs font-bold transition"
+                                                disabled={isActionBusy}
+                                                onClick={() => handleUnassignTeam(league.espnLeagueId, team.id)}
+                                                className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-rose-600/20 border border-slate-800 hover:border-rose-500/40 text-rose-400 text-xs font-semibold flex items-center gap-1 transition disabled:opacity-50"
+                                                title="Unassign user from this team"
                                               >
                                                 {isActionBusy ? (
                                                   <Loader2 className="w-3 h-3 animate-spin" />
                                                 ) : (
-                                                  'Assign'
+                                                  <>
+                                                    <UserX className="w-3 h-3" />
+                                                    <span>Unassign</span>
+                                                  </>
                                                 )}
                                               </button>
-
-                                              <button
-                                                type="button"
-                                                onClick={() => {
-                                                  setAssigningTeamKey(null);
-                                                  setSelectedAssignUserId('');
-                                                }}
-                                                className="px-1.5 py-1 text-slate-400 hover:text-white text-xs"
-                                              >
-                                                ✕
-                                              </button>
-                                            </div>
+                                            </>
                                           ) : (
-                                            <button
-                                              type="button"
-                                              onClick={() => {
-                                                setAssigningTeamKey(teamAssignKey);
-                                                setSelectedAssignUserId(users[0]?.id || '');
-                                              }}
-                                              className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-purple-600/20 border border-slate-800 hover:border-purple-500/40 text-purple-300 text-xs font-semibold flex items-center gap-1 transition"
-                                            >
-                                              <UserCheck className="w-3 h-3 text-purple-400" />
-                                              <span>Assign User</span>
-                                            </button>
+                                            <>
+                                              <span className="text-[11px] text-slate-500 font-medium">
+                                                Unclaimed
+                                              </span>
+
+                                              {isAssigningThis ? (
+                                                <div className="flex items-center gap-1.5 bg-slate-900 p-1 rounded-xl border border-purple-500/40">
+                                                  <select
+                                                    value={selectedAssignUserId}
+                                                    onChange={(e) => setSelectedAssignUserId(e.target.value)}
+                                                    className="px-2 py-1 rounded-lg bg-slate-950 border border-slate-800 text-xs text-white outline-none"
+                                                  >
+                                                    <option value="">Select User...</option>
+                                                    {users.map((u) => (
+                                                      <option key={u.id} value={u.id}>
+                                                        @{u.username}
+                                                      </option>
+                                                    ))}
+                                                  </select>
+
+                                                  <button
+                                                    type="button"
+                                                    disabled={!selectedAssignUserId || isActionBusy}
+                                                    onClick={() =>
+                                                      handleAssignTeam(
+                                                        league.espnLeagueId,
+                                                        team.id,
+                                                        selectedAssignUserId
+                                                      )
+                                                    }
+                                                    className="px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white text-xs font-bold transition"
+                                                  >
+                                                    {isActionBusy ? (
+                                                      <Loader2 className="w-3 h-3 animate-spin" />
+                                                    ) : (
+                                                      'Assign'
+                                                    )}
+                                                  </button>
+
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      setAssigningTeamKey(null);
+                                                      setSelectedAssignUserId('');
+                                                    }}
+                                                    className="px-1.5 py-1 text-slate-400 hover:text-white text-xs"
+                                                  >
+                                                    ✕
+                                                  </button>
+                                                </div>
+                                              ) : (
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    setAssigningTeamKey(teamAssignKey);
+                                                    setSelectedAssignUserId(users[0]?.id || '');
+                                                  }}
+                                                  className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-purple-600/20 border border-slate-800 hover:border-purple-500/40 text-purple-300 text-xs font-semibold flex items-center gap-1 transition"
+                                                >
+                                                  <UserCheck className="w-3 h-3 text-purple-400" />
+                                                  <span>Assign User</span>
+                                                </button>
+                                              )}
+                                            </>
                                           )}
-                                        </>
-                                      )}
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>

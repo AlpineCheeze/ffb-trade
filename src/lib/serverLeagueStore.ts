@@ -4,6 +4,7 @@ import path from 'path';
 import crypto from 'crypto';
 import {
   League,
+  Player,
   Swipe,
   Match,
   TradeType,
@@ -1223,6 +1224,209 @@ export function toClientLeagueView(
     incomingActivityHints,
     priorityTargetKeys,
     warmLeads,
+  };
+}
+
+export interface AdminSwipeDetail {
+  id: string;
+  teamId: string;
+  teamName: string;
+  teamLogoUrl?: string | null;
+  teamOwnerName?: string;
+  claimedBy?: string;
+  targetTeamId?: string;
+  targetTeamName?: string;
+  targetTeamLogoUrl?: string | null;
+  targetTeamOwnerName?: string;
+  targetClaimedBy?: string;
+  tradeType: TradeType;
+  offeredPlayerIds: string[];
+  offeredPlayers: Player[];
+  targetPlayerIds: string[];
+  targetPlayers: Player[];
+  isInterested: boolean; // true = Want, false = Pass
+  createdAt: string;
+  isMatched?: boolean;
+  matchId?: string;
+  hasTargetResponded?: boolean;
+  targetResponse?: 'want' | 'pass' | 'none';
+}
+
+/**
+ * Superuser: Returns comprehensive swipe activity, enriched with team and player details,
+ * mutual match statuses, and reciprocity tracking for a selected league.
+ */
+export function getLeagueSwipeActivity(espnLeagueId: string): {
+  leagueId: string;
+  leagueName: string;
+  espnLeagueId: string;
+  totalSwipesCount: number;
+  wantsCount: number;
+  passesCount: number;
+  matchesCount: number;
+  wantRate?: number;
+  swipes: AdminSwipeDetail[];
+  teams: Array<{
+    id: string;
+    espnTeamId?: string;
+    name: string;
+    logoUrl?: string | null;
+    ownerName?: string;
+    isClaimed: boolean;
+    claimedBy?: string;
+    claimedByUserId?: string;
+    rosterCount: number;
+  }>;
+} | null {
+  const state = getServerLeagueState(espnLeagueId);
+  if (!state) return null;
+
+  const teamsById = new Map<string, any>();
+  const playersById = new Map<string, Player>();
+
+  for (const team of state.league.teams) {
+    teamsById.set(team.id, team);
+    if (Array.isArray(team.roster)) {
+      for (const p of team.roster) {
+        if (p && p.id) {
+          playersById.set(p.id, p);
+        }
+      }
+    }
+  }
+
+  // Pre-index active matches for fast lookup
+  const activeMatches = (state.matches || []).filter((m) => m && !m.deletedAt);
+
+  // Index swipes to detect target reciprocal responses
+  const swipeLookup = new Map<string, Swipe>();
+  for (const s of state.swipes) {
+    const key = `${s.teamId}->${s.targetTeamId || ''}|${[...(s.offeredPlayerIds || [])].sort().join(',')}|${[...(s.targetPlayerIds || [])].sort().join(',')}`;
+    swipeLookup.set(key, s);
+  }
+
+  const enrichedSwipes: AdminSwipeDetail[] = (state.swipes || []).map((s) => {
+    const initiatingTeam = teamsById.get(s.teamId);
+    const targetTeam = s.targetTeamId ? teamsById.get(s.targetTeamId) : undefined;
+
+    const offeredPlayers: Player[] = (s.offeredPlayerIds || []).map(
+      (pid) =>
+        playersById.get(pid) || {
+          id: pid,
+          espnPlayerId: pid,
+          fullName: `Player ${pid}`,
+          position: 'FLEX',
+          nflTeam: 'NFL',
+          headshotUrl: '',
+          opponentDifficulty: 'normal',
+          nextOpponent: '',
+          byeWeek: 0,
+          injuryStatus: 'ACTIVE',
+          projectedPoints: 0,
+          seasonAvgPoints: 0,
+        }
+    );
+
+    const targetPlayers: Player[] = (s.targetPlayerIds || []).map(
+      (pid) =>
+        playersById.get(pid) || {
+          id: pid,
+          espnPlayerId: pid,
+          fullName: `Player ${pid}`,
+          position: 'FLEX',
+          nflTeam: 'NFL',
+          headshotUrl: '',
+          opponentDifficulty: 'normal',
+          nextOpponent: '',
+          byeWeek: 0,
+          injuryStatus: 'ACTIVE',
+          projectedPoints: 0,
+          seasonAvgPoints: 0,
+        }
+    );
+
+    // Check if matched
+    const matchedRecord = activeMatches.find((m) => {
+      const isTeamA = m.teamAId === s.teamId && m.teamBId === s.targetTeamId;
+      const isTeamB = m.teamBId === s.teamId && m.teamAId === s.targetTeamId;
+      if (!isTeamA && !isTeamB) return false;
+      const myMatchedPlayerIds = (isTeamA ? m.teamAPlayers : m.teamBPlayers).map((p) => p.id);
+      const oppMatchedPlayerIds = (isTeamA ? m.teamBPlayers : m.teamAPlayers).map((p) => p.id);
+      return (
+        arraysEqualIgnoreOrder(myMatchedPlayerIds, s.offeredPlayerIds || []) &&
+        arraysEqualIgnoreOrder(oppMatchedPlayerIds, s.targetPlayerIds || [])
+      );
+    });
+
+    // Check if target team responded
+    let hasTargetResponded = false;
+    let targetResponse: 'want' | 'pass' | 'none' = 'none';
+    if (s.targetTeamId) {
+      const reciprocalKey = `${s.targetTeamId}->${s.teamId}|${[...(s.targetPlayerIds || [])].sort().join(',')}|${[...(s.offeredPlayerIds || [])].sort().join(',')}`;
+      const reciprocalSwipe = swipeLookup.get(reciprocalKey);
+      if (reciprocalSwipe) {
+        hasTargetResponded = true;
+        targetResponse = reciprocalSwipe.isInterested ? 'want' : 'pass';
+      }
+    }
+
+    return {
+      id: s.id,
+      teamId: s.teamId,
+      teamName: initiatingTeam?.name || `Team ${s.teamId}`,
+      teamLogoUrl: initiatingTeam?.logoUrl,
+      teamOwnerName: initiatingTeam?.claimedBy || initiatingTeam?.ownerName,
+      claimedBy: initiatingTeam?.claimedBy,
+      targetTeamId: s.targetTeamId,
+      targetTeamName: targetTeam?.name || (s.targetTeamId ? `Team ${s.targetTeamId}` : undefined),
+      targetTeamLogoUrl: targetTeam?.logoUrl,
+      targetTeamOwnerName: targetTeam?.claimedBy || targetTeam?.ownerName,
+      targetClaimedBy: targetTeam?.claimedBy,
+      tradeType: s.tradeType,
+      offeredPlayerIds: s.offeredPlayerIds || [],
+      offeredPlayers,
+      targetPlayerIds: s.targetPlayerIds || [],
+      targetPlayers,
+      isInterested: Boolean(s.isInterested),
+      createdAt: s.createdAt,
+      isMatched: Boolean(matchedRecord),
+      matchId: matchedRecord?.id,
+      hasTargetResponded,
+      targetResponse,
+    };
+  });
+
+  // Sort newest first by default
+  enrichedSwipes.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  const wantsCount = enrichedSwipes.filter((s) => s.isInterested).length;
+  const passesCount = enrichedSwipes.length - wantsCount;
+  const wantRate =
+    enrichedSwipes.length > 0 ? Math.round((wantsCount / enrichedSwipes.length) * 100) : 0;
+
+  const teams = state.league.teams.map((t) => ({
+    id: t.id,
+    espnTeamId: t.espnTeamId,
+    name: t.name,
+    logoUrl: t.logoUrl,
+    ownerName: t.ownerName,
+    isClaimed: Boolean(t.isClaimed),
+    claimedBy: t.claimedBy,
+    claimedByUserId: t.claimedByUserId,
+    rosterCount: t.roster?.length || 0,
+  }));
+
+  return {
+    leagueId: state.league.id,
+    leagueName: state.league.name,
+    espnLeagueId: state.league.espnLeagueId,
+    totalSwipesCount: enrichedSwipes.length,
+    wantsCount,
+    passesCount,
+    matchesCount: (state.matches || []).length,
+    wantRate,
+    swipes: enrichedSwipes,
+    teams,
   };
 }
 

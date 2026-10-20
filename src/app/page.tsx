@@ -36,6 +36,8 @@ import {
   computeIncomingActivityHints,
   computePriorityTargetKeys,
   computeWarmTradeLeads,
+  generateSwipeKey,
+  getReciprocalTradeType,
   DeckItem,
 } from '@/lib/matchmaking';
 import { recordPackageSwipeEloUpdate, resetInternalEloStore } from '@/lib/elo';
@@ -794,9 +796,35 @@ export default function Home() {
 
   const effectivePriorityTargetKeys = useMemo<string[]>(() => {
     if (!userTeam) return [];
-    const localKeys = computePriorityTargetKeys(swipes, userTeam.id);
-    return Array.from(new Set([...localKeys, ...serverPriorityKeys]));
-  }, [userTeam, swipes, serverPriorityKeys]);
+    const localKeys = computePriorityTargetKeys(swipes, userTeam.id, matches);
+    const excludedKeys = new Set(
+      swipes
+        .filter((s) => s.teamId === userTeam.id)
+        .map((s) => generateSwipeKey(s.tradeType, s.offeredPlayerIds || [], s.targetPlayerIds || []))
+    );
+    for (const m of matches) {
+      if (!m || m.deletedAt) continue;
+      if (m.teamAId === userTeam.id) {
+        excludedKeys.add(
+          generateSwipeKey(
+            m.tradeType,
+            m.teamAPlayers.map((p) => p.id),
+            m.teamBPlayers.map((p) => p.id)
+          )
+        );
+      } else if (m.teamBId === userTeam.id) {
+        excludedKeys.add(
+          generateSwipeKey(
+            getReciprocalTradeType(m.tradeType),
+            m.teamBPlayers.map((p) => p.id),
+            m.teamAPlayers.map((p) => p.id)
+          )
+        );
+      }
+    }
+    const filteredServerKeys = serverPriorityKeys.filter((k) => !excludedKeys.has(k));
+    return Array.from(new Set([...localKeys, ...filteredServerKeys]));
+  }, [userTeam, swipes, serverPriorityKeys, matches]);
 
   const effectiveWarmLeads = useMemo<WarmTradeLead[]>(() => {
     if (!league || !userTeam) return [];
@@ -849,6 +877,7 @@ export default function Home() {
       tradeType,
       offeredPlayerIds: activeOfferedIds,
       swipes,
+      matches,
       selectedPositions,
       includedOpponentTeams,
       seed: activeSeed,
@@ -861,6 +890,7 @@ export default function Home() {
     requiredOfferedCount,
     tradeType,
     swipes,
+    matches,
     selectedPositions,
     includedOpponentTeams,
     deckSeed,

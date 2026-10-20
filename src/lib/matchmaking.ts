@@ -117,6 +117,7 @@ export interface GenerateDeckItemsOptions {
   tradeType: TradeType;
   offeredPlayerIds: string[];
   swipes?: Swipe[];
+  matches?: Match[];
   selectedPositions?: Position[];
   includedOpponentTeams?: Team[];
   seed?: string | number;
@@ -137,6 +138,7 @@ export function generateDeckItems({
   tradeType,
   offeredPlayerIds,
   swipes = [],
+  matches = [],
   selectedPositions = ['RB', 'WR', 'TE', 'QB', 'FLEX'],
   includedOpponentTeams,
   seed = 'pasta_loft_deck_seed',
@@ -150,6 +152,7 @@ export function generateDeckItems({
       : 1;
   const activeOfferedIds = Array.isArray(offeredPlayerIds) ? offeredPlayerIds : [];
   const safeSwipes = Array.isArray(swipes) ? swipes : [];
+  const safeMatches = Array.isArray(matches) ? matches : [];
 
   // Robust fallback: if includedOpponentTeams is not passed, derive from league
   // Also strictly exclude userTeam if accidentally included in includedOpponentTeams
@@ -165,6 +168,28 @@ export function generateDeckItems({
       .map((s) => generateSwipeKey(s.tradeType, s.offeredPlayerIds || [], s.targetPlayerIds || []))
   );
 
+  // Strictly exclude cards that are already matched in matches
+  for (const m of safeMatches) {
+    if (!m || m.deletedAt) continue;
+    if (m.teamAId === userTeam.id && m.tradeType === tradeType) {
+      existingSwipeKeys.add(
+        generateSwipeKey(
+          m.tradeType,
+          m.teamAPlayers.map((p) => p.id),
+          m.teamBPlayers.map((p) => p.id)
+        )
+      );
+    } else if (m.teamBId === userTeam.id && getReciprocalTradeType(m.tradeType) === tradeType) {
+      existingSwipeKeys.add(
+        generateSwipeKey(
+          tradeType,
+          m.teamBPlayers.map((p) => p.id),
+          m.teamAPlayers.map((p) => p.id)
+        )
+      );
+    }
+  }
+
   // Build priority target keys set from explicit priorityTargetKeys AND any opponent swipes in safeSwipes
   const priorityKeysSet = new Set<string>(Array.isArray(priorityTargetKeys) ? priorityTargetKeys : []);
   for (const s of safeSwipes) {
@@ -175,7 +200,8 @@ export function generateDeckItems({
       s.teamId !== userTeam.id &&
       isReciprocalTradeType(tradeType, s.tradeType) &&
       arraysEqualIgnoreOrder(s.targetPlayerIds || [], activeOfferedIds) &&
-      !hasUserRespondedToIncomingSwipe(s, safeSwipes, userTeam.id)
+      !hasUserRespondedToIncomingSwipe(s, safeSwipes, userTeam.id) &&
+      !isSwipeAlreadyMatched(s, safeMatches, userTeam.id)
     ) {
       priorityKeysSet.add(
         generateSwipeKey(tradeType, activeOfferedIds, s.offeredPlayerIds || [])
@@ -322,7 +348,8 @@ export function generateDeckItems({
 /**
  * True multiset equality comparison that preserves duplicate counts.
  */
-export function arraysEqualIgnoreOrder(a: string[], b: string[]): boolean {
+export function arraysEqualIgnoreOrder(a?: string[] | null, b?: string[] | null): boolean {
+  if (!a || !b || !Array.isArray(a) || !Array.isArray(b)) return false;
   if (a.length !== b.length) return false;
   const sortedA = [...a].sort();
   const sortedB = [...b].sort();
@@ -512,6 +539,29 @@ export function createSeedOpponentSwipes(league: League): Swipe[] {
 }
 
 /**
+ * Checks if a specific incoming swipe already corresponds to an active completed match in matches.
+ */
+export function isSwipeAlreadyMatched(
+  incomingSwipe: Swipe,
+  matches?: Match[],
+  userTeamId?: string | null
+): boolean {
+  if (!incomingSwipe || !Array.isArray(matches) || !userTeamId) return false;
+  return matches.some((m) => {
+    if (!m || m.deletedAt) return false;
+    const isTeamA = m.teamAId === userTeamId && m.teamBId === incomingSwipe.teamId;
+    const isTeamB = m.teamBId === userTeamId && m.teamAId === incomingSwipe.teamId;
+    if (!isTeamA && !isTeamB) return false;
+    const userMatchedPlayerIds = (isTeamA ? m.teamAPlayers : m.teamBPlayers).map((p) => p.id);
+    const oppMatchedPlayerIds = (isTeamA ? m.teamBPlayers : m.teamAPlayers).map((p) => p.id);
+    return (
+      arraysEqualIgnoreOrder(userMatchedPlayerIds, incomingSwipe.targetPlayerIds || []) &&
+      arraysEqualIgnoreOrder(oppMatchedPlayerIds, incomingSwipe.offeredPlayerIds || [])
+    );
+  });
+}
+
+/**
  * Checks if the user has already responded with a reciprocal Want or Pass to an incoming swipe.
  */
 export function hasUserRespondedToIncomingSwipe(
@@ -519,13 +569,13 @@ export function hasUserRespondedToIncomingSwipe(
   allSwipes: Swipe[],
   userTeamId: string
 ): boolean {
-  if (!incomingSwipe || !incomingSwipe.tradeType) return false;
+  if (!incomingSwipe || !incomingSwipe.tradeType || !Array.isArray(allSwipes)) return false;
   const reciprocalType = getReciprocalTradeType(incomingSwipe.tradeType);
   return allSwipes.some(
     (r) =>
       r &&
       r.teamId === userTeamId &&
-      r.targetTeamId === incomingSwipe.teamId &&
+      (!r.targetTeamId || r.targetTeamId === incomingSwipe.teamId) &&
       r.tradeType === reciprocalType &&
       arraysEqualIgnoreOrder(r.offeredPlayerIds || [], incomingSwipe.targetPlayerIds || []) &&
       arraysEqualIgnoreOrder(r.targetPlayerIds || [], incomingSwipe.offeredPlayerIds || [])
@@ -586,11 +636,13 @@ export function computeIncomingActivityHints(
  * for all opponent `isInterested: true` swipes targeting `userTeamId`.
  * Used for blind priority deck injection so candidate cards that complete an existing opponent
  * swipe appear near the top of the deck.
- * Excludes incoming swipes where the user has already responded with a reciprocal Want or Pass.
+ * Excludes incoming swipes where the user has already responded with a reciprocal Want or Pass,
+ * or where an active mutual match already exists in `matches`.
  */
 export function computePriorityTargetKeys(
   allSwipes: Swipe[],
-  userTeamId?: string | null
+  userTeamId?: string | null,
+  matches?: Match[]
 ): string[] {
   if (!userTeamId || !Array.isArray(allSwipes)) return [];
 
@@ -602,7 +654,9 @@ export function computePriorityTargetKeys(
       s.targetTeamId === userTeamId &&
       s.teamId !== userTeamId &&
       s.tradeType &&
-      !hasUserRespondedToIncomingSwipe(s, allSwipes, userTeamId)
+      isValidTradeType(s.tradeType) &&
+      !hasUserRespondedToIncomingSwipe(s, allSwipes, userTeamId) &&
+      !isSwipeAlreadyMatched(s, matches, userTeamId)
     ) {
       const userTradeType = getReciprocalTradeType(s.tradeType);
       const key = generateSwipeKey(

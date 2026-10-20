@@ -4,9 +4,13 @@ import {
   generateDeckItems,
   computePriorityTargetKeys,
   getReciprocalTradeType,
+  arraysEqualIgnoreOrder,
+  hasUserRespondedToIncomingSwipe,
+  isSwipeAlreadyMatched,
   VALID_TRADE_TYPES,
 } from '@/lib/matchmaking';
-import { Swipe, TradeType } from '@/types/fantasy';
+import { toClientLeagueView } from '@/lib/serverLeagueStore';
+import { Swipe, Match, TradeType, ServerLeagueState } from '@/types/fantasy';
 
 export async function runPotentialMatchDeckPriorityTests() {
   console.log('========================================================');
@@ -401,6 +405,150 @@ export async function runPotentialMatchDeckPriorityTests() {
     const expectedIds = [bP(0), bP(1)].sort();
     assert.deepStrictEqual(topCardIds, expectedIds, 'Top card must match opponent pair');
     console.log('✓ Test 7 Passed: Canonical sorting handles arbitrary player ID ordering.');
+  }
+
+  // -------------------------------------------------------------------------
+  // Test 8: Active match in `matches` strictly excludes card from deck & priority
+  // -------------------------------------------------------------------------
+  console.log('[Test 8] Active match in matches strictly excludes card from deck and priority keys...');
+  {
+    const oppSwipe: Swipe = {
+      id: 'sw_opp_matched_case',
+      teamId: oppTeamB.id,
+      tradeType: '1-for-1',
+      offeredPlayerIds: [bP(0)],
+      targetPlayerIds: [uP(0)],
+      targetTeamId: userTeam.id,
+      isInterested: true,
+      createdAt: new Date().toISOString(),
+    };
+
+    const existingMatch: Match = {
+      id: 'm_active_1',
+      leagueId: league.id,
+      tradeType: '1-for-1',
+      teamAId: userTeam.id,
+      teamBId: oppTeamB.id,
+      teamAPlayers: [userTeam.roster[0]],
+      teamBPlayers: [oppTeamB.roster[0]],
+      teamA: userTeam,
+      teamB: oppTeamB,
+      createdAt: new Date().toISOString(),
+    };
+
+    // Even if swipes has no user swipe, matches has the active match
+    const priorityKeysWithMatch = computePriorityTargetKeys([oppSwipe], userTeam.id, [existingMatch]);
+    assert.strictEqual(
+      priorityKeysWithMatch.length,
+      0,
+      'computePriorityTargetKeys must exclude incoming swipe if active match exists in matches'
+    );
+
+    const deckWithMatch = generateDeckItems({
+      league,
+      userTeam,
+      tradeType: '1-for-1',
+      offeredPlayerIds: [uP(0)],
+      swipes: [oppSwipe],
+      matches: [existingMatch],
+      priorityTargetKeys: priorityKeysWithMatch,
+      seed: 'seed_match_exclusion',
+    });
+
+    assert.ok(
+      !deckWithMatch.some((card) => card.players.some((p) => p.id === bP(0))),
+      'Already matched card must be excluded from candidate deck via matches parameter'
+    );
+    console.log('✓ Test 8 Passed: Active match in matches strictly excluded from deck and priority keys.');
+  }
+
+  // -------------------------------------------------------------------------
+  // Test 9: toClientLeagueView integration & end-to-end priority deck placement
+  // -------------------------------------------------------------------------
+  console.log('[Test 9] toClientLeagueView integration generates priorityTargetKeys and deck index 0...');
+  {
+    const oppSwipe: Swipe = {
+      id: 'sw_server_view_opp',
+      teamId: oppTeamB.id,
+      tradeType: '1-for-1',
+      offeredPlayerIds: [bP(2)],
+      targetPlayerIds: [uP(1)],
+      targetTeamId: userTeam.id,
+      isInterested: true,
+      createdAt: new Date().toISOString(),
+    };
+
+    const serverState: ServerLeagueState = {
+      league,
+      swipes: [oppSwipe],
+      matches: [],
+      deletedMatches: [],
+      elo: {},
+      updatedAt: new Date().toISOString(),
+    };
+
+    const clientView = toClientLeagueView(serverState, userTeam.id);
+    assert.ok(
+      Array.isArray(clientView.priorityTargetKeys),
+      'toClientLeagueView must return priorityTargetKeys array'
+    );
+    assert.strictEqual(
+      clientView.priorityTargetKeys.length,
+      1,
+      'toClientLeagueView should have 1 priority key'
+    );
+
+    // Client generates deck using toClientLeagueView's priorityTargetKeys
+    const clientDeck = generateDeckItems({
+      league: clientView.league,
+      userTeam,
+      tradeType: '1-for-1',
+      offeredPlayerIds: [uP(1)],
+      swipes: clientView.mySwipes,
+      matches: clientView.matches,
+      priorityTargetKeys: clientView.priorityTargetKeys,
+      seed: 'seed_client_view_test',
+    });
+
+    assert.ok(clientDeck.length > 0, 'Client deck should have items');
+    assert.strictEqual(
+      clientDeck[0].players[0].id,
+      bP(2),
+      'Client deck index 0 must be the priority card derived from server toClientLeagueView'
+    );
+    console.log('✓ Test 9 Passed: toClientLeagueView end-to-end priority deck placement verified.');
+  }
+
+  // -------------------------------------------------------------------------
+  // Test 10: Null-safety and edge cases
+  // -------------------------------------------------------------------------
+  console.log('[Test 10] Robust null-safety and malformed inputs...');
+  {
+    assert.strictEqual(arraysEqualIgnoreOrder(undefined, undefined), false);
+    assert.strictEqual(arraysEqualIgnoreOrder(null, ['a']), false);
+    assert.strictEqual(arraysEqualIgnoreOrder(['a'], null), false);
+    assert.strictEqual(arraysEqualIgnoreOrder([], []), true);
+    assert.strictEqual(arraysEqualIgnoreOrder(['a', 'b'], ['b', 'a']), true);
+
+    assert.strictEqual(
+      hasUserRespondedToIncomingSwipe(null as any, [], userTeam.id),
+      false
+    );
+    assert.strictEqual(
+      hasUserRespondedToIncomingSwipe({} as any, null as any, userTeam.id),
+      false
+    );
+
+    const keysNull = computePriorityTargetKeys(null as any, null as any);
+    assert.deepStrictEqual(keysNull, []);
+
+    const deckNull = generateDeckItems({
+      tradeType: '1-for-1',
+      offeredPlayerIds: [],
+    });
+    assert.deepStrictEqual(deckNull, []);
+
+    console.log('✓ Test 10 Passed: Null-safety and boundary conditions verified.');
   }
 
   console.log('\n========================================================');

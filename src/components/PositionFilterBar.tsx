@@ -704,9 +704,26 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
                       {player.position} • {player.nflTeam}
                     </span>
                     {isTargeted && (
-                      <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-0.5 flex-shrink-0">
+                      <span
+                        className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-0.5 flex-shrink-0"
+                        title={
+                          incomingActivityHints?.playerInterestedTeams?.[player.id]?.length
+                            ? `Interested: ${incomingActivityHints.playerInterestedTeams[player.id]
+                                .map((t) => `${t.teamName}${t.ownerName ? ` (${t.ownerName})` : ''}`)
+                                .join(', ')}`
+                            : 'One or more opponents want this player'
+                        }
+                      >
                         <Flame className="w-2.5 h-2.5 text-amber-400" />
-                        <span>Wanted</span>
+                        <span>
+                          {incomingActivityHints?.playerInterestedTeams?.[player.id]?.length
+                            ? `${incomingActivityHints.playerInterestedTeams[player.id].length} ${
+                                incomingActivityHints.playerInterestedTeams[player.id].length === 1
+                                  ? 'Team Wants'
+                                  : 'Teams Want'
+                              }`
+                            : 'Wanted'}
+                        </span>
                       </span>
                     )}
                   </div>

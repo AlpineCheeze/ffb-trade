@@ -65,6 +65,10 @@ async function run() {
   if (deckPriorityModule && deckPriorityModule.testPromise) {
     await deckPriorityModule.testPromise;
   }
+  const rosterInterestedTeamsModule = jiti('./test_roster_interested_teams.ts');
+  if (rosterInterestedTeamsModule && rosterInterestedTeamsModule.testPromise) {
+    await rosterInterestedTeamsModule.testPromise;
+  }
 }
 
 run().catch((err) => {

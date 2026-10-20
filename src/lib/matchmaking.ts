@@ -7,6 +7,7 @@ import {
   TradeType,
   Position,
   IncomingActivityHints,
+  InterestedTeamDetail,
   WarmTradeLead,
 } from '@/types/fantasy';
 
@@ -583,22 +584,33 @@ export function hasUserRespondedToIncomingSwipe(
 }
 
 /**
- * Computes blind-safe incoming activity hints for `userTeamId`.
- * Reveals which user-perspective trade types (e.g. '1-for-2' if an opponent swiped '2-for-1' on user)
- * and which of the user's own roster player IDs have incoming `isInterested: true` swipes from opponents,
- * without leaking which opponent swiped or which opponent players were offered.
- * Excludes incoming swipes where the user has already responded with a reciprocal Want or Pass.
+ * Computes incoming activity hints for `userTeamId`.
+ * Reveals which user-perspective trade types (e.g. '1-for-2' if an opponent swiped '2-for-1' on user),
+ * which of the user's own roster player IDs have incoming `isInterested: true` swipes from opponents,
+ * and which other teams are interested in each specific player.
+ * Excludes incoming swipes where the user has already responded with a reciprocal Want or Pass,
+ * or where an active mutual match already exists in `matches`.
  */
 export function computeIncomingActivityHints(
   allSwipes: Swipe[],
-  userTeamId?: string | null
+  userTeamId?: string | null,
+  matches?: Match[],
+  teams?: Team[]
 ): IncomingActivityHints {
   if (!userTeamId || !Array.isArray(allSwipes)) {
     return {
       interestedTradeTypes: [],
       targetedPlayerIds: [],
       totalIncomingCount: 0,
+      playerInterestedTeams: {},
     };
+  }
+
+  const teamsById = new Map<string, Team>();
+  if (Array.isArray(teams)) {
+    for (const t of teams) {
+      if (t && t.id) teamsById.set(t.id, t);
+    }
   }
 
   const incomingSwipes = allSwipes.filter(
@@ -607,27 +619,62 @@ export function computeIncomingActivityHints(
       s.isInterested &&
       s.targetTeamId === userTeamId &&
       s.teamId !== userTeamId &&
+      (!matches || !isSwipeAlreadyMatched(s, matches, userTeamId)) &&
       !hasUserRespondedToIncomingSwipe(s, allSwipes, userTeamId)
   );
 
   const tradeTypeSet = new Set<TradeType>();
   const targetedPlayerIdSet = new Set<string>();
+  const playerInterestedTeamsMap: Record<string, Map<string, InterestedTeamDetail>> = {};
 
   for (const s of incomingSwipes) {
-    if (s.tradeType) {
-      tradeTypeSet.add(getReciprocalTradeType(s.tradeType));
+    const reciprocalType = s.tradeType ? getReciprocalTradeType(s.tradeType) : undefined;
+    if (reciprocalType) {
+      tradeTypeSet.add(reciprocalType);
     }
     if (Array.isArray(s.targetPlayerIds)) {
       for (const pid of s.targetPlayerIds) {
-        if (pid) targetedPlayerIdSet.add(pid);
+        if (!pid) continue;
+        targetedPlayerIdSet.add(pid);
+
+        if (!playerInterestedTeamsMap[pid]) {
+          playerInterestedTeamsMap[pid] = new Map();
+        }
+
+        const teamMap = playerInterestedTeamsMap[pid];
+        const opponentTeam = teamsById.get(s.teamId);
+        const teamName = opponentTeam?.name || `Team ${s.teamId}`;
+        const ownerName = opponentTeam?.claimedBy || opponentTeam?.ownerName;
+        const logoUrl = opponentTeam?.logoUrl;
+
+        if (!teamMap.has(s.teamId)) {
+          teamMap.set(s.teamId, {
+            teamId: s.teamId,
+            teamName,
+            ownerName,
+            logoUrl,
+            tradeTypes: reciprocalType ? [reciprocalType] : [],
+          });
+        } else {
+          const existing = teamMap.get(s.teamId)!;
+          if (reciprocalType && !existing.tradeTypes?.includes(reciprocalType)) {
+            existing.tradeTypes = [...(existing.tradeTypes || []), reciprocalType];
+          }
+        }
       }
     }
+  }
+
+  const playerInterestedTeams: Record<string, InterestedTeamDetail[]> = {};
+  for (const [pid, teamMap] of Object.entries(playerInterestedTeamsMap)) {
+    playerInterestedTeams[pid] = Array.from(teamMap.values());
   }
 
   return {
     interestedTradeTypes: Array.from(tradeTypeSet),
     targetedPlayerIds: Array.from(targetedPlayerIdSet),
     totalIncomingCount: incomingSwipes.length,
+    playerInterestedTeams,
   };
 }
 

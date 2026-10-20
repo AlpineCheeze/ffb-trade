@@ -1203,7 +1203,12 @@ export function toClientLeagueView(
   const myDeletedMatches = teamId
     ? (state.deletedMatches || []).filter((m) => m.teamAId === teamId || m.teamBId === teamId)
     : [];
-  const incomingActivityHints = computeIncomingActivityHints(state.swipes, teamId);
+  const incomingActivityHints = computeIncomingActivityHints(
+    state.swipes,
+    teamId,
+    state.matches,
+    state.league?.teams
+  );
   const priorityTargetKeys = computePriorityTargetKeys(state.swipes, teamId, state.matches);
   const warmLeads = computeWarmTradeLeads(state.swipes, state.matches, state.league, teamId);
 

@@ -120,10 +120,19 @@ export interface InternalEloRecord {
   lastUpdated: string;
 }
 
+export interface InterestedTeamDetail {
+  teamId: string;
+  teamName: string;
+  ownerName?: string;
+  logoUrl?: string;
+  tradeTypes?: TradeType[]; // user-perspective trade types (e.g. '1-for-1', '2-for-1')
+}
+
 export interface IncomingActivityHints {
   interestedTradeTypes: TradeType[]; // user-perspective trade types (e.g. '1-for-2' if opponent swiped '2-for-1' on user)
   targetedPlayerIds: string[]; // user's own roster player IDs that opponents swiped Want on
   totalIncomingCount: number;
+  playerInterestedTeams?: Record<string, InterestedTeamDetail[]>; // playerId -> list of interested teams
 }
 
 export interface WarmTradeLead {

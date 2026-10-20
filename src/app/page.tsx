@@ -51,6 +51,7 @@ import {
   TradeType,
   UserAccount,
   IncomingActivityHints,
+  InterestedTeamDetail,
   WarmTradeLead,
   ResetScope,
 } from '@/types/fantasy';
@@ -769,7 +770,7 @@ export default function Home() {
   // Combine server-computed incoming activity hints, priority target keys, and warm leads with local seed swipes
   const effectiveIncomingHints = useMemo<IncomingActivityHints | undefined>(() => {
     if (!userTeam) return undefined;
-    const localHints = computeIncomingActivityHints(swipes, userTeam.id);
+    const localHints = computeIncomingActivityHints(swipes, userTeam.id, matches, league?.teams);
     if (!serverIncomingHints) return localHints;
 
     const mergedTradeTypes = Array.from(
@@ -784,6 +785,32 @@ export default function Home() {
         ...(serverIncomingHints.targetedPlayerIds || []),
       ])
     );
+
+    const mergedPlayerInterestedTeams: Record<string, InterestedTeamDetail[]> = {};
+    const allPlayerIds = new Set([
+      ...Object.keys(localHints.playerInterestedTeams || {}),
+      ...Object.keys(serverIncomingHints.playerInterestedTeams || {}),
+    ]);
+
+    for (const pid of allPlayerIds) {
+      const localList = localHints.playerInterestedTeams?.[pid] || [];
+      const serverList = serverIncomingHints.playerInterestedTeams?.[pid] || [];
+      const teamMap = new Map<string, InterestedTeamDetail>();
+
+      for (const t of [...serverList, ...localList]) {
+        if (!teamMap.has(t.teamId)) {
+          teamMap.set(t.teamId, { ...t });
+        } else {
+          const existing = teamMap.get(t.teamId)!;
+          if (t.tradeTypes && t.tradeTypes.length > 0) {
+            const combinedTypes = Array.from(new Set([...(existing.tradeTypes || []), ...t.tradeTypes]));
+            teamMap.set(t.teamId, { ...existing, tradeTypes: combinedTypes });
+          }
+        }
+      }
+      mergedPlayerInterestedTeams[pid] = Array.from(teamMap.values());
+    }
+
     return {
       interestedTradeTypes: mergedTradeTypes,
       targetedPlayerIds: mergedTargetedIds,
@@ -791,8 +818,9 @@ export default function Home() {
         localHints.totalIncomingCount || 0,
         serverIncomingHints.totalIncomingCount || 0
       ),
+      playerInterestedTeams: mergedPlayerInterestedTeams,
     };
-  }, [userTeam, swipes, serverIncomingHints]);
+  }, [userTeam, swipes, matches, league?.teams, serverIncomingHints]);
 
   const effectivePriorityTargetKeys = useMemo<string[]>(() => {
     if (!userTeam) return [];
@@ -2253,12 +2281,20 @@ export default function Home() {
           <div className="w-full">
             <ShoppingRoster
               userTeam={userTeam}
+              allTeams={league?.teams || []}
               tradeType={tradeType}
               selectedPlayerIds={selectedOfferedPlayerIds}
               onTradeTypeChange={handleTradeTypeChange}
               onTogglePlayer={handleToggleOfferedPlayer}
               onDoneShopping={() => setActiveTab('deck')}
               incomingActivityHints={effectiveIncomingHints}
+              onTradeWithTeam={(player, teamDetail) => {
+                setSelectedOfferedPlayerIds([player.id]);
+                if (teamDetail.tradeTypes && teamDetail.tradeTypes.length > 0) {
+                  handleTradeTypeChange(teamDetail.tradeTypes[0]);
+                }
+                setActiveTab('deck');
+              }}
             />
           </div>
         )}

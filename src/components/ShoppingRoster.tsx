@@ -1,7 +1,14 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { Player, Position, Team, TradeType, IncomingActivityHints } from '@/types/fantasy';
+import {
+  Player,
+  Position,
+  Team,
+  TradeType,
+  IncomingActivityHints,
+  InterestedTeamDetail,
+} from '@/types/fantasy';
 import {
   Sparkles,
   ArrowRight,
@@ -10,28 +17,33 @@ import {
   AlertCircle,
   ChevronDown,
   Flame,
+  Users,
 } from 'lucide-react';
 
 interface ShoppingRosterProps {
   userTeam: Team;
+  allTeams?: Team[];
   tradeType: TradeType;
   selectedPlayerIds: string[];
   onTradeTypeChange: (type: TradeType) => void;
   onTogglePlayer: (player: Player) => void;
   onDoneShopping: () => void;
   incomingActivityHints?: IncomingActivityHints;
+  onTradeWithTeam?: (player: Player, teamDetail: InterestedTeamDetail) => void;
 }
 
 const ROSTER_FILTER_POSITIONS: Array<'All' | Position> = ['All', 'QB', 'RB', 'WR', 'TE'];
 
 export const ShoppingRoster: React.FC<ShoppingRosterProps> = ({
   userTeam,
+  allTeams,
   tradeType,
   selectedPlayerIds,
   onTradeTypeChange,
   onTogglePlayer,
   onDoneShopping,
   incomingActivityHints,
+  onTradeWithTeam,
 }) => {
   const [rosterPositionFilter, setRosterPositionFilter] = useState<'All' | Position>('All');
 
@@ -50,6 +62,10 @@ export const ShoppingRoster: React.FC<ShoppingRosterProps> = ({
     () => incomingActivityHints?.interestedTradeTypes || [],
     [incomingActivityHints?.interestedTradeTypes]
   );
+
+  const playerInterestedTeamsMap = useMemo(() => {
+    return incomingActivityHints?.playerInterestedTeams || {};
+  }, [incomingActivityHints?.playerInterestedTeams]);
 
   const filteredRoster = useMemo(() => {
     if (rosterPositionFilter === 'All') return userTeam.roster;
@@ -234,28 +250,39 @@ export const ShoppingRoster: React.FC<ShoppingRosterProps> = ({
       </div>
 
       {/* Roster Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[460px] overflow-y-auto pr-1">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[500px] overflow-y-auto pr-1">
         {filteredRoster.map((player) => {
           const isSelected = selectedPlayerIds.includes(player.id);
-          const isInDemand = targetedPlayerIdSet.has(player.id);
+          const interestedTeams = playerInterestedTeamsMap[player.id] || [];
+          const isInDemand = interestedTeams.length > 0 || targetedPlayerIdSet.has(player.id);
+
           return (
             <div
               key={player.id}
               onClick={() => onTogglePlayer(player)}
-              className={`p-3.5 rounded-2xl border cursor-pointer transition-all flex items-center gap-3.5 relative overflow-hidden ${
+              className={`p-3.5 rounded-2xl border cursor-pointer transition-all flex flex-col justify-between gap-2.5 relative overflow-hidden ${
                 isSelected
                   ? 'bg-blue-950/70 border-blue-500 shadow-lg shadow-blue-500/20 ring-1 ring-blue-500 scale-[1.01]'
                   : 'bg-slate-900/60 hover:bg-slate-800/80 border-slate-800/90 hover:border-slate-700'
               }`}
             >
               {/* Active / In-Demand Indicator Badges */}
-              <div className="absolute top-2 right-2 flex items-center gap-1">
+              <div className="absolute top-2 right-2 flex items-center gap-1 z-10">
                 {isInDemand && (
                   <span
                     className="flex items-center gap-0.5 bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full shadow"
-                    title="One or more league managers have swiped Want on packages featuring this player"
+                    title={
+                      interestedTeams.length > 0
+                        ? `Interested: ${interestedTeams.map((t) => t.teamName).join(', ')}`
+                        : 'One or more league managers have swiped Want on packages featuring this player'
+                    }
                   >
-                    🔥 In demand
+                    <Flame className="w-2.5 h-2.5 text-amber-400" />
+                    <span>
+                      {interestedTeams.length > 0
+                        ? `${interestedTeams.length} ${interestedTeams.length === 1 ? 'Team Wants' : 'Teams Want'}`
+                        : 'In Demand'}
+                    </span>
                   </span>
                 )}
                 {isSelected && (
@@ -266,38 +293,107 @@ export const ShoppingRoster: React.FC<ShoppingRosterProps> = ({
                 )}
               </div>
 
-              {/* Player Image */}
-              <div className="w-14 h-14 rounded-xl bg-slate-800 border border-slate-700 flex-shrink-0 flex items-center justify-center overflow-hidden">
-                <img
-                  src={player.headshotUrl}
-                  alt={player.fullName}
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    (e.target as HTMLElement).style.display = 'none';
-                  }}
-                />
+              {/* Main Player Row */}
+              <div className="flex items-center gap-3.5 min-w-0 w-full pr-16 sm:pr-0">
+                {/* Player Image */}
+                <div className="w-14 h-14 rounded-xl bg-slate-800 border border-slate-700 flex-shrink-0 flex items-center justify-center overflow-hidden">
+                  <img
+                    src={player.headshotUrl}
+                    alt={player.fullName}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLElement).style.display = 'none';
+                    }}
+                  />
+                </div>
+
+                {/* Player Info */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-blue-600 text-white">
+                      {player.position}
+                    </span>
+                    <span className="text-xs text-slate-400 font-semibold truncate">
+                      {player.nflTeam}
+                    </span>
+                  </div>
+                  <h3 className="text-sm font-bold text-white truncate mt-0.5">
+                    {player.fullName}
+                  </h3>
+                  <div className="text-[11px] text-slate-400 flex items-center flex-wrap gap-x-2 gap-y-1 mt-1">
+                    <span>Bye {player.byeWeek}</span>
+                    {player.injuryStatus !== 'ACTIVE' && (
+                      <span className="text-amber-400 font-bold">• {player.injuryStatus}</span>
+                    )}
+                  </div>
+                </div>
               </div>
 
-              {/* Player Info */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-blue-600 text-white">
-                    {player.position}
-                  </span>
-                  <span className="text-xs text-slate-400 font-semibold truncate">
-                    {player.nflTeam}
-                  </span>
+              {/* Interested Teams Section */}
+              {interestedTeams.length > 0 && (
+                <div className="w-full pt-2 border-t border-slate-800/80 flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-bold text-amber-400 flex items-center gap-1">
+                      <Users className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                      <span>Interested Teams ({interestedTeams.length}):</span>
+                    </span>
+                    <span className="text-[10px] text-slate-400">
+                      Tap team to trade
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {interestedTeams.map((teamDetail) => {
+                      const liveTeam = allTeams?.find((t) => t.id === teamDetail.teamId);
+                      const displayName = liveTeam?.name || teamDetail.teamName;
+                      const displayOwner = liveTeam?.claimedBy || liveTeam?.ownerName || teamDetail.ownerName;
+                      const displayLogo = liveTeam?.logoUrl || teamDetail.logoUrl;
+
+                      return (
+                        <button
+                          key={teamDetail.teamId}
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (onTradeWithTeam) {
+                              onTradeWithTeam(player, teamDetail);
+                            } else {
+                              onTogglePlayer(player);
+                            }
+                          }}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-bold bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 hover:border-amber-400 text-amber-200 transition-all hover:scale-[1.02] active:scale-95 shadow-sm"
+                          title={`Click to trade ${player.fullName} with ${displayName}${displayOwner ? ` (${displayOwner})` : ''}`}
+                        >
+                          {displayLogo ? (
+                            <img
+                              src={displayLogo}
+                              alt=""
+                              className="w-4 h-4 rounded-full object-cover flex-shrink-0 border border-amber-400/40"
+                              onError={(e) => {
+                                (e.target as HTMLElement).style.display = 'none';
+                              }}
+                            />
+                          ) : (
+                            <Users className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                          )}
+                          <span className="truncate max-w-[130px] sm:max-w-[150px] font-semibold text-white">
+                            {displayName}
+                          </span>
+                          {displayOwner && (
+                            <span className="text-amber-400/80 text-[10px] font-normal truncate max-w-[90px]">
+                              ({displayOwner})
+                            </span>
+                          )}
+                          {teamDetail.tradeTypes && teamDetail.tradeTypes.length > 0 && (
+                            <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-amber-400/20 text-amber-300 border border-amber-400/30">
+                              {teamDetail.tradeTypes[0]}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-                <h3 className="text-sm font-bold text-white truncate mt-0.5">
-                  {player.fullName}
-                </h3>
-                <div className="text-[11px] text-slate-400 flex items-center flex-wrap gap-x-2 gap-y-1 mt-1">
-                  <span>Bye {player.byeWeek}</span>
-                  {player.injuryStatus !== 'ACTIVE' && (
-                    <span className="text-amber-400 font-bold">• {player.injuryStatus}</span>
-                  )}
-                </div>
-              </div>
+              )}
             </div>
           );
         })}

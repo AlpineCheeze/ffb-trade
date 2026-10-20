@@ -9,8 +9,6 @@ import {
   Layers,
   AlertCircle,
   ChevronDown,
-  Zap,
-  TrendingUp,
   Flame,
 } from 'lucide-react';
 
@@ -294,14 +292,6 @@ export const ShoppingRoster: React.FC<ShoppingRosterProps> = ({
                   {player.fullName}
                 </h3>
                 <div className="text-[11px] text-slate-400 flex items-center flex-wrap gap-x-2 gap-y-1 mt-1">
-                  <span className="inline-flex items-center gap-0.5 text-amber-300 font-bold bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded-md text-[10px]">
-                    <Zap className="w-2.5 h-2.5 text-amber-400" />
-                    Proj {player.projectedPoints.toFixed(1)}
-                  </span>
-                  <span className="inline-flex items-center gap-0.5 text-emerald-300 font-bold bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-md text-[10px]">
-                    <TrendingUp className="w-2.5 h-2.5 text-emerald-400" />
-                    Avg {player.seasonAvgPoints.toFixed(1)}
-                  </span>
                   <span>Bye {player.byeWeek}</span>
                   {player.injuryStatus !== 'ACTIVE' && (
                     <span className="text-amber-400 font-bold">• {player.injuryStatus}</span>

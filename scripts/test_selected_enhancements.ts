@@ -442,8 +442,10 @@ export const testPromise = (async () => {
   );
   assert.ok(
     swipeCardSrc.includes('toggleStats: () => void') &&
-      swipeCardSrc.includes('setShowStats((prev) => !prev)'),
-    'SwipeCardRef must expose toggleStats'
+      swipeCardSrc.includes('setShowStats((prev) => !prev)') &&
+      !swipeCardSrc.includes('projectedPoints') &&
+      !swipeCardSrc.includes('seasonAvgPoints'),
+    'SwipeCardRef must expose toggleStats and have player projections/averages removed'
   );
 
   assert.ok(
@@ -460,9 +462,9 @@ export const testPromise = (async () => {
   );
   assert.ok(
     shoppingRosterSrc.includes("['All', 'QB', 'RB', 'WR', 'TE']") &&
-      shoppingRosterSrc.includes('player.projectedPoints.toFixed(1)') &&
-      shoppingRosterSrc.includes('player.seasonAvgPoints.toFixed(1)'),
-    'ShoppingRoster.tsx must include position filter pills and Proj/Avg stat badges'
+      !shoppingRosterSrc.includes('projectedPoints') &&
+      !shoppingRosterSrc.includes('seasonAvgPoints'),
+    'ShoppingRoster.tsx must include position filter pills and have Proj/Avg stat badges removed'
   );
 
   const filterBarSrc = fs.readFileSync(
@@ -475,9 +477,9 @@ export const testPromise = (async () => {
       filterBarSrc.includes("toggleMobilePill('teams')") &&
       filterBarSrc.includes('onTradeTypeChange') &&
       filterBarSrc.includes('onToggleOfferedPlayer') &&
-      filterBarSrc.includes('player.projectedPoints.toFixed(1)') &&
-      filterBarSrc.includes('player.seasonAvgPoints.toFixed(1)'),
-    'PositionFilterBar.tsx must include the compact mobile pills, inline package switcher controls, and Proj/Avg stat badges'
+      !filterBarSrc.includes('player.projectedPoints') &&
+      !filterBarSrc.includes('player.seasonAvgPoints'),
+    'PositionFilterBar.tsx must include the compact mobile pills, inline package switcher controls, and have Proj/Avg badges removed'
   );
 
   assert.ok(

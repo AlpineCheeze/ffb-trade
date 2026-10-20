@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect, useImperativeHandle, useCallback } from 'react';
 import { motion, useMotionValue, useTransform, animate, PanInfo } from 'framer-motion';
 import { Player, Team } from '@/types/fantasy';
-import { ShieldAlert, Calendar, Check, X, Info, Plus, Zap, TrendingUp, UserX } from 'lucide-react';
+import { ShieldAlert, Calendar, Check, X, Info, Plus, UserX } from 'lucide-react';
 
 export interface SwipeCardRef {
   swipe: (isInterested: boolean) => void;
@@ -300,27 +300,6 @@ export const SwipeCard = React.forwardRef<SwipeCardRef, SwipeCardProps>(function
                 )}
               </div>
 
-              {/* Core Fantasy Metrics Bar */}
-              <div className="grid grid-cols-2 gap-2 my-1.5 flex-shrink-0">
-                <div className="px-3 py-1.5 rounded-xl bg-slate-950/70 border border-slate-800/80 flex items-center justify-between">
-                  <span className="text-[10px] font-bold uppercase text-slate-400 flex items-center gap-1">
-                    <Zap className="w-3 h-3 text-amber-400" /> Proj
-                  </span>
-                  <span className="text-xs font-black text-white">
-                    {players[0].projectedPoints.toFixed(1)} <span className="text-[10px] font-normal text-slate-500">pts</span>
-                  </span>
-                </div>
-
-                <div className="px-3 py-1.5 rounded-xl bg-slate-950/70 border border-slate-800/80 flex items-center justify-between">
-                  <span className="text-[10px] font-bold uppercase text-slate-400 flex items-center gap-1">
-                    <TrendingUp className="w-3 h-3 text-emerald-400" /> Avg
-                  </span>
-                  <span className="text-xs font-black text-white">
-                    {players[0].seasonAvgPoints.toFixed(1)} <span className="text-[10px] font-normal text-slate-500">pts</span>
-                  </span>
-                </div>
-              </div>
-
               {/* Compact 2-Column Key-Value Season Stats Grid */}
               {showStats && players[0].stats && (
                 <motion.div
@@ -475,8 +454,6 @@ export const SwipeCard = React.forwardRef<SwipeCardRef, SwipeCardProps>(function
 
                   <div className="text-[10px] min-[400px]:text-[11px] text-slate-400 flex items-center gap-2 mt-0.5 font-medium">
                     <span>Bye Week {player.byeWeek}</span>
-                    <span>•</span>
-                    <span className="text-slate-300 font-bold">{player.projectedPoints.toFixed(1)} pts</span>
                   </div>
                 </div>
               </div>

@@ -19,7 +19,7 @@
 3. **Tinder/Bumble Swipe Deck**:
    - Physics-based card drag using **Framer Motion** with rotation, velocity thresholds, and rubber-banding.
    - Dynamic stamps on drag: **WANT** (green) on right drag, **PASS** (red) on left drag.
-   - High-res ESPN player photos, team logos, projected points, bye weeks, matchup difficulty indicators, and season stat trends.
+   - High-res ESPN player photos, team logos, bye weeks, matchup difficulty indicators, and season stat trends.
    - Floating action controls: Pass (X), Undo (revert last swipe), Want (Checkmark).
    - Fast position filtering (ALL, RB, WR, TE, QB).
 

@@ -541,15 +541,6 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
                       </span>
                     )}
                   </div>
-                  <div className="text-[10px] text-slate-400 font-semibold flex items-center gap-1.5 flex-shrink-0">
-                    <span className="text-amber-300/90 font-bold">
-                      Proj {player.projectedPoints.toFixed(1)}
-                    </span>
-                    <span className="text-slate-600">•</span>
-                    <span className="text-emerald-300/90 font-bold">
-                      Avg {player.seasonAvgPoints.toFixed(1)}
-                    </span>
-                  </div>
                 </button>
               );
             })}

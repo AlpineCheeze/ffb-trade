@@ -357,9 +357,13 @@ export const SwipeCard = React.forwardRef<SwipeCardRef, SwipeCardProps>(function
 
       {/* MULTI-PLAYER PACKAGE CARD (2 or 3 players) */}
       {isPackage && (
-        <div className="flex-1 flex flex-col justify-between p-4 bg-slate-900/95 z-10 min-h-0">
+        <div className={`flex-1 flex flex-col justify-between bg-slate-900/95 z-10 min-h-0 ${
+          players.length >= 3 ? 'p-3 sm:p-4' : 'p-4'
+        }`}>
           {/* Package Header */}
-          <div className="flex items-center justify-between pb-2.5 border-b border-slate-800 flex-shrink-0">
+          <div className={`flex items-center justify-between border-b border-slate-800 flex-shrink-0 ${
+            players.length >= 3 ? 'pb-2 sm:pb-2.5' : 'pb-2.5'
+          }`}>
             <div className="min-w-0 flex-1">
               <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-indigo-500/20 border border-indigo-500/40 text-indigo-400">
                 You Receive ({players.length} Players)
@@ -375,7 +379,7 @@ export const SwipeCard = React.forwardRef<SwipeCardRef, SwipeCardProps>(function
                       e.stopPropagation();
                       onExcludeOwner(ownerTeam.id, ownerTeam.claimedBy || ownerTeam.ownerName || ownerTeam.name);
                     }}
-                    className="inline-flex items-center justify-center gap-1 min-h-[44px] min-w-[44px] px-2 py-1.5 rounded-lg text-[10px] font-bold text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-slate-800 hover:border-rose-500/30 transition-all flex-shrink-0"
+                    className="inline-flex items-center justify-center gap-1 min-h-[36px] sm:min-h-[40px] px-2.5 py-1 rounded-lg text-[10px] font-bold text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-slate-800 hover:border-rose-500/30 transition-all flex-shrink-0 touch-manipulation"
                     title={`Exclude ${ownerTeam.claimedBy || ownerTeam.ownerName || ownerTeam.name} from trade deck`}
                   >
                     <UserX className="w-3.5 h-3.5 text-rose-400" />
@@ -387,21 +391,23 @@ export const SwipeCard = React.forwardRef<SwipeCardRef, SwipeCardProps>(function
           </div>
 
           {/* Player Rows */}
-          <div className={`flex-1 flex flex-col justify-around min-h-0 py-1 ${players.length >= 3 ? 'gap-1.5' : 'gap-2.5'}`}>
+          <div className={`flex-1 flex flex-col justify-around min-h-0 overflow-hidden ${
+            players.length >= 3 ? 'py-1.5 gap-1.5' : 'py-1 gap-2.5'
+          }`}>
             {players.map((player) => (
               <div
                 key={player.id}
-                className={`bg-slate-950/70 border border-slate-800 rounded-2xl flex items-center relative ${
+                className={`bg-slate-950/70 border border-slate-800 rounded-xl sm:rounded-2xl flex items-center relative flex-shrink-0 ${
                   players.length >= 3
-                    ? 'p-2 min-[400px]:p-2.5 gap-2.5 sm:gap-3'
+                    ? 'p-1.5 min-[400px]:p-2 sm:p-2.5 gap-2 sm:gap-3'
                     : 'p-3 gap-3.5'
                 }`}
               >
                 {/* Player Photo */}
                 <div
-                  className={`rounded-xl bg-slate-900 border border-slate-700/80 overflow-hidden flex-shrink-0 flex items-center justify-center ${
+                  className={`rounded-lg sm:rounded-xl bg-slate-900 border border-slate-700/80 overflow-hidden flex-shrink-0 flex items-center justify-center ${
                     players.length >= 3
-                      ? 'w-11 h-11 min-[400px]:w-12 min-[400px]:h-12 sm:w-14 sm:h-14'
+                      ? 'w-10 h-10 min-[400px]:w-11 min-[400px]:h-11 sm:w-14 sm:h-14'
                       : 'w-16 h-16'
                   }`}
                 >
@@ -435,11 +441,15 @@ export const SwipeCard = React.forwardRef<SwipeCardRef, SwipeCardProps>(function
                     )}
                   </div>
 
-                  <h3 className={`font-black text-white truncate mt-0.5 ${players.length >= 3 ? 'text-xs min-[400px]:text-sm sm:text-base' : 'text-base'}`}>
+                  <h3 className={`font-black text-white truncate leading-tight ${
+                    players.length >= 3 ? 'text-xs min-[400px]:text-sm sm:text-base mt-0.5' : 'text-base mt-0.5'
+                  }`}>
                     {player.fullName}
                   </h3>
 
-                  <div className="text-[10px] min-[400px]:text-[11px] text-slate-400 flex items-center gap-2 mt-0.5 font-medium">
+                  <div className={`text-[10px] min-[400px]:text-[11px] text-slate-400 flex items-center gap-2 font-medium ${
+                    players.length >= 3 ? 'mt-0.5' : 'mt-0.5'
+                  }`}>
                     <span>Bye Week {player.byeWeek}</span>
                   </div>
                 </div>
@@ -448,7 +458,9 @@ export const SwipeCard = React.forwardRef<SwipeCardRef, SwipeCardProps>(function
           </div>
 
           {/* Swipe Hint Footer */}
-          <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500 font-semibold flex-shrink-0">
+          <div className={`border-t border-slate-800/80 flex items-center justify-between text-[10px] min-[400px]:text-[11px] text-slate-500 font-semibold flex-shrink-0 ${
+            players.length >= 3 ? 'pt-2 pb-0.5 mt-1' : 'pt-2'
+          }`}>
             <span className="flex items-center gap-1 text-rose-400/80">
               <X className="w-3.5 h-3.5" /> Swipe Left to Pass Package
             </span>

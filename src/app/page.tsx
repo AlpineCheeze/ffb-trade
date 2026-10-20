@@ -2020,7 +2020,7 @@ export default function Home() {
             />
 
             {/* The Interactive Card Stack */}
-            <div className="card-stack relative mb-6">
+            <div className="card-stack relative mb-4 sm:mb-6">
               {currentCard ? (
                 <AnimatePresence mode="popLayout">
                   {/* Next Card in Stack (Depth preview) */}

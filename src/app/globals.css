@@ -29,13 +29,13 @@ body {
   position: relative;
   width: 100%;
   max-width: 380px;
-  height: 440px;
+  height: 460px;
   perspective: 1000px;
 }
 
 @media (max-height: 700px) {
   .card-stack {
-    height: 385px;
+    height: 400px;
   }
 }
 

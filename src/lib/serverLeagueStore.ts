@@ -18,6 +18,7 @@ import {
   createSeedOpponentSwipes,
   computeIncomingActivityHints,
   computePriorityTargetKeys,
+  computeIncomingLikes,
   computeWarmTradeLeads,
 } from './matchmaking';
 import { createMockLeague, sanitizeLeagueByeWeeks } from './espn';
@@ -1211,6 +1212,7 @@ export function toClientLeagueView(
     state.league?.teams
   );
   const priorityTargetKeys = computePriorityTargetKeys(state.swipes, teamId, state.matches);
+  const incomingLikes = computeIncomingLikes(state.swipes, teamId, state.matches, state.league);
   const warmLeads = computeWarmTradeLeads(state.swipes, state.matches, state.league, teamId);
 
   const sanitizedLeague = sanitizeLeagueByeWeeks(state.league);
@@ -1222,6 +1224,7 @@ export function toClientLeagueView(
     matchFound: matchFound ?? null,
     lastResetAt: state.lastResetAt,
     incomingActivityHints,
+    incomingLikes,
     priorityTargetKeys,
     warmLeads,
   };

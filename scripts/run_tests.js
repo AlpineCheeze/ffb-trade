@@ -73,6 +73,10 @@ async function run() {
   if (adminSwipeActivityModule && adminSwipeActivityModule.testPromise) {
     await adminSwipeActivityModule.testPromise;
   }
+  const incomingLikesModule = jiti('./test_incoming_likes.ts');
+  if (incomingLikesModule && incomingLikesModule.testPromise) {
+    await incomingLikesModule.testPromise;
+  }
 }
 
 run().catch((err) => {

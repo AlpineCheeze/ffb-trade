@@ -8,6 +8,7 @@ import {
   Position,
   IncomingActivityHints,
   InterestedTeamDetail,
+  IncomingLike,
   WarmTradeLead,
 } from '@/types/fantasy';
 
@@ -716,6 +717,121 @@ export function computePriorityTargetKeys(
   }
 
   return Array.from(keys);
+}
+
+/**
+ * Computes all active "Incoming Likes" for `userTeamId`.
+ * An incoming like is an unreciprocated swipe where another manager swiped `isInterested: true`
+ * targeting `userTeamId`.
+ * Excludes swipes the user has already responded to (Want or Pass) or that are already matched.
+ */
+export function computeIncomingLikes(
+  allSwipes: Swipe[],
+  userTeamId?: string | null,
+  matches?: Match[],
+  league?: League | null
+): IncomingLike[] {
+  if (!userTeamId || !Array.isArray(allSwipes) || !league || !Array.isArray(league.teams)) {
+    return [];
+  }
+
+  const teamsById = new Map<string, Team>();
+  const playersById = new Map<string, Player>();
+
+  for (const t of league.teams) {
+    if (t && t.id) {
+      teamsById.set(t.id, t);
+      if (Array.isArray(t.roster)) {
+        for (const p of t.roster) {
+          if (p && p.id) {
+            playersById.set(p.id, p);
+          }
+        }
+      }
+    }
+  }
+
+  const userTeam = teamsById.get(userTeamId);
+  if (!userTeam) return [];
+
+  const incomingSwipes = allSwipes.filter(
+    (s) =>
+      s &&
+      s.isInterested &&
+      s.targetTeamId === userTeamId &&
+      s.teamId !== userTeamId &&
+      s.tradeType &&
+      isValidTradeType(s.tradeType) &&
+      (!matches || !isSwipeAlreadyMatched(s, matches, userTeamId)) &&
+      !hasUserRespondedToIncomingSwipe(s, allSwipes, userTeamId)
+  );
+
+  const likes: IncomingLike[] = [];
+
+  for (const s of incomingSwipes) {
+    const opponentTeam = teamsById.get(s.teamId);
+    if (!opponentTeam) continue;
+
+    const userTradeType = getReciprocalTradeType(s.tradeType);
+
+    // Players user would send (opponent requested them from user's roster)
+    const offeredPlayers: Player[] = (s.targetPlayerIds || []).map(
+      (pid) =>
+        playersById.get(pid) || {
+          id: pid,
+          espnPlayerId: pid,
+          fullName: `Player ${pid}`,
+          position: 'FLEX',
+          nflTeam: 'NFL',
+          headshotUrl: '',
+          opponentDifficulty: 'normal',
+          nextOpponent: '',
+          byeWeek: 0,
+          injuryStatus: 'ACTIVE',
+          projectedPoints: 0,
+          seasonAvgPoints: 0,
+        }
+    );
+
+    // Players user would receive (opponent offered them to user)
+    const targetPlayers: Player[] = (s.offeredPlayerIds || []).map(
+      (pid) =>
+        playersById.get(pid) || {
+          id: pid,
+          espnPlayerId: pid,
+          fullName: `Player ${pid}`,
+          position: 'FLEX',
+          nflTeam: 'NFL',
+          headshotUrl: '',
+          opponentDifficulty: 'normal',
+          nextOpponent: '',
+          byeWeek: 0,
+          injuryStatus: 'ACTIVE',
+          projectedPoints: 0,
+          seasonAvgPoints: 0,
+        }
+    );
+
+    likes.push({
+      id: s.id,
+      opponentTeamId: s.teamId,
+      opponentTeamName: opponentTeam.name,
+      opponentOwnerName: opponentTeam.claimedBy || opponentTeam.ownerName,
+      opponentLogoUrl: opponentTeam.logoUrl,
+      tradeType: userTradeType,
+      opponentTradeType: s.tradeType,
+      offeredPlayerIds: s.targetPlayerIds || [],
+      targetPlayerIds: s.offeredPlayerIds || [],
+      offeredPlayers,
+      targetPlayers,
+      createdAt: s.createdAt,
+    });
+  }
+
+  // Sort newest first
+  likes.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  return likes;
 }
 
 /**

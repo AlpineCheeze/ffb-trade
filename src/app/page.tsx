@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { createMockLeague, fetchEspnLeague, sanitizeLeagueByeWeeks } from '@/lib/espn';
 import {
@@ -35,6 +35,7 @@ import {
   generateDeckItems,
   computeIncomingActivityHints,
   computePriorityTargetKeys,
+  computeIncomingLikes,
   computeWarmTradeLeads,
   generateSwipeKey,
   getReciprocalTradeType,
@@ -52,6 +53,7 @@ import {
   UserAccount,
   IncomingActivityHints,
   InterestedTeamDetail,
+  IncomingLike,
   WarmTradeLead,
   ResetScope,
 } from '@/types/fantasy';
@@ -59,6 +61,7 @@ import { Navbar } from '@/components/Navbar';
 import { SwipeCard, SwipeCardRef } from '@/components/SwipeCard';
 import { ShoppingRoster } from '@/components/ShoppingRoster';
 import { MatchesView } from '@/components/MatchesView';
+import { YourLikesView } from '@/components/YourLikesView';
 import { MatchCelebrationModal } from '@/components/MatchCelebrationModal';
 import { LeagueSyncModal } from '@/components/LeagueSyncModal';
 import { AuthModal } from '@/components/AuthModal';
@@ -104,7 +107,7 @@ export default function Home() {
   const [tradeType, setTradeType] = useState<TradeType>('1-for-1');
   const [selectedOfferedPlayerIds, setSelectedOfferedPlayerIds] = useState<string[]>([]);
   const [selectedPositions, setSelectedPositions] = useState<Position[]>(ALL_POSITIONS);
-  const [activeTab, setActiveTab] = useState<'deck' | 'matches' | 'roster' | 'lobby'>('lobby');
+  const [activeTab, setActiveTab] = useState<'deck' | 'matches' | 'roster' | 'lobby' | 'likes'>('lobby');
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const [isPackageMinimized, setIsPackageMinimized] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
@@ -126,6 +129,7 @@ export default function Home() {
 
   // Server-computed matchmaking hints, priority keys, and warm leads
   const [serverIncomingHints, setServerIncomingHints] = useState<IncomingActivityHints | null>(null);
+  const [serverIncomingLikes, setServerIncomingLikes] = useState<IncomingLike[]>([]);
   const [serverPriorityKeys, setServerPriorityKeys] = useState<string[]>([]);
   const [serverWarmLeads, setServerWarmLeads] = useState<WarmTradeLead[]>([]);
 
@@ -288,6 +292,7 @@ export default function Home() {
     setDeletedMatches(localDeleted);
     setMatches(mergeMatchesUnique(localMatches, [], localDeleted));
     setServerIncomingHints(null);
+    setServerIncomingLikes([]);
     setServerPriorityKeys([]);
     setServerWarmLeads([]);
     lastResetAtRef.current = undefined;
@@ -401,6 +406,9 @@ export default function Home() {
         setServerPriorityKeys(serverView.priorityTargetKeys || []);
       }
       if (serverView.warmLeads !== undefined) {
+        if (serverView.incomingLikes !== undefined) {
+          setServerIncomingLikes(serverView.incomingLikes || []);
+        }
         setServerWarmLeads(serverView.warmLeads || []);
       }
 
@@ -507,7 +515,10 @@ export default function Home() {
           setServerPriorityKeys(serverView.priorityTargetKeys || []);
         }
         if (serverView.warmLeads !== undefined) {
-          setServerWarmLeads(serverView.warmLeads || []);
+          if (serverView.incomingLikes !== undefined) {
+          setServerIncomingLikes(serverView.incomingLikes || []);
+        }
+        setServerWarmLeads(serverView.warmLeads || []);
         }
         const isMock =
           serverView.league.id === 'league_mock_123' || serverView.league.espnLeagueId === '12345678';
@@ -564,7 +575,10 @@ export default function Home() {
           setServerPriorityKeys(serverView.priorityTargetKeys || []);
         }
         if (serverView.warmLeads !== undefined) {
-          setServerWarmLeads(serverView.warmLeads || []);
+          if (serverView.incomingLikes !== undefined) {
+          setServerIncomingLikes(serverView.incomingLikes || []);
+        }
+        setServerWarmLeads(serverView.warmLeads || []);
         }
         const isMock =
           serverView.league.id === 'league_mock_123' || serverView.league.espnLeagueId === '12345678';
@@ -868,6 +882,51 @@ export default function Home() {
     return combined;
   }, [league, userTeam, swipes, matches, serverWarmLeads]);
 
+  // Compute all active Incoming Likes (trades where other owners swiped YES involving your players)
+  const effectiveIncomingLikes = useMemo<IncomingLike[]>(() => {
+    if (!league || !userTeam) return [];
+    const localLikes = computeIncomingLikes(swipes, userTeam.id, matches, league);
+    const seen = new Set<string>();
+    const combined: IncomingLike[] = [];
+
+    for (const like of [...localLikes, ...serverIncomingLikes]) {
+      if (!like || seen.has(like.id)) continue;
+
+      // Filter out if user already swiped (Want or Pass) on this proposal
+      const hasResponded = swipes.some(
+        (s) =>
+          s &&
+          s.teamId === userTeam.id &&
+          (!s.targetTeamId || s.targetTeamId === like.opponentTeamId) &&
+          s.tradeType === like.tradeType &&
+          arraysEqualIgnoreOrder(s.offeredPlayerIds || [], like.offeredPlayerIds || []) &&
+          arraysEqualIgnoreOrder(s.targetPlayerIds || [], like.targetPlayerIds || [])
+      );
+      if (hasResponded) continue;
+
+      // Filter out if already in confirmed matches
+      const alreadyMatched = matches.some((m) => {
+        if (!m || m.deletedAt) return false;
+        const isA = m.teamAId === userTeam.id && m.teamBId === like.opponentTeamId;
+        const isB = m.teamBId === userTeam.id && m.teamAId === like.opponentTeamId;
+        if (!isA && !isB) return false;
+        const myMatchedIds = (isA ? m.teamAPlayers : m.teamBPlayers).map((p) => p.id);
+        const oppMatchedIds = (isA ? m.teamBPlayers : m.teamAPlayers).map((p) => p.id);
+        return (
+          arraysEqualIgnoreOrder(myMatchedIds, like.offeredPlayerIds) &&
+          arraysEqualIgnoreOrder(oppMatchedIds, like.targetPlayerIds)
+        );
+      });
+      if (alreadyMatched) continue;
+
+      seen.add(like.id);
+      combined.push(like);
+    }
+
+    combined.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return combined;
+  }, [league, userTeam, swipes, matches, serverIncomingLikes]);
+
   // Explore a Warm Trade Lead in 1 click (sets reciprocal tradeType, pre-selects overlapping offered players, isolates partner team, opens deck)
   const handleExploreWarmLead = (lead: WarmTradeLead) => {
     if (!userTeam || !league) return;
@@ -1048,7 +1107,10 @@ export default function Home() {
           setServerPriorityKeys(serverView.priorityTargetKeys || []);
         }
         if (serverView.warmLeads !== undefined) {
-          setServerWarmLeads(serverView.warmLeads || []);
+          if (serverView.incomingLikes !== undefined) {
+          setServerIncomingLikes(serverView.incomingLikes || []);
+        }
+        setServerWarmLeads(serverView.warmLeads || []);
         }
         const isMock = league.id === 'league_mock_123' || league.espnLeagueId === '12345678';
         const serverDeleted = serverView.deletedMatches || [];
@@ -1068,6 +1130,119 @@ export default function Home() {
       })
       .catch((err) => {
         console.error('Failed to record swipe on server:', err);
+      });
+  };
+
+  // Handle Swiping on an Incoming Like (Accept/Want or Pass)
+  const handleSwipeLike = (like: IncomingLike, isInterested: boolean) => {
+
+      if (!userTeam || !league) return;
+
+      mutationVersionRef.current += 1;
+      const swipeVersion = mutationVersionRef.current;
+
+      const newSwipe: Swipe = {
+        id: `swipe_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+        teamId: userTeam.id,
+        targetTeamId: like.opponentTeamId,
+        tradeType: like.tradeType,
+        offeredPlayerIds: like.offeredPlayerIds,
+        targetPlayerIds: like.targetPlayerIds,
+        isInterested,
+        createdAt: new Date().toISOString(),
+      };
+
+      const updatedSwipes = [...swipes, newSwipe];
+      setSwipes(updatedSwipes);
+      saveLocalSwipes(
+        league.espnLeagueId,
+        updatedSwipes.filter((s) => s.teamId === userTeam.id)
+      );
+
+      // Update internal Elo privately in background
+      recordPackageSwipeEloUpdate(like.offeredPlayerIds, like.targetPlayerIds, isInterested);
+
+      // Check for immediate local match
+      let triggeredLocalMatch: Match | null = null;
+      if (isInterested) {
+        const localMatch = checkForMutualMatch(newSwipe, updatedSwipes, league);
+        if (localMatch) {
+          triggeredLocalMatch = localMatch;
+          setMatches((prev) => {
+            const next = mergeMatchesUnique([localMatch], prev);
+            saveLocalMatches(league.espnLeagueId, next);
+            return next;
+          });
+          setActiveMatchCelebration(localMatch);
+        }
+      }
+
+      // Sequence server swipe in mutation queue
+      mutationQueueRef.current = mutationQueueRef.current
+        .then(async () => {
+          const serverView = await recordSwipeOnServer(league.espnLeagueId, newSwipe, league);
+          if (!serverView) return;
+
+          // Session / permission error handling
+          if (serverView.status === 401) {
+            setErrorNotification('Your session has expired. Please log in again.');
+            setTimeout(() => setErrorNotification(null), 5000);
+            handleOpenAuth('login');
+            return;
+          }
+          if (serverView.status === 403 || serverView.status === 409) {
+            setErrorNotification(
+              serverView.error ||
+                (serverView.status === 403
+                  ? 'Team ownership has changed or access was denied (403)'
+                  : 'Team claim conflict (409)')
+            );
+            setTimeout(() => setErrorNotification(null), 5000);
+            return;
+          }
+
+          if (serverView.matchFound && !undoneSwipeIdsRef.current.has(newSwipe.id)) {
+            setMatches((prev) => {
+              const next = mergeMatchesUnique([serverView.matchFound!], prev);
+              saveLocalMatches(league.espnLeagueId, next);
+              return next;
+            });
+            if (!triggeredLocalMatch) {
+              setActiveMatchCelebration(serverView.matchFound);
+            }
+          }
+
+          if (mutationVersionRef.current !== swipeVersion) return;
+          if (serverView.incomingActivityHints !== undefined) {
+            setServerIncomingHints(serverView.incomingActivityHints || null);
+          }
+          if (serverView.priorityTargetKeys !== undefined) {
+            setServerPriorityKeys(serverView.priorityTargetKeys || []);
+          }
+          if (serverView.incomingLikes !== undefined) {
+            setServerIncomingLikes(serverView.incomingLikes || []);
+          }
+          if (serverView.warmLeads !== undefined) {
+            setServerWarmLeads(serverView.warmLeads || []);
+          }
+          const isMock = league.id === 'league_mock_123' || league.espnLeagueId === '12345678';
+          const serverDeleted = serverView.deletedMatches || [];
+          setDeletedMatches((prevDel) =>
+            isMock ? mergeMatchesUnique(serverDeleted, prevDel) : serverDeleted
+          );
+          if (serverView.matches) {
+            const serverMatches = serverView.matches;
+            setMatches((prev) => {
+              const next = isMock
+                ? mergeMatchesUnique(serverMatches, prev, serverDeleted)
+                : serverMatches;
+              saveLocalMatches(league.espnLeagueId, next);
+              return next;
+            });
+          }
+        })
+        .catch((err) => {
+          console.error('Failed to record like swipe on server:', err);
       });
   };
 
@@ -1157,7 +1332,10 @@ export default function Home() {
           setServerPriorityKeys(serverView.priorityTargetKeys || []);
         }
         if (serverView.warmLeads !== undefined) {
-          setServerWarmLeads(serverView.warmLeads || []);
+          if (serverView.incomingLikes !== undefined) {
+          setServerIncomingLikes(serverView.incomingLikes || []);
+        }
+        setServerWarmLeads(serverView.warmLeads || []);
         }
         const isMock = league.id === 'league_mock_123' || league.espnLeagueId === '12345678';
         const serverDeleted = serverView.deletedMatches || [];
@@ -1256,6 +1434,9 @@ export default function Home() {
         setServerPriorityKeys(serverView.priorityTargetKeys || []);
       }
       if (serverView.warmLeads !== undefined) {
+        if (serverView.incomingLikes !== undefined) {
+          setServerIncomingLikes(serverView.incomingLikes || []);
+        }
         setServerWarmLeads(serverView.warmLeads || []);
       }
       const isMock = league.id === 'league_mock_123' || league.espnLeagueId === '12345678';
@@ -1344,6 +1525,9 @@ export default function Home() {
         setServerPriorityKeys(serverView.priorityTargetKeys || []);
       }
       if (serverView.warmLeads !== undefined) {
+        if (serverView.incomingLikes !== undefined) {
+          setServerIncomingLikes(serverView.incomingLikes || []);
+        }
         setServerWarmLeads(serverView.warmLeads || []);
       }
       const isMock = league.id === 'league_mock_123' || league.espnLeagueId === '12345678';
@@ -1398,7 +1582,10 @@ export default function Home() {
             setServerPriorityKeys(serverView.priorityTargetKeys || []);
           }
           if (serverView.warmLeads !== undefined) {
-            setServerWarmLeads(serverView.warmLeads || []);
+            if (serverView.incomingLikes !== undefined) {
+          setServerIncomingLikes(serverView.incomingLikes || []);
+        }
+        setServerWarmLeads(serverView.warmLeads || []);
           }
           const freshSeeds = isMock ? createSeedOpponentSwipes(serverView.league) : [];
           setSwipes([
@@ -1445,7 +1632,10 @@ export default function Home() {
             setServerPriorityKeys(serverView.priorityTargetKeys || []);
           }
           if (serverView.warmLeads !== undefined) {
-            setServerWarmLeads(serverView.warmLeads || []);
+            if (serverView.incomingLikes !== undefined) {
+          setServerIncomingLikes(serverView.incomingLikes || []);
+        }
+        setServerWarmLeads(serverView.warmLeads || []);
           }
           const freshSeeds = isMock ? createSeedOpponentSwipes(serverView.league) : [];
           setSwipes([
@@ -1519,7 +1709,10 @@ export default function Home() {
           setServerPriorityKeys(serverView.priorityTargetKeys || []);
         }
         if (serverView.warmLeads !== undefined) {
-          setServerWarmLeads(serverView.warmLeads || []);
+          if (serverView.incomingLikes !== undefined) {
+          setServerIncomingLikes(serverView.incomingLikes || []);
+        }
+        setServerWarmLeads(serverView.warmLeads || []);
         }
         const freshSeeds = isMock ? createSeedOpponentSwipes(serverView.league) : [];
         setSwipes([
@@ -2267,11 +2460,26 @@ export default function Home() {
               deletedMatches={deletedMatches}
               warmLeads={effectiveWarmLeads}
               currentTeamId={userTeamId}
+              incomingLikesCount={effectiveIncomingLikes.length}
+              onViewLikes={() => setActiveTab('likes')}
               onStartSwiping={() => setActiveTab('deck')}
               onExploreWarmLead={handleExploreWarmLead}
               onDeleteMatch={handleDeleteMatch}
               onDeleteAllMatches={handleDeleteAllMatches}
               onResetSwipes={() => setIsResetModalOpen(true)}
+            />
+          </div>
+        )}
+
+        {/* TAB 2B: YOUR LIKES VIEW */}
+        {activeTab === 'likes' && userTeam && league && (
+          <div className="w-full">
+            <YourLikesView
+              incomingLikes={effectiveIncomingLikes}
+              currentTeam={userTeam}
+              onBackToMatches={() => setActiveTab('matches')}
+              onSwipeLike={handleSwipeLike}
+              onStartSwipingDeck={() => setActiveTab('deck')}
             />
           </div>
         )}

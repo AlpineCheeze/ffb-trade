@@ -2,14 +2,16 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Match, TradeType, WarmTradeLead } from '@/types/fantasy';
-import { ArrowLeftRight, Check, Copy, Sparkles, Trash2, History, RotateCcw, Flame } from 'lucide-react';
+import { ArrowLeftRight, Check, Copy, Sparkles, Trash2, History, RotateCcw, Flame, Heart } from 'lucide-react';
 
 interface MatchesViewProps {
   matches: Match[];
   deletedMatches?: Match[];
   warmLeads?: WarmTradeLead[];
   currentTeamId?: string | null;
+  incomingLikesCount?: number;
   onStartSwiping: () => void;
+  onViewLikes?: () => void;
   onExploreWarmLead?: (lead: WarmTradeLead) => void;
   onDeleteMatch?: (match: Match) => void;
   onDeleteAllMatches?: () => void;
@@ -21,7 +23,9 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
   deletedMatches = [],
   warmLeads = [],
   currentTeamId,
+  incomingLikesCount = 0,
   onStartSwiping,
+  onViewLikes,
   onExploreWarmLead,
   onDeleteMatch,
   onDeleteAllMatches,
@@ -463,6 +467,42 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* VIEW YOUR LIKES CARD & BUTTON */}
+      {onViewLikes && (
+        <div className="pt-2">
+          <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-pink-950/30 via-rose-950/20 to-purple-950/30 border border-pink-500/25 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="text-center sm:text-left space-y-1">
+              <div className="text-sm sm:text-base font-extrabold text-white flex items-center justify-center sm:justify-start gap-2">
+                <Heart className="w-5 h-5 text-pink-400 fill-pink-400/30" />
+                <span>See Who Liked Your Players</span>
+                {incomingLikesCount > 0 && (
+                  <span className="px-2 py-0.5 rounded-full text-xs font-black bg-pink-500/20 border border-pink-500/40 text-pink-300">
+                    {incomingLikesCount} new
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-300 max-w-md">
+                Directly view trades other owners have swiped &ldquo;yes&rdquo; on involving your players, and swipe yes or pass on any of them!
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={onViewLikes}
+              className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-gradient-to-r from-pink-600 via-rose-600 to-purple-600 hover:from-pink-500 hover:via-rose-500 hover:to-purple-500 text-white font-black text-sm shadow-lg shadow-pink-950/60 hover:shadow-pink-500/30 transition-all duration-200 flex items-center justify-center gap-2.5 active:scale-95 border border-pink-400/40 flex-shrink-0 group"
+            >
+              <Heart className="w-4 h-4 text-pink-200 fill-pink-200/50 group-hover:scale-125 transition-transform" />
+              <span>View Your Likes</span>
+              {incomingLikesCount > 0 && (
+                <span className="px-2 py-0.5 rounded-full bg-white/20 text-white text-xs font-black">
+                  {incomingLikesCount}
+                </span>
+              )}
+            </button>
           </div>
         </div>
       )}

@@ -450,6 +450,7 @@ function mapResponseToClientLeagueView(data: any): ClientLeagueView {
     matchFound: data.matchFound || null,
     lastResetAt: data.lastResetAt,
     incomingActivityHints: data.incomingActivityHints,
+    incomingLikes: data.incomingLikes || [],
     priorityTargetKeys: data.priorityTargetKeys || [],
     warmLeads: data.warmLeads || [],
   };
@@ -472,6 +473,7 @@ export type LeagueStoreFailure = {
   matchFound?: undefined;
   lastResetAt?: undefined;
   incomingActivityHints?: undefined;
+  incomingLikes?: undefined;
   priorityTargetKeys?: undefined;
   warmLeads?: undefined;
 };

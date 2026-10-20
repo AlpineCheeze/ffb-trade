@@ -163,6 +163,21 @@ export interface ServerLeagueState {
   };
 }
 
+export interface IncomingLike {
+  id: string; // The opponent's swipe ID
+  opponentTeamId: string;
+  opponentTeamName: string;
+  opponentOwnerName?: string;
+  opponentLogoUrl?: string;
+  tradeType: TradeType; // user-perspective trade type (e.g. '1-for-2' if opponent offered '2-for-1')
+  opponentTradeType: TradeType;
+  offeredPlayerIds: string[]; // players user will send if accepted (opponent's targetPlayerIds)
+  targetPlayerIds: string[]; // players user will receive if accepted (opponent's offeredPlayerIds)
+  offeredPlayers: Player[]; // full Player objects user will send
+  targetPlayers: Player[]; // full Player objects user will receive
+  createdAt: string;
+}
+
 export interface ClientLeagueView {
   league: League;
   mySwipes: Swipe[];
@@ -171,6 +186,7 @@ export interface ClientLeagueView {
   matchFound?: Match | null;
   lastResetAt?: string;
   incomingActivityHints?: IncomingActivityHints;
+  incomingLikes?: IncomingLike[];
   priorityTargetKeys?: string[];
   warmLeads?: WarmTradeLead[];
 }

@@ -8,10 +8,10 @@ import { UnicornLogo } from './UnicornLogo';
 interface NavbarProps {
   league: League | null;
   currentTeam?: Team | null;
-  activeTab: 'deck' | 'matches' | 'roster' | 'lobby';
+  activeTab: 'deck' | 'matches' | 'roster' | 'lobby' | 'likes';
   matchCount: number;
   currentUser?: UserAccount | null;
-  onTabChange: (tab: 'deck' | 'matches' | 'roster' | 'lobby') => void;
+  onTabChange: (tab: 'deck' | 'matches' | 'roster' | 'lobby' | 'likes') => void;
   onGoHome: () => void;
   onOpenSync: () => void;
   onOpenAuth?: () => void;
@@ -106,7 +106,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 onClick={() => onTabChange('matches')}
                 className={`relative px-2.5 lg:px-3 xl:px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition ${
-                  activeTab === 'matches'
+                  activeTab === 'matches' || activeTab === 'likes'
                     ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                 }`}
@@ -244,7 +244,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             onClick={() => onTabChange('matches')}
             className={`min-h-[48px] flex-1 max-w-[84px] relative flex flex-col items-center justify-center py-1 px-2 rounded-xl transition touch-manipulation active:scale-95 ${
-              activeTab === 'matches' ? 'text-blue-400 font-bold bg-blue-500/10' : 'text-slate-400 hover:text-slate-200'
+              activeTab === 'matches' || activeTab === 'likes' ? 'text-blue-400 font-bold bg-blue-500/10' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
             <div className="relative">

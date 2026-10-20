@@ -211,7 +211,7 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
   }, [teams, excludedTeamIds]);
 
   return isMinimized ? (
-    <div className="w-full max-w-sm mb-3 sm:mb-4 bg-slate-900/90 border border-slate-800 rounded-2xl p-2 sm:p-2.5 shadow-xl backdrop-blur-md">
+    <div className="w-full max-w-sm sm:max-w-[440px] mb-3 sm:mb-4 bg-slate-900/90 border border-slate-800 rounded-2xl p-2 sm:p-2.5 shadow-xl backdrop-blur-md">
       <div className="w-full flex items-center justify-between gap-1.5 sm:gap-2">
         {/* Clickable summary of active trade package */}
         <button
@@ -245,11 +245,11 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
 
           {/* Package details: "Your Offer:" & Full Player Name & Trade Type */}
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5 leading-tight">
-              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+            <div className="flex items-center gap-1.5 leading-tight whitespace-nowrap">
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 whitespace-nowrap flex-shrink-0">
                 Your Offer:
               </span>
-              <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black uppercase bg-blue-500/20 text-blue-400 border border-blue-500/30 flex-shrink-0">
+              <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black uppercase bg-blue-500/20 text-blue-400 border border-blue-500/30 flex-shrink-0 whitespace-nowrap">
                 {tradeType}
               </span>
               {totalIncomingCount > 0 && (
@@ -303,7 +303,7 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
       </div>
     </div>
   ) : (
-    <div className="w-full max-w-sm mb-3 sm:mb-4 bg-slate-900/90 border border-slate-800 rounded-2xl p-2.5 sm:p-3 shadow-xl backdrop-blur-md">
+    <div className="w-full max-w-sm sm:max-w-[440px] mb-3 sm:mb-4 bg-slate-900/90 border border-slate-800 rounded-2xl p-2.5 sm:p-3 shadow-xl backdrop-blur-md">
       {/* ========================================================= */}
       {/* ALWAYS VISIBLE: "YOUR OFFER" BANNER & "CHANGE PACKAGE"    */}
       {/* (Mobile & Desktop)                                       */}
@@ -317,7 +317,7 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
                 offeredPlayers.map((player) => (
                   <div
                     key={player.id}
-                    className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-slate-800 border-2 border-slate-900 overflow-hidden flex-shrink-0 shadow"
+                    className="w-8 h-8 rounded-full bg-slate-800 border-2 border-slate-900 overflow-hidden flex-shrink-0 shadow"
                     title={player.fullName}
                   >
                     <img
@@ -328,7 +328,7 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
                   </div>
                 ))
               ) : (
-                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-slate-800 border border-amber-500/40 flex items-center justify-center text-xs text-amber-400 font-bold">
+                <div className="w-8 h-8 rounded-full bg-slate-800 border border-amber-500/40 flex items-center justify-center text-xs text-amber-400 font-bold">
                   ?
                 </div>
               )}
@@ -336,18 +336,18 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
 
             {/* Offer Details */}
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[10px] sm:text-xs font-black uppercase tracking-wider text-slate-400">
+              <div className="flex items-center gap-1.5 whitespace-nowrap">
+                <span className="text-[10px] sm:text-xs font-black uppercase tracking-wider text-slate-400 whitespace-nowrap flex-shrink-0">
                   Your Offer:
                 </span>
-                <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black uppercase bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                <span className="px-1.5 py-0.2 rounded-full text-[9px] sm:text-[10px] font-black uppercase bg-blue-500/20 text-blue-400 border border-blue-500/30 whitespace-nowrap flex-shrink-0">
                   {tradeType}
                 </span>
-                <span className="text-[10px] font-bold text-slate-400">
+                <span className="text-[10px] sm:text-xs font-bold text-slate-400 whitespace-nowrap flex-shrink-0">
                   ({offeredPlayers.length}/{sendCount})
                 </span>
                 {totalIncomingCount > 0 && (
-                  <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                  <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1 whitespace-nowrap flex-shrink-0">
                     <Flame className="w-2.5 h-2.5 text-amber-400 fill-amber-400/30" />
                     <span>{totalIncomingCount} Incoming</span>
                   </span>
@@ -374,27 +374,27 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
             <button
               type="button"
               onClick={handleTogglePackage}
-              className={`px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-bold transition flex items-center gap-1 ${
+              className={`px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-bold transition flex items-center gap-1 flex-shrink-0 ${
                 isPackageOpen
                   ? 'bg-blue-600 border-blue-500 text-white shadow-sm'
                   : 'bg-blue-600/20 hover:bg-blue-600/30 border-blue-500/30 text-blue-300'
               }`}
             >
-              <span>Change Package</span>
+              <span className="whitespace-nowrap">Change Package</span>
               {isPackageOpen ? (
-                <ChevronUp className="w-3.5 h-3.5" />
+                <ChevronUp className="w-3.5 h-3.5 flex-shrink-0" />
               ) : (
-                <ChevronDown className="w-3.5 h-3.5" />
+                <ChevronDown className="w-3.5 h-3.5 flex-shrink-0" />
               )}
             </button>
             <button
               type="button"
               onClick={() => handleToggleMinimize(true)}
-              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700 text-xs font-bold text-slate-300 hover:text-white transition flex items-center gap-1"
+              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700 text-xs font-bold text-slate-300 hover:text-white transition flex items-center gap-1 flex-shrink-0"
               title="Minimize trade package & filters to focus on swiping"
             >
-              <Minimize2 className="w-3.5 h-3.5 sm:w-3 sm:h-3 text-blue-400" />
-              <span className="hidden sm:inline">Minimize</span>
+              <Minimize2 className="w-3.5 h-3.5 sm:w-3 sm:h-3 text-blue-400 flex-shrink-0" />
+              <span className="hidden md:inline whitespace-nowrap">Minimize</span>
             </button>
           </div>
         </div>
@@ -478,7 +478,7 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
                 <span className="whitespace-nowrap">Package</span>
               </div>
               <span
-                className={`mt-1 px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider leading-none ${
+                className={`mt-1 px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider leading-none whitespace-nowrap flex-shrink-0 ${
                   activeTab === 'package'
                     ? 'bg-blue-500 text-white'
                     : 'bg-slate-800 text-slate-300'
@@ -506,7 +506,7 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
               <span className="whitespace-nowrap">Positions</span>
             </div>
             <span
-              className={`mt-1 px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider leading-none ${
+              className={`mt-1 px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider leading-none whitespace-nowrap flex-shrink-0 ${
                 activeTab === 'positions'
                   ? 'bg-blue-500 text-white'
                   : 'bg-slate-800 text-slate-300'
@@ -533,12 +533,12 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
               <span className="whitespace-nowrap">Trade With</span>
             </div>
             {excludedCount > 0 ? (
-              <span className="mt-1 px-1.5 py-0.5 rounded-full text-[9px] font-black leading-none bg-rose-500/20 text-rose-300 border border-rose-500/40">
+              <span className="mt-1 px-1.5 py-0.5 rounded-full text-[9px] font-black leading-none bg-rose-500/20 text-rose-300 border border-rose-500/40 whitespace-nowrap flex-shrink-0">
                 {includedCount}/{teams.length}
               </span>
             ) : (
               <span
-                className={`mt-1 px-1.5 py-0.5 rounded-full text-[9px] font-black leading-none ${
+                className={`mt-1 px-1.5 py-0.5 rounded-full text-[9px] font-black leading-none whitespace-nowrap flex-shrink-0 ${
                   activeTab === 'teams'
                     ? 'bg-blue-500 text-white'
                     : 'bg-slate-800 text-slate-300'

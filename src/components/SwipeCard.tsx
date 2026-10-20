@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect, useImperativeHandle, useCallback } from 'react';
 import { motion, useMotionValue, useTransform, animate, PanInfo } from 'framer-motion';
 import { Player, Team } from '@/types/fantasy';
-import { ShieldAlert, Calendar, Check, X, Info, Plus, UserX } from 'lucide-react';
+import { ShieldAlert, Calendar, Check, X, Info, UserX } from 'lucide-react';
 
 export interface SwipeCardRef {
   swipe: (isInterested: boolean) => void;
@@ -388,37 +388,24 @@ export const SwipeCard = React.forwardRef<SwipeCardRef, SwipeCardProps>(function
           </div>
 
           {/* Player Rows */}
-          <div className={`flex-1 flex flex-col justify-around min-h-0 py-1 ${players.length >= 3 ? 'gap-1' : 'gap-2'}`}>
-            {players.map((player, idx) => (
-              <React.Fragment key={player.id}>
-                {/* Plus / AND separator between package rows */}
-                {idx > 0 && (
-                  <div className="flex items-center justify-center -my-1 sm:-my-0.5 z-10 flex-shrink-0 pointer-events-none">
-                    <div
-                      className={`flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-800/90 border border-slate-700/80 text-slate-300 shadow-sm ${
-                        players.length >= 3 ? 'text-[9px]' : 'text-[10px]'
-                      } font-black uppercase tracking-wider`}
-                    >
-                      <Plus className={players.length >= 3 ? 'w-2.5 h-2.5 text-blue-400' : 'w-3 h-3 text-blue-400'} />
-                      <span>AND</span>
-                    </div>
-                  </div>
-                )}
+          <div className={`flex-1 flex flex-col justify-around min-h-0 py-1 ${players.length >= 3 ? 'gap-1.5' : 'gap-2.5'}`}>
+            {players.map((player) => (
+              <div
+                key={player.id}
+                className={`bg-slate-950/70 border border-slate-800 rounded-2xl flex items-center relative ${
+                  players.length >= 3
+                    ? 'p-2 min-[400px]:p-2.5 gap-2.5 sm:gap-3'
+                    : 'p-3 gap-3.5'
+                }`}
+              >
+                {/* Player Photo */}
                 <div
-                  className={`bg-slate-950/70 border border-slate-800 rounded-2xl flex items-center relative ${
+                  className={`rounded-xl bg-slate-900 border border-slate-700/80 overflow-hidden flex-shrink-0 flex items-center justify-center ${
                     players.length >= 3
-                      ? 'p-2 min-[400px]:p-2.5 gap-2.5 sm:gap-3'
-                      : 'p-3 gap-3.5'
+                      ? 'w-11 h-11 min-[400px]:w-12 min-[400px]:h-12 sm:w-14 sm:h-14'
+                      : 'w-16 h-16'
                   }`}
                 >
-                  {/* Player Photo */}
-                  <div
-                    className={`rounded-xl bg-slate-900 border border-slate-700/80 overflow-hidden flex-shrink-0 flex items-center justify-center ${
-                      players.length >= 3
-                        ? 'w-11 h-11 min-[400px]:w-12 min-[400px]:h-12 sm:w-14 sm:h-14'
-                        : 'w-16 h-16'
-                    }`}
-                  >
                   {!imgErrors[player.id] ? (
                     <img
                       src={player.headshotUrl}
@@ -458,7 +445,6 @@ export const SwipeCard = React.forwardRef<SwipeCardRef, SwipeCardProps>(function
                   </div>
                 </div>
               </div>
-            </React.Fragment>
             ))}
           </div>
 

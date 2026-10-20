@@ -360,12 +360,12 @@ export const SwipeCard = React.forwardRef<SwipeCardRef, SwipeCardProps>(function
         <div className="flex-1 flex flex-col justify-between p-4 bg-slate-900/95 z-10 min-h-0">
           {/* Package Header */}
           <div className="flex items-center justify-between pb-2.5 border-b border-slate-800 flex-shrink-0">
-            <div>
+            <div className="min-w-0 flex-1">
               <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-indigo-500/20 border border-indigo-500/40 text-indigo-400">
                 You Receive ({players.length} Players)
               </span>
-              <div className="flex items-center gap-2 mt-1">
-                <span className="text-xs text-slate-400 font-semibold truncate">
+              <div className="flex items-center justify-between gap-2 mt-1">
+                <span className="text-xs text-slate-400 font-semibold truncate flex-1 min-w-0">
                   From: <span className="text-blue-400">{ownerTeam?.claimedBy || ownerTeam?.ownerName || 'Opponent'}</span>{ownerTeam?.name ? ` (${ownerTeam.name})` : ''}
                 </span>
                 {onExcludeOwner && ownerTeam && (
@@ -384,7 +384,6 @@ export const SwipeCard = React.forwardRef<SwipeCardRef, SwipeCardProps>(function
                 )}
               </div>
             </div>
-            <span className="text-[11px] font-bold text-slate-500">{players.length} Assets</span>
           </div>
 
           {/* Player Rows */}

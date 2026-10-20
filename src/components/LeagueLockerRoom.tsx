@@ -362,22 +362,24 @@ export const LeagueLockerRoom: React.FC<LeagueLockerRoomProps> = ({
                 </div>
 
                 {/* Star Player Previews */}
-                <div className="mt-3 flex items-center gap-1.5">
-                  {team.roster.slice(0, 4).map((p) => (
-                    <div
-                      key={p.id}
-                      className="w-9 h-9 rounded-full bg-slate-950 border border-slate-700 overflow-hidden flex-shrink-0 relative"
-                      title={`${p.fullName} (${p.position})`}
-                    >
-                      <img
-                        src={p.headshotUrl}
-                        alt={p.fullName}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                  ))}
+                <div className="mt-3 flex items-center">
+                  <div className="flex items-center -space-x-2">
+                    {team.roster.slice(0, 4).map((p) => (
+                      <div
+                        key={p.id}
+                        className="w-8 h-8 rounded-full bg-slate-950 border-2 border-slate-900 overflow-hidden flex-shrink-0 relative hover:z-10 transition-transform hover:scale-110"
+                        title={`${p.fullName} (${p.position})`}
+                      >
+                        <img
+                          src={p.headshotUrl}
+                          alt={p.fullName}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    ))}
+                  </div>
                   {team.roster.length > 4 && (
-                    <span className="text-[10px] text-slate-500 font-bold pl-1">
+                    <span className="text-[10px] text-slate-500 font-bold ml-2 whitespace-nowrap">
                       +{team.roster.length - 4} more
                     </span>
                   )}

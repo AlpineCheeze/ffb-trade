@@ -88,7 +88,7 @@ export const MatchCelebrationModal: React.FC<MatchCelebrationModalProps> = ({
         </p>
 
         {/* Matched Players Comparison */}
-        <div className="mt-6 grid grid-cols-2 gap-3 items-center relative">
+        <div className="mt-6 grid grid-cols-2 gap-6 sm:gap-8 items-center relative">
           {/* Trade Swap Icon Center */}
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-blue-600 border-2 border-slate-900 text-white flex items-center justify-center shadow-lg shadow-blue-500/50">
             <ArrowLeftRight className="w-4 h-4" />

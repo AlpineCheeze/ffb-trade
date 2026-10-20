@@ -349,7 +349,7 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
                 {totalIncomingCount > 0 && (
                   <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1 whitespace-nowrap flex-shrink-0">
                     <Flame className="w-2.5 h-2.5 text-amber-400 fill-amber-400/30" />
-                    <span>{totalIncomingCount} Incoming</span>
+                    <span>{totalIncomingCount}<span className="hidden sm:inline"> Incoming</span></span>
                   </span>
                 )}
               </div>
@@ -380,7 +380,7 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
                   : 'bg-blue-600/20 hover:bg-blue-600/30 border-blue-500/30 text-blue-300'
               }`}
             >
-              <span className="whitespace-nowrap">Change Package</span>
+              <span className="whitespace-nowrap">Change<span className="hidden sm:inline"> Package</span></span>
               {isPackageOpen ? (
                 <ChevronUp className="w-3.5 h-3.5 flex-shrink-0" />
               ) : (
@@ -637,7 +637,7 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
                   }`}
                 >
                   <Flame className="w-2.5 h-2.5 text-amber-400 fill-amber-400/30" />
-                  <span>🔥 Incoming {tType} interest</span>
+                  <span>Incoming {tType} interest</span>
                 </button>
               ))}
             </div>
@@ -773,7 +773,7 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
           </div>
 
           {/* Position Toggle Pills */}
-          <div className="mt-2.5 flex items-center gap-1.5 flex-wrap">
+          <div className="mt-2.5 grid grid-cols-4 sm:grid-cols-7 gap-1.5">
             {ALL_POSITIONS.map((pos) => {
               const isSelected = selectedPositions.includes(pos);
               const meta = positionLabels[pos] || { label: pos, color: 'from-blue-600 to-indigo-600' };
@@ -783,7 +783,7 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
                   type="button"
                   key={pos}
                   onClick={() => onTogglePosition(pos)}
-                  className={`flex-1 min-w-[44px] py-1.5 px-2 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1 border ${
+                  className={`w-full py-1.5 px-1.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1 border ${
                     isSelected
                       ? 'bg-blue-600 border-blue-500 text-white shadow-md shadow-blue-600/30 ring-1 ring-blue-400/40 scale-[1.02]'
                       : 'bg-slate-950/70 border-slate-800 text-slate-500 hover:text-slate-300 hover:border-slate-700'

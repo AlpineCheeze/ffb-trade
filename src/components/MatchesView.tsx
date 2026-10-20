@@ -248,7 +248,7 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
                   </div>
 
                   {/* Side-by-Side Trade Comparison */}
-                  <div className="flex flex-col sm:grid sm:grid-cols-2 gap-3 items-stretch sm:items-center relative">
+                  <div className="flex flex-col sm:grid sm:grid-cols-2 gap-3 sm:gap-8 items-stretch sm:items-center relative">
                     {/* Your Package (You Send) */}
                     <div className="w-full bg-slate-950/60 border border-slate-800 rounded-2xl p-3 flex flex-col gap-2">
                       <div className="text-[10px] uppercase font-bold text-slate-500">

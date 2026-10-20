@@ -380,7 +380,7 @@ export const HomeHero: React.FC<HomeHeroProps> = ({
 
       {/* Super User Admin Banner */}
       {(currentUser.isSuperUser || currentUser.username.toLowerCase() === 'superu') && onOpenSuperUser && (
-        <div className="w-full max-w-2xl mb-6 p-4 rounded-3xl bg-gradient-to-r from-purple-950/70 via-slate-900 to-indigo-950/50 border border-purple-500/40 shadow-2xl flex items-center justify-between gap-4">
+        <div className="w-full max-w-2xl mb-6 p-4 rounded-3xl bg-gradient-to-r from-purple-950/70 via-slate-900 to-indigo-950/50 border border-purple-500/40 shadow-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-purple-600/30 flex-shrink-0">
               <Crown className="w-5 h-5 text-amber-300" />
@@ -399,7 +399,7 @@ export const HomeHero: React.FC<HomeHeroProps> = ({
           <button
             type="button"
             onClick={onOpenSuperUser}
-            className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-lg shadow-purple-600/30 flex items-center gap-1.5 transition active:scale-95 flex-shrink-0"
+            className="w-full sm:w-auto justify-center px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-lg shadow-purple-600/30 flex items-center gap-1.5 transition active:scale-95 flex-shrink-0"
           >
             <span>Open Console</span>
             <ArrowRight className="w-3.5 h-3.5" />

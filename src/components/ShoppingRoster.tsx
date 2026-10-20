@@ -103,7 +103,7 @@ export const ShoppingRoster: React.FC<ShoppingRosterProps> = ({
         <div className="mb-4 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 text-xs font-bold text-amber-300">
             <Flame className="w-4 h-4 text-amber-400 flex-shrink-0" />
-            <span>🔥 Incoming league interest detected! Try shopping these structures:</span>
+            <span>Incoming league interest detected! Try shopping these structures:</span>
           </div>
           <div className="flex items-center gap-1.5 flex-wrap">
             {interestedTradeTypes.map((tType) => {
@@ -266,35 +266,8 @@ export const ShoppingRoster: React.FC<ShoppingRosterProps> = ({
                   : 'bg-slate-900/60 hover:bg-slate-800/80 border-slate-800/90 hover:border-slate-700'
               }`}
             >
-              {/* Active / In-Demand Indicator Badges */}
-              <div className="absolute top-2 right-2 flex items-center gap-1 z-10">
-                {isInDemand && (
-                  <span
-                    className="flex items-center gap-0.5 bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full shadow"
-                    title={
-                      interestedTeams.length > 0
-                        ? `Interested: ${interestedTeams.map((t) => t.teamName).join(', ')}`
-                        : 'One or more league managers have swiped Want on packages featuring this player'
-                    }
-                  >
-                    <Flame className="w-2.5 h-2.5 text-amber-400" />
-                    <span>
-                      {interestedTeams.length > 0
-                        ? `${interestedTeams.length} ${interestedTeams.length === 1 ? 'Team Wants' : 'Teams Want'}`
-                        : 'In Demand'}
-                    </span>
-                  </span>
-                )}
-                {isSelected && (
-                  <div className="flex items-center gap-1 bg-blue-500 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded-full shadow">
-                    <CheckCircle2 className="w-3 h-3" />
-                    In Package
-                  </div>
-                )}
-              </div>
-
               {/* Main Player Row */}
-              <div className="flex items-center gap-3.5 min-w-0 w-full pr-16 sm:pr-0">
+              <div className="flex items-center gap-3.5 min-w-0 w-full">
                 {/* Player Image */}
                 <div className="w-14 h-14 rounded-xl bg-slate-800 border border-slate-700 flex-shrink-0 flex items-center justify-center overflow-hidden">
                   <img
@@ -309,13 +282,42 @@ export const ShoppingRoster: React.FC<ShoppingRosterProps> = ({
 
                 {/* Player Info */}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-blue-600 text-white">
-                      {player.position}
-                    </span>
-                    <span className="text-xs text-slate-400 font-semibold truncate">
-                      {player.nflTeam}
-                    </span>
+                  <div className="flex items-center justify-between gap-1.5">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-blue-600 text-white flex-shrink-0">
+                        {player.position}
+                      </span>
+                      <span className="text-xs text-slate-400 font-semibold truncate">
+                        {player.nflTeam}
+                      </span>
+                    </div>
+
+                    {/* Active / In-Demand Indicator Badges in flow */}
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      {isInDemand && (
+                        <span
+                          className="flex items-center gap-0.5 bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full shadow"
+                          title={
+                            interestedTeams.length > 0
+                              ? `Interested: ${interestedTeams.map((t) => t.teamName).join(', ')}`
+                              : 'One or more league managers have swiped Want on packages featuring this player'
+                          }
+                        >
+                          <Flame className="w-2.5 h-2.5 text-amber-400" />
+                          <span>
+                            {interestedTeams.length > 0
+                              ? `${interestedTeams.length} ${interestedTeams.length === 1 ? 'Team Wants' : 'Teams Want'}`
+                              : 'In Demand'}
+                          </span>
+                        </span>
+                      )}
+                      {isSelected && (
+                        <div className="flex items-center gap-1 bg-blue-500 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded-full shadow">
+                          <CheckCircle2 className="w-3 h-3" />
+                          <span>In Package</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <h3 className="text-sm font-bold text-white truncate mt-0.5">
                     {player.fullName}

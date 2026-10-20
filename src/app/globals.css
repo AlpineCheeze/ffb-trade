@@ -33,16 +33,16 @@ body {
   perspective: 1000px;
 }
 
-@media (max-height: 700px) {
-  .card-stack {
-    height: 400px;
-  }
-}
-
 @media (min-width: 640px) {
   .card-stack {
     max-width: 440px;
     height: 540px;
+  }
+}
+
+@media (max-height: 700px) {
+  .card-stack {
+    height: 400px;
   }
 }
 

@@ -145,7 +145,7 @@ export const LeagueSyncModal: React.FC<LeagueSyncModalProps> = ({
             <X className="w-5 h-5" />
           </button>
 
-          <div className="flex items-center gap-2.5 mb-2">
+          <div className="flex items-center gap-2.5 mb-2 pr-10 sm:pr-0">
             <div className="p-2 rounded-xl bg-blue-600/20 text-blue-400 border border-blue-500/20">
               {isResync ? <RefreshCw className="w-5 h-5" /> : <Download className="w-5 h-5" />}
             </div>

@@ -215,7 +215,7 @@ export const SwipeCard = React.forwardRef<SwipeCardRef, SwipeCardProps>(function
       {/* SINGLE PLAYER CARD */}
       {!isPackage && players[0] && (
         <>
-          <div className="relative h-44 min-[400px]:h-52 sm:h-72 bg-gradient-to-b from-slate-800/80 via-slate-900/40 to-slate-900 p-4 sm:p-5 flex flex-col justify-between overflow-hidden">
+          <div className="relative flex-1 min-h-[170px] sm:min-h-0 sm:h-72 bg-gradient-to-b from-slate-800/80 via-slate-900/40 to-slate-900 p-4 sm:p-5 flex flex-col justify-between overflow-hidden">
             <div className="absolute -top-10 -right-10 text-9xl font-black text-slate-800/25 select-none pointer-events-none">
               {players[0].position}
             </div>
@@ -230,8 +230,8 @@ export const SwipeCard = React.forwardRef<SwipeCardRef, SwipeCardProps>(function
                 </span>
                 {players[0].injuryStatus !== 'ACTIVE' && (
                   <span className="px-2 sm:px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-bold bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center gap-1">
-                    <ShieldAlert className="w-3.5 h-3.5" />
-                    {players[0].injuryStatus}
+                    <ShieldAlert className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span className="max-w-[70px] truncate sm:max-w-none">{players[0].injuryStatus}</span>
                   </span>
                 )}
               </div>
@@ -276,11 +276,11 @@ export const SwipeCard = React.forwardRef<SwipeCardRef, SwipeCardProps>(function
                           e.stopPropagation();
                           onExcludeOwner(ownerTeam.id, ownerTeam.claimedBy || ownerTeam.ownerName || ownerTeam.name);
                         }}
-                        className="inline-flex items-center justify-center gap-1 min-h-[44px] min-w-[44px] px-2 py-1.5 rounded-lg text-[10px] font-bold text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-slate-800 hover:border-rose-500/30 transition-all flex-shrink-0"
+                        className="inline-flex items-center justify-center gap-1 min-h-[32px] sm:min-h-[36px] px-2 py-1 rounded-lg text-[10px] font-bold text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-slate-800 hover:border-rose-500/30 transition-all flex-shrink-0 touch-manipulation"
                         title={`Exclude ${ownerTeam.claimedBy || ownerTeam.ownerName || ownerTeam.name} from trade deck`}
                       >
                         <UserX className="w-3.5 h-3.5 text-rose-400" />
-                        <span>Exclude Owner</span>
+                        <span>Exclude</span>
                       </button>
                     )}
                   </div>
@@ -462,7 +462,7 @@ export const SwipeCard = React.forwardRef<SwipeCardRef, SwipeCardProps>(function
             players.length >= 3 ? 'pt-2 pb-0.5 mt-1' : 'pt-2'
           }`}>
             <span className="flex items-center gap-1 text-rose-400/80">
-              <X className="w-3.5 h-3.5" /> Swipe Left to Pass Package
+              <X className="w-3.5 h-3.5" /> Swipe Left to Pass<span className="hidden sm:inline"> Package</span>
             </span>
             <span className="flex items-center gap-1 text-emerald-400/80">
               Swipe Right to Want <Check className="w-3.5 h-3.5" />

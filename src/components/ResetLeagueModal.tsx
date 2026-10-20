@@ -85,7 +85,7 @@ export const ResetLeagueModal: React.FC<ResetLeagueModalProps> = ({
           </button>
 
           {/* Modal Header */}
-          <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center gap-3 mb-4 pr-10 sm:pr-0">
             <div className="w-12 h-12 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center flex-shrink-0">
               <RotateCcw className="w-6 h-6" />
             </div>

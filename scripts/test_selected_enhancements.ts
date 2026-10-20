@@ -16,7 +16,7 @@ import {
   recordServerSwipe,
   deleteServerLeagueState,
 } from '@/lib/serverLeagueStore';
-import { createUser, deleteUser } from '@/lib/serverUserStore';
+import { createUser, deleteUser, loginUser, ensureSuperUserAccount } from '@/lib/serverUserStore';
 import { Swipe } from '@/types/fantasy';
 
 export const testPromise = (async () => {
@@ -384,8 +384,8 @@ export const testPromise = (async () => {
       'Unauthenticated full league reset must be rejected when teams are claimed by authenticated users'
     );
 
-    // Authenticated claimed manager can trigger full league reset, stamping lastResetAt
-    const authLeagueResetReq = new NextRequest('http://localhost:3000/api/league', {
+    // Regular authenticated claimed manager attempting full league reset is rejected with 403 Forbidden
+    const regLeagueResetReq = new NextRequest('http://localhost:3000/api/league', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -397,12 +397,35 @@ export const testPromise = (async () => {
         teamId: team1.id,
       }),
     });
-    const authLeagueResetRes = await leaguePOST(authLeagueResetReq);
-    assert.strictEqual(authLeagueResetRes.status, 200);
-    const authLeagueResetData = await authLeagueResetRes.json();
-    assert.ok(Boolean(authLeagueResetData.lastResetAt), 'Full league reset must stamp lastResetAt');
+    const regLeagueResetRes = await leaguePOST(regLeagueResetReq);
+    assert.strictEqual(
+      regLeagueResetRes.status,
+      403,
+      'Individual regular managers must be forbidden from performing full league swipe reset'
+    );
 
-    console.log('✓ Enhancement 2.3 Passed: recycle_passes, reset_team_swipes, and authenticated reset_league_swipes verified.');
+    // Super user (superu) can trigger full league reset, stamping lastResetAt
+    ensureSuperUserAccount();
+    const superLogin = loginUser('superu', 'thanos');
+    assert(superLogin && superLogin.token, 'Superuser login must succeed');
+    const superLeagueResetReq = new NextRequest('http://localhost:3000/api/league', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${superLogin.token}`,
+      },
+      body: JSON.stringify({
+        action: 'reset_league_swipes',
+        leagueId: testLeagueId,
+        teamId: team1.id,
+      }),
+    });
+    const superLeagueResetRes = await leaguePOST(superLeagueResetReq);
+    assert.strictEqual(superLeagueResetRes.status, 200);
+    const superLeagueResetData = await superLeagueResetRes.json();
+    assert.ok(Boolean(superLeagueResetData.lastResetAt), 'Full league reset by super user must stamp lastResetAt');
+
+    console.log('✓ Enhancement 2.3 Passed: recycle_passes, reset_team_swipes, and superuser-only reset_league_swipes verified.');
   } finally {
     deleteServerLeagueState(testLeagueId);
     if (userAId) deleteUser(userAId);

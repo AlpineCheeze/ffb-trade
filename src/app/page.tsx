@@ -1404,7 +1404,20 @@ export default function Home() {
         return;
       }
 
-      // Default: 'reset_league' — resets all swipes & matches across the league
+      // Default: 'reset_league' — resets all swipes & matches across the league (Super User only)
+      const isSuper = Boolean(
+        currentUser?.isSuperUser || currentUser?.username?.toLowerCase() === 'superu'
+      );
+      if (!isSuper) {
+        setErrorNotification(
+          'Only the super user (superu) can perform a league-wide swipe reset. You can reset your own team swipes.'
+        );
+        setTimeout(() => setErrorNotification(null), 5000);
+        setIsResetModalOpen(false);
+        setIsResettingSwipes(false);
+        return;
+      }
+
       setSwipes(seedSwipes);
       setMatches([]);
       setDeletedMatches([]);
@@ -1852,6 +1865,7 @@ export default function Home() {
             leagueName={league.name}
             teamName={null}
             hasTeam={false}
+            isSuperUser={Boolean(currentUser?.isSuperUser || currentUser?.username?.toLowerCase() === 'superu')}
             onClose={() => setIsResetModalOpen(false)}
             onConfirm={handleResetLeagueSwipes}
             isResetting={isResettingSwipes}
@@ -2227,6 +2241,8 @@ export default function Home() {
           isOpen={isResetModalOpen}
           leagueName={league.name}
           teamName={userTeam?.name || null}
+          hasTeam={Boolean(userTeamId)}
+          isSuperUser={Boolean(currentUser?.isSuperUser || currentUser?.username?.toLowerCase() === 'superu')}
           onClose={() => setIsResetModalOpen(false)}
           onConfirm={handleResetLeagueSwipes}
           isResetting={isResettingSwipes}

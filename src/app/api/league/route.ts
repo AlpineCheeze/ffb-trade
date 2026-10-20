@@ -736,11 +736,11 @@ export async function POST(req: NextRequest) {
           currentState?.league.teams.some((t) => Boolean(t.claimedByUserId))
         );
 
-        // Enforce authentication and league membership when teams are claimed by authenticated users
-        if (hasAuthProtectedTeams) {
+        // Enforce that only the super user (superu) can perform a league wide swipe reset
+        if (hasAuthProtectedTeams || token) {
           if (!token) {
             return NextResponse.json(
-              { error: 'Authentication required to reset a league with claimed teams' },
+              { error: 'Authentication required: Only the super user (superu) can perform a league wide swipe reset' },
               { status: 401 }
             );
           }
@@ -750,32 +750,13 @@ export async function POST(req: NextRequest) {
               { status: 401 }
             );
           }
-          const isClaimedManagerInLeague =
-            authUser.isSuperUser ||
-            Boolean(authUser.claimedTeams?.[cleanId]) ||
-            Boolean(currentState?.league.teams.some((t) => t.claimedByUserId === authUser.id));
-          if (!isClaimedManagerInLeague) {
+          const isSuper = Boolean(authUser.isSuperUser || authUser.username?.toLowerCase() === 'superu');
+          if (!isSuper) {
             return NextResponse.json(
-              { error: 'Forbidden: Only a claimed manager in this league or superuser can reset all league swipes' },
+              { error: 'Forbidden: Only the super user (superu) can perform a league wide swipe reset. Individual users can reset their own team swipes.' },
               { status: 403 }
             );
           }
-          if (
-            cleanTeamId &&
-            !authUser.isSuperUser &&
-            authUser.claimedTeams?.[cleanId] &&
-            authUser.claimedTeams[cleanId] !== cleanTeamId
-          ) {
-            return NextResponse.json(
-              { error: 'Forbidden: You do not own the specified teamId' },
-              { status: 403 }
-            );
-          }
-        } else if (token && !authUser) {
-          return NextResponse.json(
-            { error: 'Invalid or expired session token' },
-            { status: 401 }
-          );
         }
 
         const updatedState = resetServerLeagueSwipes(cleanId, fallbackLeague);

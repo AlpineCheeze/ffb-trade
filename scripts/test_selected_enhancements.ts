@@ -486,6 +486,21 @@ export const testPromise = (async () => {
     'page.tsx keyboard shortcuts must guard against BUTTON focus conflicts when Space/Arrow keys are pressed'
   );
 
+  const navbarSrc = fs.readFileSync(
+    path.resolve(__dirname, '../src/components/Navbar.tsx'),
+    'utf8'
+  );
+  assert.ok(
+    navbarSrc.includes('gap-2 sm:gap-3 lg:gap-4') &&
+      navbarSrc.includes('flex-shrink-0') &&
+      navbarSrc.includes('min-[360px]:inline-block') &&
+      navbarSrc.includes('hidden lg:inline') &&
+      navbarSrc.includes('hidden xl:inline') &&
+      navbarSrc.includes('pb-[max(0.5rem,env(safe-area-inset-bottom,0px))]') &&
+      navbarSrc.includes('min-h-[48px]'),
+    'Navbar.tsx must enforce flex-shrink protection, gap separation, responsive icon-only modes, and touch hitboxes'
+  );
+
   console.log('✓ Enhancements 1.2, 1.5, 3.1 Passed: All UI and keyboard shortcut contracts verified.');
 
   // -------------------------------------------------------------------------

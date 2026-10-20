@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import { createMockLeague, fetchEspnLeague } from '@/lib/espn';
+import { createMockLeague, fetchEspnLeague, sanitizeLeagueByeWeeks } from '@/lib/espn';
 import {
   getLeagueById,
   saveLeague,
@@ -268,11 +268,12 @@ export default function Home() {
     mutationVersionRef.current += 1;
     const reqVersion = mutationVersionRef.current;
 
-    setLeague(selectedLeague);
-    leagueRef.current = selectedLeague;
+    const safeLeague = sanitizeLeagueByeWeeks(selectedLeague);
+    setLeague(safeLeague);
+    leagueRef.current = safeLeague;
     setTradeType('1-for-1');
 
-    const seedSwipes = createSeedOpponentSwipes(selectedLeague);
+    const seedSwipes = createSeedOpponentSwipes(safeLeague);
     const localSwipes = getLocalSwipes(selectedLeague.espnLeagueId);
     const mergedInitialSwipes = [
       ...seedSwipes,

@@ -46,6 +46,219 @@ export const NFL_PRO_TEAMS: Record<number, string> = {
   34: 'HOU',
 };
 
+// Official ESPN Pro Team ID to 2024 Bye Week Mapping
+export const NFL_PRO_TEAMS_BYE_WEEKS_2024: Record<number, number> = {
+  1: 12, // ATL
+  2: 12, // BUF
+  3: 7,  // CHI
+  4: 12, // CIN
+  5: 10, // CLE
+  6: 7,  // DAL
+  7: 14, // DEN
+  8: 5,  // DET
+  9: 10, // GB
+  10: 5, // TEN
+  11: 14, // IND
+  12: 6, // KC
+  13: 10, // LV
+  14: 6, // LAR
+  15: 6, // MIA
+  16: 6, // MIN
+  17: 14, // NE
+  18: 12, // NO
+  19: 11, // NYG
+  20: 12, // NYJ
+  21: 5, // PHI
+  22: 11, // ARI
+  23: 9, // PIT
+  24: 5, // LAC
+  25: 9, // SF
+  26: 10, // SEA
+  27: 11, // TB
+  28: 14, // WSH
+  29: 11, // CAR
+  30: 12, // JAX
+  33: 14, // BAL
+  34: 14, // HOU
+};
+
+// Official NFL Abbreviation to 2024 Bye Week Mapping
+export const NFL_ABBREV_BYE_WEEKS_2024: Record<string, number> = {
+  ATL: 12,
+  BUF: 12,
+  CHI: 7,
+  CIN: 12,
+  CLE: 10,
+  DAL: 7,
+  DEN: 14,
+  DET: 5,
+  GB: 10,
+  TEN: 5,
+  IND: 14,
+  KC: 6,
+  LV: 10,
+  LAR: 6,
+  MIA: 6,
+  MIN: 6,
+  NE: 14,
+  NO: 12,
+  NYG: 11,
+  NYJ: 12,
+  PHI: 5,
+  ARI: 11,
+  PIT: 9,
+  LAC: 5,
+  SF: 9,
+  SEA: 10,
+  TB: 11,
+  WSH: 14,
+  CAR: 11,
+  JAX: 12,
+  BAL: 14,
+  HOU: 14,
+};
+
+// Official ESPN Pro Team ID to 2025 Bye Week Mapping
+export const NFL_PRO_TEAMS_BYE_WEEKS_2025: Record<number, number> = {
+  1: 5,  // ATL
+  2: 7,  // BUF
+  3: 5,  // CHI
+  4: 10, // CIN
+  5: 9,  // CLE
+  6: 10, // DAL
+  7: 12, // DEN
+  8: 8,  // DET
+  9: 5,  // GB
+  10: 10, // TEN
+  11: 11, // IND
+  12: 10, // KC
+  13: 8,  // LV
+  14: 8,  // LAR
+  15: 12, // MIA
+  16: 6,  // MIN
+  17: 14, // NE
+  18: 11, // NO
+  19: 14, // NYG
+  20: 9,  // NYJ
+  21: 9,  // PHI
+  22: 8,  // ARI
+  23: 5,  // PIT
+  24: 12, // LAC
+  25: 14, // SF
+  26: 8,  // SEA
+  27: 9,  // TB
+  28: 12, // WSH
+  29: 14, // CAR
+  30: 8,  // JAX
+  33: 7,  // BAL
+  34: 6,  // HOU
+};
+
+// Official NFL Abbreviation to 2025 Bye Week Mapping
+export const NFL_ABBREV_BYE_WEEKS_2025: Record<string, number> = {
+  ATL: 5,
+  BUF: 7,
+  CHI: 5,
+  CIN: 10,
+  CLE: 9,
+  DAL: 10,
+  DEN: 12,
+  DET: 8,
+  GB: 5,
+  TEN: 10,
+  IND: 11,
+  KC: 10,
+  LV: 8,
+  LAR: 8,
+  MIA: 12,
+  MIN: 6,
+  NE: 14,
+  NO: 11,
+  NYG: 14,
+  NYJ: 9,
+  PHI: 9,
+  ARI: 8,
+  PIT: 5,
+  LAC: 12,
+  SF: 14,
+  SEA: 8,
+  TB: 9,
+  WSH: 12,
+  CAR: 14,
+  JAX: 8,
+  BAL: 7,
+  HOU: 6,
+};
+
+/**
+ * Returns the exact NFL Bye Week for an NFL player based on their Pro Team ID,
+ * NFL Team abbreviation, and Season ID.
+ */
+export function getNflByeWeek(
+  proTeamId?: number | null,
+  nflTeamAbbrev?: string | null,
+  seasonId?: string | number | null
+): number {
+  const cleanSeason = String(seasonId ?? '').trim();
+  const is2025 = cleanSeason === '2025';
+
+  const cleanAbbrev = String(nflTeamAbbrev ?? '').trim().toUpperCase();
+  const numId = Number(proTeamId);
+
+  if (is2025) {
+    if (Number.isFinite(numId) && NFL_PRO_TEAMS_BYE_WEEKS_2025[numId]) {
+      return NFL_PRO_TEAMS_BYE_WEEKS_2025[numId];
+    }
+    if (cleanAbbrev && NFL_ABBREV_BYE_WEEKS_2025[cleanAbbrev]) {
+      return NFL_ABBREV_BYE_WEEKS_2025[cleanAbbrev];
+    }
+  }
+
+  // Default to 2024 season
+  if (Number.isFinite(numId) && NFL_PRO_TEAMS_BYE_WEEKS_2024[numId]) {
+    return NFL_PRO_TEAMS_BYE_WEEKS_2024[numId];
+  }
+  if (cleanAbbrev && NFL_ABBREV_BYE_WEEKS_2024[cleanAbbrev]) {
+    return NFL_ABBREV_BYE_WEEKS_2024[cleanAbbrev];
+  }
+
+  return 0;
+}
+
+/**
+ * Validates and corrects player bye weeks across all team rosters in a League,
+ * replacing any corrupt or legacy placeholder bye weeks with accurate NFL data.
+ */
+export function sanitizeLeagueByeWeeks(league: League): League {
+  if (!league || !Array.isArray(league.teams)) return league;
+  const season = league.seasonId || '2024';
+  let modified = false;
+
+  const updatedTeams = league.teams.map((team) => {
+    if (!Array.isArray(team.roster)) return team;
+    let teamModified = false;
+    const updatedRoster = team.roster.map((player) => {
+      const accurateBye = getNflByeWeek(undefined, player.nflTeam, season);
+      if (accurateBye > 0 && player.byeWeek !== accurateBye) {
+        teamModified = true;
+        return { ...player, byeWeek: accurateBye };
+      }
+      return player;
+    });
+
+    if (teamModified) {
+      modified = true;
+      return { ...team, roster: updatedRoster };
+    }
+    return team;
+  });
+
+  if (modified) {
+    return { ...league, teams: updatedTeams };
+  }
+  return league;
+}
+
 // Client / Server Unified ESPN League Loader
 export function normalizeEspnCookies(espnS2Raw?: string, swidRaw?: string): { espnS2?: string; swid?: string } {
   let s2 = String(espnS2Raw ?? '').replace(/[\r\n\t]+/g, '').trim();
@@ -437,8 +650,15 @@ export function normalizeEspnData(
           ? parsedJersey
           : undefined;
 
-      const parsedBye = Number(p.byeWeek);
-      const byeWeek = Number.isFinite(parsedBye) && parsedBye > 0 ? parsedBye : (7 + (posId % 6));
+      // Extract accurate NFL bye week
+      const rawProTeam = Array.isArray(raw.settings?.proTeams)
+        ? raw.settings.proTeams.find((pt: any) => pt && pt.id === proTeamId)
+        : undefined;
+      const parsedRawBye = Number(rawProTeam?.byeWeek ?? p.byeWeek);
+      const byeWeek =
+        Number.isFinite(parsedRawBye) && parsedRawBye > 0
+          ? parsedRawBye
+          : getNflByeWeek(proTeamId, nflTeam, seasonId);
 
       const deterministicId = p.id
         ? `espn_${p.id}`

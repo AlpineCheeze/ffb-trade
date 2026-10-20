@@ -19,7 +19,7 @@ import {
   computePriorityTargetKeys,
   computeWarmTradeLeads,
 } from './matchmaking';
-import { createMockLeague } from './espn';
+import { createMockLeague, sanitizeLeagueByeWeeks } from './espn';
 import { clearAllServerUsers } from './serverUserStore';
 
 // Global in-memory store across Next.js hot reloads and warm serverless invocations
@@ -184,15 +184,16 @@ function getWritableDataDir(): string | null {
   return null;
 }
 
-function createInitialServerState(league: League, forcedCleanId?: string): ServerLeagueState {
+export function createInitialServerState(league: League, forcedCleanId?: string): ServerLeagueState {
   const cleanId = forcedCleanId || sanitizeLeagueId(league.espnLeagueId);
   const isMock = league.id === 'league_mock_123' || cleanId === '12345678';
-  const normalizedLeague: League = {
+  const rawNormalizedLeague: League = {
     ...league,
     id: isMock ? 'league_mock_123' : `league_${cleanId}`,
     espnLeagueId: cleanId,
     inviteCode: league.inviteCode || cleanId,
   };
+  const normalizedLeague: League = sanitizeLeagueByeWeeks(rawNormalizedLeague);
 
   if (isMock && normalizedLeague.teams.length >= 3) {
     normalizedLeague.teams[1].isClaimed = true;
@@ -239,6 +240,7 @@ function readStateFromDisk(cleanId: string): ServerLeagueState | null {
       if (!Array.isArray(parsed.deletedMatches)) {
         parsed.deletedMatches = [];
       }
+      parsed.league = sanitizeLeagueByeWeeks(parsed.league);
       return parsed as ServerLeagueState;
     }
   } catch (err) {
@@ -363,13 +365,13 @@ export function saveServerLeagueSnapshot(
     return ft;
   });
 
-  const mergedLeague: League = {
+  const mergedLeague: League = sanitizeLeagueByeWeeks({
     ...safeFreshLeague,
     espnLeagueId: cleanId,
     inviteCode: safeFreshLeague.inviteCode || existingState.league.inviteCode || cleanId,
     teams: mergedTeams,
     lastSyncedAt: new Date().toISOString(),
-  };
+  });
 
   // Build lookup of current valid player IDs per team to prune stale swipes & matches after real-life drops/trades
   const teamRosterPlayerIds = new Map<string, Set<string>>();
@@ -1205,8 +1207,9 @@ export function toClientLeagueView(
   const priorityTargetKeys = computePriorityTargetKeys(state.swipes, teamId);
   const warmLeads = computeWarmTradeLeads(state.swipes, state.matches, state.league, teamId);
 
+  const sanitizedLeague = sanitizeLeagueByeWeeks(state.league);
   return {
-    league: state.league,
+    league: sanitizedLeague,
     mySwipes,
     matches: myMatches,
     deletedMatches: myDeletedMatches,

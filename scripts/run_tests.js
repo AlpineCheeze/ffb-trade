@@ -57,6 +57,10 @@ async function run() {
   if (credsModule && credsModule.testPromise) {
     await credsModule.testPromise;
   }
+  const byeWeeksModule = jiti('./test_bye_weeks.ts');
+  if (byeWeeksModule && byeWeeksModule.runByeWeekTests) {
+    await byeWeeksModule.runByeWeekTests();
+  }
 }
 
 run().catch((err) => {

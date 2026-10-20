@@ -61,6 +61,10 @@ async function run() {
   if (byeWeeksModule && byeWeeksModule.runByeWeekTests) {
     await byeWeeksModule.runByeWeekTests();
   }
+  const deckPriorityModule = jiti('./test_potential_match_deck_priority.ts');
+  if (deckPriorityModule && deckPriorityModule.testPromise) {
+    await deckPriorityModule.testPromise;
+  }
 }
 
 run().catch((err) => {

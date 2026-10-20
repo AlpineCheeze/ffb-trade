@@ -200,11 +200,12 @@ export const testPromise = (async () => {
   const sortedPairIds = [team3.roster[2].id, team3.roster[3].id].sort().join('_');
   const expectedCardId = `pkg_${team3.id}_${sortedPairIds}`;
   const foundIndex = deckWithPriority.findIndex((item) => item.id === expectedCardId);
-  assert.ok(
-    foundIndex === 0 || foundIndex === 1,
-    `Priority package card should be injected into top 2 deck slots (slot 0 or 1), found at index ${foundIndex}`
+  assert.strictEqual(
+    foundIndex,
+    0,
+    `Priority package card must be front-loaded at index 0 (front of queue), found at index ${foundIndex}`
   );
-  console.log(`✓ Enhancement 2.2b Passed: Priority target package injected at index ${foundIndex} near top of deck.`);
+  console.log(`✓ Enhancement 2.2b Passed: Priority target package front-loaded at index 0 at top of deck.`);
 
   console.log('[Enhancement 2.2c] Testing Warm Trade Leads (cross-package-size mutual interest)...');
   // Team 1 swipes 1-for-1 offering p1_1 for p2_1

@@ -129,7 +129,7 @@ export interface GenerateDeckItemsOptions {
  * rock-solid stability across swipes and background polling cycles.
  * If priorityTargetKeys are provided (or derived from opponent interested swipes),
  * candidate cards that would complete an opponent's existing interested swipe are
- * deterministically interleaved near the top of the deck so they remain blind.
+ * front-loaded at the very top of the deck queue so potential matches appear first.
  */
 export function generateDeckItems({
   league,
@@ -174,7 +174,8 @@ export function generateDeckItems({
       s.targetTeamId === userTeam.id &&
       s.teamId !== userTeam.id &&
       isReciprocalTradeType(tradeType, s.tradeType) &&
-      arraysEqualIgnoreOrder(s.targetPlayerIds || [], activeOfferedIds)
+      arraysEqualIgnoreOrder(s.targetPlayerIds || [], activeOfferedIds) &&
+      !hasUserRespondedToIncomingSwipe(s, safeSwipes, userTeam.id)
     ) {
       priorityKeysSet.add(
         generateSwipeKey(tradeType, activeOfferedIds, s.offeredPlayerIds || [])
@@ -314,16 +315,8 @@ export function generateDeckItems({
     return shuffled;
   }
 
-  // Deterministically interleave priority items near the top of the deck (within first few cards)
-  // so they appear early without always being strictly index 0 (preserving blind secrecy)
-  const result = [...regularItems];
-  priorityItems.forEach((pItem, idx) => {
-    const slotOffset = hashDeckSeed(`${String(seed)}::prio_slot::${pItem.id}`) % 2; // 0 or 1
-    const targetIdx = Math.min(idx * 2 + slotOffset, result.length);
-    result.splice(targetIdx, 0, pItem);
-  });
-
-  return result;
+  // Front-load priority items at the very top of the deck queue (potential matches first)
+  return [...priorityItems, ...regularItems];
 }
 
 /**

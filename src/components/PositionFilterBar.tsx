@@ -15,6 +15,7 @@ import {
   RotateCcw,
   ArrowLeftRight,
   Flame,
+  Minimize2,
 } from 'lucide-react';
 
 export const ALL_POSITIONS: Position[] = ['RB', 'WR', 'TE', 'QB', 'FLEX', 'K', 'DEF'];
@@ -47,6 +48,10 @@ export interface PositionFilterBarProps {
   onToggleOfferedPlayer?: (player: Player) => void;
   onOpenFullRoster?: () => void;
   incomingActivityHints?: IncomingActivityHints | null;
+
+  // Minimized state control
+  isMinimized?: boolean;
+  onToggleMinimize?: (minimized: boolean) => void;
 }
 
 export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
@@ -72,7 +77,38 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
   onToggleOfferedPlayer,
   onOpenFullRoster,
   incomingActivityHints,
+  isMinimized: propIsMinimized,
+  onToggleMinimize,
 }) => {
+  const [internalMinimized, setInternalMinimized] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('pasta_loft_package_minimized');
+        if (stored !== null) return stored === 'true';
+      } catch (e) {
+        // ignore storage errors
+      }
+    }
+    return false;
+  });
+
+  const isMinimized = propIsMinimized !== undefined ? propIsMinimized : internalMinimized;
+
+  const handleToggleMinimize = (nextMinimized?: boolean) => {
+    const nextVal = typeof nextMinimized === 'boolean' ? nextMinimized : !isMinimized;
+    if (onToggleMinimize) {
+      onToggleMinimize(nextVal);
+    }
+    setInternalMinimized(nextVal);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('pasta_loft_package_minimized', String(nextVal));
+      } catch (e) {
+        // ignore quota errors
+      }
+    }
+  };
+
   const [activeTab, setActiveTab] = useState<'package' | 'positions' | 'teams'>('positions');
   const [mobileOpenPanel, setMobileOpenPanel] = useState<'package' | 'positions' | 'teams' | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -163,7 +199,97 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
       .map((t) => t.claimedBy || t.ownerName || t.name);
   }, [teams, excludedTeamIds]);
 
-  return (
+  return isMinimized ? (
+    <div className="w-full max-w-sm mb-3 sm:mb-4 bg-slate-900/90 border border-slate-800 rounded-2xl p-2 sm:p-2.5 shadow-xl backdrop-blur-md">
+      <div className="w-full flex items-center justify-between gap-1.5 sm:gap-2">
+        {/* Clickable summary of active trade package */}
+        <button
+          type="button"
+          onClick={() => handleToggleMinimize(false)}
+          className="flex-1 min-w-0 flex items-center gap-2 sm:gap-2.5 text-left p-1 rounded-xl hover:bg-slate-800/60 transition-colors group"
+          title="Click to expand trade package & filters"
+        >
+          {/* Trade Type Tag */}
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-blue-500/20 text-blue-400 border border-blue-500/30 flex-shrink-0 group-hover:border-blue-400/60 transition-colors">
+            {tradeType}
+          </span>
+
+          {/* Overlapping Player Avatars */}
+          <div className="flex items-center -space-x-1.5 flex-shrink-0">
+            {offeredPlayers.length > 0 ? (
+              offeredPlayers.map((player) => (
+                <div
+                  key={player.id}
+                  className="w-7 h-7 rounded-full bg-slate-800 border-2 border-slate-900 overflow-hidden flex-shrink-0 shadow"
+                  title={player.fullName}
+                >
+                  <img
+                    src={player.headshotUrl}
+                    alt={player.fullName}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              ))
+            ) : (
+              <div className="w-7 h-7 rounded-full bg-slate-800 border border-amber-500/40 flex items-center justify-center text-xs text-amber-400 font-bold">
+                ?
+              </div>
+            )}
+          </div>
+
+          {/* Package details: Sending & Looking for */}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 leading-tight truncate">
+              <span className="text-[11px] font-bold text-white truncate">
+                {offeredPlayers.length > 0
+                  ? offeredPlayers.map((p) => p.fullName.split(' ').pop()).join(' + ')
+                  : 'Choose Player'}
+              </span>
+              {offeredPlayers.length === 1 && (
+                <span className="px-1 py-0.2 rounded text-[9px] font-black bg-blue-600 text-white flex-shrink-0">
+                  {offeredPlayers[0].position}
+                </span>
+              )}
+              {totalIncomingCount > 0 && (
+                <span
+                  className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-0.5 flex-shrink-0"
+                  title={`${totalIncomingCount} incoming trade interest offers`}
+                >
+                  <Flame className="w-2.5 h-2.5 text-amber-400 fill-amber-400/40" />
+                  <span>{totalIncomingCount}</span>
+                </span>
+              )}
+            </div>
+            <div className="text-[10px] text-slate-400 truncate mt-0.5 flex items-center gap-1 font-medium">
+              <span className="text-blue-300/90 font-semibold">Get {receiveCount}</span>
+              <span>•</span>
+              <span className="text-slate-300 truncate">
+                {isAllSelected ? 'Any Pos' : selectedPositions.join(', ')}
+              </span>
+              {excludedCount > 0 && (
+                <>
+                  <span>•</span>
+                  <span className="text-amber-400/90 flex-shrink-0">{includedCount}/{teams.length} teams</span>
+                </>
+              )}
+            </div>
+          </div>
+        </button>
+
+        {/* Expand Filters Button */}
+        <button
+          type="button"
+          onClick={() => handleToggleMinimize(false)}
+          className="py-1.5 px-2.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 border border-slate-700/80 text-slate-300 hover:text-white text-xs font-bold transition flex items-center gap-1 flex-shrink-0 shadow-sm"
+          title="Expand trade package & filters"
+        >
+          <SlidersHorizontal className="w-3.5 h-3.5 text-blue-400" />
+          <span className="text-[11px] hidden min-[360px]:inline">Filters</span>
+          <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+        </button>
+      </div>
+    </div>
+  ) : (
     <div className="w-full max-w-sm mb-3 sm:mb-4 bg-slate-900/90 border border-slate-800 rounded-2xl p-2.5 sm:p-3 shadow-xl backdrop-blur-md">
       {/* ========================================================= */}
       {/* MOBILE COMPACT UNIFIED DECK CONTROL BAR (< 640px)         */}
@@ -233,6 +359,15 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
             )}
           </button>
         )}
+
+        <button
+          type="button"
+          onClick={() => handleToggleMinimize(true)}
+          className="p-1.5 min-w-[34px] min-h-[34px] rounded-xl text-slate-400 hover:text-white bg-slate-950/80 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 transition flex items-center justify-center flex-shrink-0"
+          title="Minimize trade package & filters"
+        >
+          <Minimize2 className="w-3.5 h-3.5 text-blue-400" />
+        </button>
       </div>
 
       {/* ========================================================= */}
@@ -294,22 +429,33 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={toggleDesktopPackage}
-            className={`ml-3 px-3 py-1.5 rounded-xl border text-xs font-bold transition flex-shrink-0 flex items-center gap-1 ${
-              activeTab === 'package'
-                ? 'bg-blue-600 border-blue-500 text-white shadow-sm'
-                : 'bg-blue-600/20 hover:bg-blue-600/30 border-blue-500/30 text-blue-300'
-            }`}
-          >
-            <span>Change Package</span>
-            {activeTab === 'package' ? (
-              <ChevronUp className="w-3.5 h-3.5" />
-            ) : (
-              <ChevronDown className="w-3.5 h-3.5" />
-            )}
-          </button>
+          <div className="flex items-center gap-1.5 flex-shrink-0 ml-3">
+            <button
+              type="button"
+              onClick={toggleDesktopPackage}
+              className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition flex items-center gap-1 ${
+                activeTab === 'package'
+                  ? 'bg-blue-600 border-blue-500 text-white shadow-sm'
+                  : 'bg-blue-600/20 hover:bg-blue-600/30 border-blue-500/30 text-blue-300'
+              }`}
+            >
+              <span>Change Package</span>
+              {activeTab === 'package' ? (
+                <ChevronUp className="w-3.5 h-3.5" />
+              ) : (
+                <ChevronDown className="w-3.5 h-3.5" />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleToggleMinimize(true)}
+              className="px-2.5 py-1.5 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700 text-xs font-bold text-slate-300 hover:text-white transition flex items-center gap-1"
+              title="Minimize trade package & filters to focus on swiping"
+            >
+              <Minimize2 className="w-3 h-3 text-blue-400" />
+              <span>Minimize</span>
+            </button>
+          </div>
         </div>
       )}
 
@@ -387,6 +533,15 @@ export const PositionFilterBar: React.FC<PositionFilterBarProps> = ({
                 {teams.length}
               </span>
             )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleToggleMinimize(true)}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition flex items-center justify-center flex-shrink-0 ml-0.5"
+            title="Minimize filters to focus on swiping"
+          >
+            <Minimize2 className="w-3.5 h-3.5 text-blue-400" />
           </button>
         </div>
       )}

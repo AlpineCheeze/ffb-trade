@@ -103,6 +103,17 @@ export default function Home() {
   const [selectedPositions, setSelectedPositions] = useState<Position[]>(ALL_POSITIONS);
   const [activeTab, setActiveTab] = useState<'deck' | 'matches' | 'roster' | 'lobby'>('lobby');
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+  const [isPackageMinimized, setIsPackageMinimized] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('pasta_loft_package_minimized');
+        if (stored !== null) return stored === 'true';
+      } catch {
+        // ignore
+      }
+    }
+    return false;
+  });
 
   // Swipes and matches state
   const [swipes, setSwipes] = useState<Swipe[]>([]);
@@ -1560,6 +1571,19 @@ export default function Home() {
           e.preventDefault();
           cardRef.current.toggleStats();
         }
+      } else if (e.key === 'm' || e.key === 'M' || e.key === 'f' || e.key === 'F') {
+        e.preventDefault();
+        setIsPackageMinimized((prev) => {
+          const next = !prev;
+          if (typeof window !== 'undefined') {
+            try {
+              localStorage.setItem('pasta_loft_package_minimized', String(next));
+            } catch {
+              // ignore
+            }
+          }
+          return next;
+        });
       }
     };
 
@@ -1970,6 +1994,8 @@ export default function Home() {
           <div className="w-full flex flex-col items-center">
             {/* Unified Deck Control Bar (Inline Package Switcher + Target Positions + Trade With Filter) */}
             <PositionFilterBar
+              isMinimized={isPackageMinimized}
+              onToggleMinimize={setIsPackageMinimized}
               selectedPositions={selectedPositions}
               onTogglePosition={handleTogglePosition}
               onSelectAll={handleSelectAllPositions}

@@ -478,14 +478,20 @@ export const testPromise = (async () => {
       filterBarSrc.includes('onTradeTypeChange') &&
       filterBarSrc.includes('onToggleOfferedPlayer') &&
       !filterBarSrc.includes('player.projectedPoints') &&
-      !filterBarSrc.includes('player.seasonAvgPoints'),
-    'PositionFilterBar.tsx must include the compact mobile pills, inline package switcher controls, and have Proj/Avg badges removed'
+      !filterBarSrc.includes('player.seasonAvgPoints') &&
+      filterBarSrc.includes('isMinimized') &&
+      filterBarSrc.includes('handleToggleMinimize') &&
+      filterBarSrc.includes('pasta_loft_package_minimized') &&
+      filterBarSrc.includes('Minimize2'),
+    'PositionFilterBar.tsx must include compact mobile pills, package switcher, Proj/Avg removed, and minimizable trade package card'
   );
 
   assert.ok(
     pageSrc.includes("target.tagName === 'BUTTON'") &&
-      pageSrc.includes('target.blur()'),
-    'page.tsx keyboard shortcuts must guard against BUTTON focus conflicts when Space/Arrow keys are pressed'
+      pageSrc.includes('target.blur()') &&
+      pageSrc.includes('isPackageMinimized') &&
+      pageSrc.includes("e.key === 'm' || e.key === 'M'"),
+    'page.tsx keyboard shortcuts must support Space/Arrow button blur guards and m/M/f/F minimize toggle'
   );
 
   const navbarSrc = fs.readFileSync(
